@@ -5,6 +5,14 @@ All notable changes to Kudosy will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0](https://github.com/bin101/kudosy/compare/v0.1.0...v0.2.0) (2026-06-20)
+
+
+### Features
+
+* fix feed parser, add Feed tab, remove legacy config ([10d1dfc](https://github.com/bin101/kudosy/commit/10d1dfc5f4e3edf230817cafe87dc3372a7f9b7a))
+* initial Kudosy release v0.1.0 ([e96e760](https://github.com/bin101/kudosy/commit/e96e760b2d35afc2f23ec5ed7920381f622a2fe5))
+
 ## 0.1.0 (2026-06-20)
 
 
