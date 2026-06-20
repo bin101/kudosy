@@ -398,13 +398,18 @@ small, .hint {
   position: relative;
   width: 40px;
   height: 22px;
-  background: var(--border);
+  background: #94a3b8; /* slate-400 — klar sichtbar auf weißer Card */
   border-radius: 999px;
   flex-shrink: 0;
   transition: background .2s;
 }
 
 .toggle-row input:checked ~ .toggle-track { background: var(--brand); }
+
+/* Focus-Ring für Tastatur-Navigation */
+.toggle-row input:focus-visible ~ .toggle-track {
+  box-shadow: 0 0 0 3px var(--brand-light);
+}
 
 .toggle-thumb {
   position: absolute;
@@ -415,7 +420,7 @@ small, .hint {
   background: #fff;
   border-radius: 50%;
   transition: transform .2s;
-  box-shadow: 0 1px 3px rgba(0,0,0,.2);
+  box-shadow: 0 1px 4px rgba(0,0,0,.30);
 }
 
 .toggle-row input:checked ~ .toggle-track .toggle-thumb {
