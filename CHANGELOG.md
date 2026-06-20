@@ -5,6 +5,14 @@ All notable changes to Kudosy will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.2](https://github.com/bin101/kudosy/compare/v0.3.1...v0.3.2) (2026-06-20)
+
+
+### Bug Fixes
+
+* restore flex layout on settings toggles ([04cf7a4](https://github.com/bin101/kudosy/commit/04cf7a4b5328313cd6c645300056bd414fb754cc))
+* restore flex layout on settings toggles inside form-group ([468d8d5](https://github.com/bin101/kudosy/commit/468d8d53cc9742a23a887af892b8c1e04a51fca4))
+
 ## [0.3.1](https://github.com/bin101/kudosy/compare/v0.3.0...v0.3.1) (2026-06-20)
 
 
