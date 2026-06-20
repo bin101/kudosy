@@ -5,6 +5,13 @@ All notable changes to Kudosy will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1](https://github.com/bin101/kudosy/compare/v0.3.0...v0.3.1) (2026-06-20)
+
+
+### Bug Fixes
+
+* make settings toggles visually distinct as on/off switches ([5e17dcf](https://github.com/bin101/kudosy/commit/5e17dcf8cbf6e5326b54ec913bce3550d9297465))
+
 ## [0.3.0](https://github.com/bin101/kudosy/compare/v0.2.0...v0.3.0) (2026-06-20)
 
 
