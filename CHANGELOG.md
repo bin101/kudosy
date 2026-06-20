@@ -5,6 +5,13 @@ All notable changes to Kudosy will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0](https://github.com/bin101/kudosy/compare/v0.2.0...v0.3.0) (2026-06-20)
+
+
+### Features
+
+* multilingual UI (DE/EN/FR/ES/IT) and activity cache ([9ad0fac](https://github.com/bin101/kudosy/commit/9ad0face80a849899a1df5e5336512cd096c8cc9))
+
 ## [0.2.0](https://github.com/bin101/kudosy/compare/v0.1.0...v0.2.0) (2026-06-20)
 
 
