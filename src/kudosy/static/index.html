@@ -18,25 +18,26 @@
           <path d="M11 25 L11 8.5 C11 7 13 5 15.5 5 C17.5 5 19 6.5 19 8.5 L19 15 L24.5 15 C27 15 28.5 16.5 28.5 18.5 C28.5 19.5 28 20.3 27.2 20.8 C28 21.3 28.5 22.2 28.5 23.2 C28.5 24.3 27.7 25.3 26.5 25.7 C27 26.2 27.2 27 27.2 27.7 C27.2 29.2 26.2 30.3 24.7 30.5 C25 31 25.2 31.8 25.2 32.5 C25.2 34.5 23.8 35.5 22.2 35.5 L14.5 35.5 C12 35.5 11 33.8 11 32 L11 25 Z" fill="currentColor"/>
         </svg>
         <span class="header-title">Kudosy</span>
-        <span id="status-badge" class="badge badge-idle">Lade…</span>
+        <span id="status-badge" class="badge badge-idle" data-i18n="badge.loading">Lade…</span>
       </div>
       <div class="header-actions">
-        <button id="btn-dry-run" class="btn btn-secondary" title="Dry-Run: zeigt welche Kudos gesendet würden, ohne sie wirklich zu senden">
-          <span>🔍</span> Dry-Run
+        <select id="lang-select" class="lang-select" aria-label="Language"></select>
+        <button id="btn-dry-run" class="btn btn-secondary" data-i18n-title="btn.dryRun.title" title="Dry-Run: zeigt welche Kudos gesendet würden, ohne sie wirklich zu senden">
+          <span>🔍</span> <span data-i18n="btn.dryRun">Dry-Run</span>
         </button>
         <button id="btn-run" class="btn btn-primary">
-          <span>▶</span> Jetzt ausführen
+          <span>▶</span> <span data-i18n="btn.runNow">Jetzt ausführen</span>
         </button>
       </div>
     </div>
   </header>
 
   <nav class="tabs">
-    <button class="tab active" data-tab="config">Konfiguration</button>
-    <button class="tab" data-tab="defaults">Defaults</button>
-    <button class="tab" data-tab="settings">Einstellungen</button>
-    <button class="tab" data-tab="feed">Feed</button>
-    <button class="tab" data-tab="log">Status &amp; Log</button>
+    <button class="tab active" data-tab="config" data-i18n="tab.config">Konfiguration</button>
+    <button class="tab" data-tab="defaults" data-i18n="tab.defaults">Defaults</button>
+    <button class="tab" data-tab="settings" data-i18n="tab.settings">Einstellungen</button>
+    <button class="tab" data-tab="feed" data-i18n="tab.feed">Feed</button>
+    <button class="tab" data-tab="log" data-i18n="tab.log">Status &amp; Log</button>
   </nav>
 
   <main class="content">
@@ -46,66 +47,83 @@
       <form id="form-config">
 
         <div class="card">
-          <h2>Zugangsdaten</h2>
+          <h2 data-i18n="config.credentials.title">Zugangsdaten</h2>
           <div class="form-group">
-            <label for="cookieInput">Strava Session Cookie</label>
+            <label for="cookieInput" data-i18n="config.cookie.label">Strava Session Cookie</label>
             <div class="input-reveal">
-              <input type="password" id="cookieInput" placeholder="Aus Browser DevTools: _strava4_session" autocomplete="off">
-              <button type="button" class="btn-icon" data-reveal="cookieInput" title="Anzeigen/Verbergen">👁</button>
+              <input type="password" id="cookieInput"
+                     data-i18n-placeholder="config.cookie.placeholder"
+                     placeholder="Aus Browser DevTools: _strava4_session"
+                     autocomplete="off">
+              <button type="button" class="btn-icon" data-reveal="cookieInput"
+                      data-i18n-title="config.cookie.reveal.title"
+                      title="Anzeigen/Verbergen">👁</button>
             </div>
-            <small>Browser → DevTools → Application → Cookies → <code>_strava4_session</code></small>
+            <small data-i18n="config.cookie.hint">Browser → DevTools → Application → Cookies → _strava4_session</small>
           </div>
           <div class="form-group">
-            <label for="athleteIdInput">Athlete ID</label>
-            <input type="text" id="athleteIdInput" placeholder="z.B. 105191432" inputmode="numeric">
+            <label for="athleteIdInput" data-i18n="config.athleteId.label">Athlete ID</label>
+            <input type="text" id="athleteIdInput"
+                   data-i18n-placeholder="config.athleteId.placeholder"
+                   placeholder="z.B. 105191432" inputmode="numeric">
             <small>Strava Profil-URL: strava.com/athletes/<strong>&lt;deine-ID&gt;</strong></small>
           </div>
         </div>
 
         <div class="card">
           <div class="card-header-row">
-            <h2>Ignorierte Athleten</h2>
+            <h2 data-i18n="config.ignoreAthletes.title">Ignorierte Athleten</h2>
             <button type="button" class="btn btn-outline btn-sm" id="btn-load-all-names"
-                    title="Namen aller Athleten von Strava abrufen">🔍 Alle Namen laden</button>
+                    data-i18n-title="config.ignoreAthletes.loadAll.title"
+                    title="Namen aller Athleten von Strava abrufen"
+                    data-i18n="config.ignoreAthletes.loadAll">🔍 Alle Namen laden</button>
           </div>
-          <p class="hint">Aktivitäten dieser Athleten werden übersprungen. Der Name wird von Strava geladen und lokal gecacht.</p>
+          <p class="hint" data-i18n="config.ignoreAthletes.hint">Aktivitäten dieser Athleten werden übersprungen. Der Name wird von Strava geladen und lokal gecacht.</p>
           <ul class="dynamic-list" id="ignore-list"></ul>
-          <button type="button" class="btn btn-outline btn-sm" id="btn-add-athlete">+ Athlet hinzufügen</button>
+          <button type="button" class="btn btn-outline btn-sm" id="btn-add-athlete" data-i18n="config.ignoreAthletes.addBtn">+ Athlet hinzufügen</button>
         </div>
 
         <div class="card">
-          <h2>Kudo-Regeln: Min. Distanz</h2>
-          <p class="hint">Aktivitäten <em>unter</em> dieser Distanz (km) werden übersprungen. Leer lassen = keine Regel.</p>
+          <h2 data-i18n="config.minDist.title">Kudo-Regeln: Min. Distanz</h2>
+          <p class="hint" data-i18n-html="config.minDist.hint">Aktivitäten <em>unter</em> dieser Distanz (km) werden übersprungen. Leer lassen = keine Regel.</p>
           <div class="table-wrap">
             <table class="rules-table">
-              <thead><tr><th>Sportart</th><th>Min. km</th><th></th></tr></thead>
+              <thead><tr>
+                <th data-i18n="table.sportType">Sportart</th>
+                <th data-i18n="table.minKm">Min. km</th>
+                <th></th>
+              </tr></thead>
               <tbody id="tbody-distance"></tbody>
             </table>
           </div>
-          <button type="button" class="btn btn-outline btn-sm" id="btn-add-distance">+ Regel hinzufügen</button>
+          <button type="button" class="btn btn-outline btn-sm" id="btn-add-distance" data-i18n="config.minDist.addBtn">+ Regel hinzufügen</button>
         </div>
 
         <div class="card">
-          <h2>Kudo-Regeln: Min. Dauer</h2>
-          <p class="hint">Aktivitäten <em>unter</em> dieser Dauer (Minuten) werden übersprungen. Leer lassen = keine Regel.</p>
+          <h2 data-i18n="config.minTime.title">Kudo-Regeln: Min. Dauer</h2>
+          <p class="hint" data-i18n-html="config.minTime.hint">Aktivitäten <em>unter</em> dieser Dauer (Minuten) werden übersprungen. Leer lassen = keine Regel.</p>
           <div class="table-wrap">
             <table class="rules-table">
-              <thead><tr><th>Sportart</th><th>Min. min</th><th></th></tr></thead>
+              <thead><tr>
+                <th data-i18n="table.sportType">Sportart</th>
+                <th data-i18n="table.minMin">Min. min</th>
+                <th></th>
+              </tr></thead>
               <tbody id="tbody-time"></tbody>
             </table>
           </div>
-          <button type="button" class="btn btn-outline btn-sm" id="btn-add-time">+ Regel hinzufügen</button>
+          <button type="button" class="btn btn-outline btn-sm" id="btn-add-time" data-i18n="config.minTime.addBtn">+ Regel hinzufügen</button>
         </div>
 
         <div class="card">
-          <h2>Auto-Kudos nach Aktivitätsname</h2>
-          <p class="hint">Regex-Muster — passende Aktivitäten erhalten immer Kudos, unabhängig von Distanz/Dauer.</p>
+          <h2 data-i18n="config.activityNames.title">Auto-Kudos nach Aktivitätsname</h2>
+          <p class="hint" data-i18n="config.activityNames.hint">Regex-Muster — passende Aktivitäten erhalten immer Kudos, unabhängig von Distanz/Dauer.</p>
           <ul class="dynamic-list" id="activity-names-list"></ul>
-          <button type="button" class="btn btn-outline btn-sm" id="btn-add-name">+ Muster hinzufügen</button>
+          <button type="button" class="btn btn-outline btn-sm" id="btn-add-name" data-i18n="config.activityNames.addBtn">+ Muster hinzufügen</button>
         </div>
 
         <div class="form-footer">
-          <button type="submit" class="btn btn-primary btn-lg">💾 Konfiguration speichern</button>
+          <button type="submit" class="btn btn-primary btn-lg" data-i18n="config.saveBtn">💾 Konfiguration speichern</button>
         </div>
 
       </form>
@@ -116,57 +134,69 @@
       <form id="form-defaults">
 
         <div class="card">
-          <h2>Catch-all Regel</h2>
-          <p class="hint">Gilt für <strong>alle</strong> Sportarten ohne eigene Regel, und auch als Fallback wenn die Konfiguration fehlt.<br>
+          <h2 data-i18n="defaults.catchAll.title">Catch-all Regel</h2>
+          <p class="hint" data-i18n-html="defaults.catchAll.hint">Gilt für <strong>alle</strong> Sportarten ohne eigene Regel, und auch als Fallback wenn die Konfiguration fehlt.<br>
           Auf <strong>0</strong> setzen, um den jeweiligen Catch-all zu deaktivieren.</p>
 
           <div class="form-row">
             <div class="form-group">
-              <label for="catchAllDist">Standard Min. Distanz (km)</label>
-              <input type="number" id="catchAllDist" min="0" step="0.1" placeholder="0 = deaktiviert">
+              <label for="catchAllDist" data-i18n="defaults.catchAll.minDist.label">Standard Min. Distanz (km)</label>
+              <input type="number" id="catchAllDist" min="0" step="0.1"
+                     data-i18n-placeholder="defaults.catchAll.minDist.placeholder"
+                     placeholder="0 = deaktiviert">
             </div>
             <div class="form-group">
-              <label for="catchAllTime">Standard Min. Dauer (min)</label>
-              <input type="number" id="catchAllTime" min="0" step="1" placeholder="0 = deaktiviert">
+              <label for="catchAllTime" data-i18n="defaults.catchAll.minTime.label">Standard Min. Dauer (min)</label>
+              <input type="number" id="catchAllTime" min="0" step="1"
+                     data-i18n-placeholder="defaults.catchAll.minTime.placeholder"
+                     placeholder="0 = deaktiviert">
             </div>
           </div>
 
           <div class="info-box">
-            <strong>Priorität (hoch → niedrig):</strong>
+            <strong data-i18n="defaults.priority.label">Priorität (hoch → niedrig):</strong>
             <ol>
-              <li>Konfigurationsregeln (Config-Tab)</li>
-              <li>Sportartspezifische Default-Regeln (unten)</li>
-              <li>Catch-all für alle restlichen Sportarten</li>
+              <li data-i18n="defaults.priority.1">Konfigurationsregeln (Config-Tab)</li>
+              <li data-i18n="defaults.priority.2">Sportartspezifische Default-Regeln (unten)</li>
+              <li data-i18n="defaults.priority.3">Catch-all für alle restlichen Sportarten</li>
             </ol>
           </div>
         </div>
 
         <div class="card">
-          <h2>Default-Distanzregeln (pro Sportart)</h2>
-          <p class="hint">Überschreiben den Catch-all für einzelne Sportarten. Leeres Feld = Catch-all greift.</p>
+          <h2 data-i18n="defaults.defDist.title">Default-Distanzregeln (pro Sportart)</h2>
+          <p class="hint" data-i18n="defaults.defDist.hint">Überschreiben den Catch-all für einzelne Sportarten. Leeres Feld = Catch-all greift.</p>
           <div class="table-wrap">
             <table class="rules-table">
-              <thead><tr><th>Sportart</th><th>Min. km</th><th></th></tr></thead>
+              <thead><tr>
+                <th data-i18n="table.sportType">Sportart</th>
+                <th data-i18n="table.minKm">Min. km</th>
+                <th></th>
+              </tr></thead>
               <tbody id="tbody-def-distance"></tbody>
             </table>
           </div>
-          <button type="button" class="btn btn-outline btn-sm" id="btn-add-def-distance">+ Regel hinzufügen</button>
+          <button type="button" class="btn btn-outline btn-sm" id="btn-add-def-distance" data-i18n="defaults.defDist.addBtn">+ Regel hinzufügen</button>
         </div>
 
         <div class="card">
-          <h2>Default-Dauerregeln (pro Sportart)</h2>
-          <p class="hint">Überschreiben den Catch-all für einzelne Sportarten.</p>
+          <h2 data-i18n="defaults.defTime.title">Default-Dauerregeln (pro Sportart)</h2>
+          <p class="hint" data-i18n="defaults.defTime.hint">Überschreiben den Catch-all für einzelne Sportarten.</p>
           <div class="table-wrap">
             <table class="rules-table">
-              <thead><tr><th>Sportart</th><th>Min. min</th><th></th></tr></thead>
+              <thead><tr>
+                <th data-i18n="table.sportType">Sportart</th>
+                <th data-i18n="table.minMin">Min. min</th>
+                <th></th>
+              </tr></thead>
               <tbody id="tbody-def-time"></tbody>
             </table>
           </div>
-          <button type="button" class="btn btn-outline btn-sm" id="btn-add-def-time">+ Regel hinzufügen</button>
+          <button type="button" class="btn btn-outline btn-sm" id="btn-add-def-time" data-i18n="defaults.defTime.addBtn">+ Regel hinzufügen</button>
         </div>
 
         <div class="form-footer">
-          <button type="submit" class="btn btn-primary btn-lg">💾 Defaults speichern</button>
+          <button type="submit" class="btn btn-primary btn-lg" data-i18n="defaults.saveBtn">💾 Defaults speichern</button>
         </div>
 
       </form>
@@ -177,65 +207,65 @@
       <form id="form-settings">
 
         <div class="card">
-          <h2>Scheduler</h2>
+          <h2 data-i18n="settings.scheduler.title">Scheduler</h2>
           <div class="form-group">
             <label class="toggle-row">
               <input type="checkbox" id="schedulerEnabled">
               <span class="toggle-track"><span class="toggle-thumb"></span></span>
-              <span>Automatisch ausführen</span>
+              <span data-i18n="settings.scheduler.enabled.label">Automatisch ausführen</span>
             </label>
           </div>
           <div class="form-group" id="interval-group">
-            <label for="intervalMinutes">Intervall (Minuten)</label>
+            <label for="intervalMinutes" data-i18n="settings.interval.label">Intervall (Minuten)</label>
             <input type="number" id="intervalMinutes" min="5" max="1440" step="5">
-            <small>Minimum 5 Minuten. Empfohlen: 60 (stündlich).</small>
+            <small data-i18n="settings.interval.hint">Minimum 5 Minuten. Empfohlen: 60 (stündlich).</small>
           </div>
           <div class="form-group" id="jitter-group">
-            <label for="jitterMinutes">Jitter ± (Minuten)</label>
+            <label for="jitterMinutes" data-i18n="settings.jitter.label">Jitter ± (Minuten)</label>
             <input type="number" id="jitterMinutes" min="0" max="120" step="1">
-            <small>Zufälliger Versatz zum Intervall (±). Macht den Takt unvorhersehbar. Empfohlen: 15.</small>
+            <small data-i18n="settings.jitter.hint">Zufälliger Versatz zum Intervall (±). Macht den Takt unvorhersehbar. Empfohlen: 15.</small>
           </div>
         </div>
 
         <div class="card">
-          <h2>Menschliche Timing-Delays</h2>
-          <p class="hint">Zwischen den einzelnen Kudos-Anfragen wird eine zufällige Pause eingelegt — verhindert maschinenhaftes Verhalten.</p>
+          <h2 data-i18n="settings.delays.title">Menschliche Timing-Delays</h2>
+          <p class="hint" data-i18n="settings.delays.hint">Zwischen den einzelnen Kudos-Anfragen wird eine zufällige Pause eingelegt — verhindert maschinenhaftes Verhalten.</p>
           <div class="form-row">
             <div class="form-group">
-              <label for="minKudosDelaySeconds">Min. Pause (Sekunden)</label>
+              <label for="minKudosDelaySeconds" data-i18n="settings.minDelay.label">Min. Pause (Sekunden)</label>
               <input type="number" id="minKudosDelaySeconds" min="0" step="0.5">
-              <small>Minimum 0. Empfohlen: 3.</small>
+              <small data-i18n="settings.minDelay.hint">Minimum 0. Empfohlen: 3.</small>
             </div>
             <div class="form-group">
-              <label for="maxKudosDelaySeconds">Max. Pause (Sekunden)</label>
+              <label for="maxKudosDelaySeconds" data-i18n="settings.maxDelay.label">Max. Pause (Sekunden)</label>
               <input type="number" id="maxKudosDelaySeconds" min="0" step="0.5">
-              <small>Muss ≥ Min. sein. Empfohlen: 25.</small>
+              <small data-i18n="settings.maxDelay.hint">Muss ≥ Min. sein. Empfohlen: 25.</small>
             </div>
           </div>
           <div class="form-group">
             <label class="toggle-row">
               <input type="checkbox" id="shuffleOrder">
               <span class="toggle-track"><span class="toggle-thumb"></span></span>
-              <span>Reihenfolge zufällig mischen</span>
+              <span data-i18n="settings.shuffle.label">Reihenfolge zufällig mischen</span>
             </label>
-            <small style="margin-top:6px">Kudos werden in zufälliger Reihenfolge vergeben (nur im Nicht-Dry-Run).</small>
+            <small style="margin-top:6px" data-i18n="settings.shuffle.hint">Kudos werden in zufälliger Reihenfolge vergeben (nur im Nicht-Dry-Run).</small>
           </div>
         </div>
 
         <div class="card">
-          <h2>Ausführungsmodus</h2>
+          <h2 data-i18n="settings.dryRun.title">Ausführungsmodus</h2>
           <div class="form-group">
             <label class="toggle-row">
               <input type="checkbox" id="globalDryRun">
               <span class="toggle-track"><span class="toggle-thumb"></span></span>
-              <span>Globaler Dry-Run</span>
+              <span data-i18n="settings.dryRun.label">Globaler Dry-Run</span>
             </label>
-            <small>Wenn aktiv, sendet der Scheduler <strong>keine echten Kudos</strong>.</small>
+            <small data-i18n-html="settings.dryRun.hint">Wenn aktiv, sendet der Scheduler <strong>keine echten Kudos</strong>.</small>
           </div>
         </div>
 
         <div class="form-footer">
-          <button type="submit" class="btn btn-primary btn-lg">💾 Einstellungen speichern</button>
+          <button type="submit" class="btn btn-primary btn-lg" data-i18n="settings.saveBtn">💾 Einstellungen speichern</button>
         </div>
 
       </form>
@@ -246,12 +276,12 @@
 
       <div class="card">
         <div class="card-header-row">
-          <h2>Strava Feed</h2>
-          <button type="button" class="btn btn-outline btn-sm" id="btn-refresh-feed">🔄 Aktualisieren</button>
+          <h2 data-i18n="feed.title">Strava Feed</h2>
+          <button type="button" class="btn btn-outline btn-sm" id="btn-refresh-feed" data-i18n="feed.refresh">🔄 Aktualisieren</button>
         </div>
-        <p class="hint">Aktivitäten aus deinem Strava-Feed — mit Kudo-Status und Regelentscheidung der Engine.</p>
+        <p class="hint" data-i18n="feed.hint">Aktivitäten aus deinem Strava-Feed — mit Kudo-Status und Regelentscheidung der Engine.</p>
         <div id="feed-list" class="feed-list">
-          <p class="hint feed-empty">Klicke auf „Aktualisieren" oder öffne diesen Tab, um den Feed zu laden.</p>
+          <p class="hint feed-empty" data-i18n="feed.initial">Klicke auf „Aktualisieren" oder öffne diesen Tab, um den Feed zu laden.</p>
         </div>
       </div>
 
@@ -262,12 +292,12 @@
 
       <div class="status-grid">
         <div class="card status-card" id="card-last-run">
-          <div class="status-label">Letzter Lauf</div>
+          <div class="status-label" data-i18n="log.lastRun.label">Letzter Lauf</div>
           <div class="status-value" id="val-last-run">—</div>
           <div class="status-sub" id="val-kudos">—</div>
         </div>
         <div class="card status-card" id="card-next-run">
-          <div class="status-label">Nächster Lauf</div>
+          <div class="status-label" data-i18n="log.nextRun.label">Nächster Lauf</div>
           <div class="status-value" id="val-next-run">—</div>
           <div class="status-sub" id="val-interval">—</div>
         </div>
@@ -275,14 +305,14 @@
 
       <div class="card">
         <div class="log-header">
-          <h2>Log-Ausgabe</h2>
+          <h2 data-i18n="log.output.title">Log-Ausgabe</h2>
           <label class="toggle-row toggle-compact">
             <input type="checkbox" id="auto-refresh" checked>
             <span class="toggle-track"><span class="toggle-thumb"></span></span>
-            <span>Auto-Refresh (3s)</span>
+            <span data-i18n="log.autoRefresh">Auto-Refresh (3s)</span>
           </label>
         </div>
-        <pre id="log-output" class="log-output">Lade…</pre>
+        <pre id="log-output" class="log-output" data-i18n="log.output.loading">Lade…</pre>
       </div>
 
     </section>

@@ -22,7 +22,16 @@ from kudosy.routes import router
 from kudosy.scheduler import KudosyScheduler
 from kudosy.settings import get_settings
 from kudosy.sport_types import ALL_SPORT_TYPES, fetch_sport_types, merge_sport_types
-from kudosy.store import bootstrap, log_path, read_defaults, read_settings, read_user_config
+from kudosy.store import (
+    bootstrap,
+    log_path,
+    mark_kudoed,
+    prune_kudoed,
+    read_defaults,
+    read_kudoed_ids,
+    read_settings,
+    read_user_config,
+)
 
 log = logging.getLogger(__name__)
 
@@ -83,6 +92,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         from kudosy.strava_client import StravaClient
 
         reset_log_handler(log_path())
+        kudoed_ids = read_kudoed_ids()
         client = StravaClient(user_cfg.stravaSessionCookie)
         try:
             result = await run_kudos(
@@ -92,7 +102,20 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
                 client=client,
                 feed_parser=feed_parser,
                 dry_run=dry_run,
+                kudoed_ids=kudoed_ids,
             )
+            # Persist newly kudoed activity IDs (dry-run never sends, so list is empty)
+            if result and result.newly_kudoed:
+                now_iso = result.finished_at.isoformat()
+                for activity_id in result.newly_kudoed:
+                    mark_kudoed(activity_id, now_iso)
+                prune_kudoed()
+                if result.skipped_cached:
+                    log.info(
+                        "Cache: %d activities skipped (already kudoed), %d newly cached",
+                        result.skipped_cached,
+                        len(result.newly_kudoed),
+                    )
             return result
         finally:
             await client.aclose()

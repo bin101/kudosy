@@ -319,4 +319,11 @@ class StravaHtmlFeedParser:
 
 
 class AuthError(Exception):
-    """Raised when Strava returns a login redirect (cookie expired)."""
+    """Raised when Strava returns a login redirect (cookie expired).
+
+    The ``code`` attribute is set by :class:`StravaClient._check_auth` to a
+    machine-readable error code (e.g. ``AUTH_INVALID_COOKIE``) that the
+    frontend can translate.
+    """
+
+    code: str = "AUTH_FAILED"

@@ -8,6 +8,7 @@ can use a temp directory without touching real config.
 from __future__ import annotations
 
 import contextlib
+import datetime as _dt
 import json
 import logging
 import os
@@ -91,6 +92,7 @@ _CONFIG_FILE = "config.yaml"
 _DEFAULTS_FILE = "defaults.yaml"
 _SETTINGS_FILE = "settings.json"
 _LABELS_FILE = "athlete-labels.json"
+_KUDOED_FILE = "kudoed-activities.json"
 _LOG_FILE = "last-run.log"
 
 _DEFAULT_SETTINGS = AppSettings()
@@ -167,6 +169,52 @@ def cache_athlete_label(athlete_id: str, name: str) -> None:
     write_athlete_labels(labels)
 
 
+def read_kudoed() -> dict[str, str]:
+    """Return mapping of activity_id → ISO-timestamp for all cached kudoed activities."""
+    raw = _read_json(_path(_KUDOED_FILE))
+    return raw if isinstance(raw, dict) else {}
+
+
+def read_kudoed_ids() -> set[str]:
+    """Return the set of activity_ids that were already kudoed (fast lookup)."""
+    return set(read_kudoed().keys())
+
+
+def write_kudoed(data: dict[str, str]) -> None:
+    """Persist the full kudoed-activities mapping atomically."""
+    _write_json_atomic(_path(_KUDOED_FILE), data)
+
+
+def mark_kudoed(activity_id: str, ts_iso: str) -> None:
+    """Add a single kudoed activity_id to the persistent cache."""
+    data = read_kudoed()
+    data[activity_id] = ts_iso
+    write_kudoed(data)
+
+
+def prune_kudoed(max_age_days: int = 30) -> None:
+    """Remove cached entries older than *max_age_days* days.
+
+    Since Activity has no timestamp field, we track when we cached the kudo.
+    The Strava feed only holds ~60 recent items, so entries older than
+    max_age_days are guaranteed to be out of the feed and can be dropped.
+    """
+    data = read_kudoed()
+    cutoff = _dt.datetime.now(_dt.UTC) - _dt.timedelta(days=max_age_days)
+    pruned = {aid: ts for aid, ts in data.items() if _parse_ts(ts) > cutoff}
+    if len(pruned) < len(data):
+        log.debug("prune_kudoed: removed %d old entries", len(data) - len(pruned))
+        write_kudoed(pruned)
+
+
+def _parse_ts(ts: str) -> _dt.datetime:
+    """Parse an ISO timestamp string; return epoch on failure (triggers pruning)."""
+    try:
+        return _dt.datetime.fromisoformat(ts)
+    except (ValueError, TypeError):
+        return _dt.datetime(1970, 1, 1, tzinfo=_dt.UTC)
+
+
 def log_path() -> Path:
     return _path(_LOG_FILE)
 
@@ -219,3 +267,9 @@ def bootstrap() -> None:
     if not labels_path.exists():
         log.info("[bootstrap] Creating %s", labels_path)
         _write_json_atomic(labels_path, {})
+
+    # Seed kudoed-activities.json if missing
+    kudoed_path = _path(_KUDOED_FILE)
+    if not kudoed_path.exists():
+        log.info("[bootstrap] Creating %s", kudoed_path)
+        _write_json_atomic(kudoed_path, {})

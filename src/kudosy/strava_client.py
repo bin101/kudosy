@@ -142,9 +142,13 @@ class StravaClient:
         """Raise AuthError if Strava redirected to the login page."""
         url_str = str(resp.url)
         if "login" in url_str or "sessions" in url_str:
-            raise AuthError(
+            err = AuthError(
                 "Strava-Session-Cookie ist ungültig oder abgelaufen. "
                 "Bitte neuen Cookie in der Konfiguration eintragen."
             )
+            err.code = "AUTH_INVALID_COOKIE"
+            raise err
         if resp.status_code == 401:
-            raise AuthError("Authentifizierung fehlgeschlagen (HTTP 401).")
+            err = AuthError("Authentifizierung fehlgeschlagen (HTTP 401).")
+            err.code = "AUTH_FAILED"
+            raise err

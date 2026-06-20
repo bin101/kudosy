@@ -349,7 +349,11 @@ def test_get_feed_auth_error_returns_401(app_client: TestClient, data_dir: Path)
         resp = app_client.get("/api/feed")
 
     assert resp.status_code == 401
-    assert "Cookie" in resp.json()["detail"]
+    detail = resp.json()["detail"]
+    # detail is now a structured dict with 'code' and 'message'
+    assert isinstance(detail, dict)
+    assert detail.get("code") in ("AUTH_INVALID_COOKIE", "AUTH_FAILED")
+    assert "Cookie" in detail.get("message", "")
 
 
 def test_get_feed_empty_feed_returns_empty_list(app_client: TestClient, data_dir: Path) -> None:

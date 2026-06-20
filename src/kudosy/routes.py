@@ -49,7 +49,10 @@ async def put_config(request: Request) -> dict[str, Any]:
     data = await request.json()
     cookie = data.get("stravaSessionCookie")
     if cookie is not None and not cookie:
-        raise HTTPException(status_code=400, detail="stravaSessionCookie darf nicht leer sein")
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "EMPTY_COOKIE", "message": "stravaSessionCookie darf nicht leer sein"},
+        )
     write_user_config_raw(data)
     return {"ok": True}
 
@@ -116,7 +119,10 @@ async def get_sport_types(request: Request) -> list[str]:
 async def get_athlete(athlete_id: str) -> dict[str, Any]:
     cfg = read_user_config()
     if not cfg or not cfg.stravaSessionCookie:
-        raise HTTPException(status_code=400, detail="Kein Session-Cookie konfiguriert")
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "NO_COOKIE", "message": "Kein Session-Cookie konfiguriert"},
+        )
 
     # Check persistent cache first
     labels = read_athlete_labels()
@@ -127,7 +133,8 @@ async def get_athlete(athlete_id: str) -> dict[str, Any]:
     try:
         name = await client.lookup_athlete(athlete_id)
     except AuthError as exc:
-        raise HTTPException(status_code=401, detail=str(exc)) from exc
+        code = getattr(exc, "code", "AUTH_FAILED")
+        raise HTTPException(status_code=401, detail={"code": code, "message": str(exc)}) from exc
     finally:
         await client.aclose()
 
@@ -155,7 +162,10 @@ async def post_run(
     scheduler = state.get("scheduler")
 
     if scheduler and scheduler.is_running:
-        raise HTTPException(status_code=409, detail="Job läuft bereits — bitte warten")
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "JOB_RUNNING", "message": "Job läuft bereits — bitte warten"},
+        )
 
     # dryRun from ?dryRun=1 or body
     dry_run = request.query_params.get("dryRun") == "1"
@@ -168,7 +178,10 @@ async def post_run(
 
     job_fn = state.get("job_fn")
     if job_fn is None:
-        raise HTTPException(status_code=503, detail="Engine nicht bereit")
+        raise HTTPException(
+            status_code=503,
+            detail={"code": "ENGINE_NOT_READY", "message": "Engine nicht bereit"},
+        )
 
     async def _run() -> None:
         from kudosy.app import get_app_state
@@ -214,7 +227,10 @@ async def get_feed() -> list[dict[str, Any]]:
     """Fetch the Strava following feed and annotate each activity with the engine decision."""
     cfg = read_user_config()
     if not cfg or not cfg.stravaSessionCookie:
-        raise HTTPException(status_code=400, detail="Kein Session-Cookie konfiguriert")
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "NO_COOKIE", "message": "Kein Session-Cookie konfiguriert"},
+        )
 
     defaults = read_defaults()
     effective = build_effective_config(cfg, defaults)
@@ -231,7 +247,8 @@ async def get_feed() -> list[dict[str, Any]]:
             result.append(entry)
         return result
     except AuthError as exc:
-        raise HTTPException(status_code=401, detail=str(exc)) from exc
+        code = getattr(exc, "code", "AUTH_FAILED")
+        raise HTTPException(status_code=401, detail={"code": code, "message": str(exc)}) from exc
     finally:
         await client.aclose()
 

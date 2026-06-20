@@ -153,6 +153,8 @@ class RunResult(BaseModel):
     would_give: int  # number that would receive kudos (dry-run count)
     given: int  # actually sent (0 in dry-run)
     error: str | None = None
+    newly_kudoed: list[str] = []  # activity_ids successfully kudoed this run
+    skipped_cached: int = 0  # activities skipped because already in cache
 
 
 class RunStatus(BaseModel):

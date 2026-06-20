@@ -2,6 +2,17 @@
 // Kudosy UI — app.js
 // ──────────────────────────────────────────────────────────────────────────────
 
+import {
+  SUPPORTED,
+  LANG_LABELS,
+  t,
+  getLang,
+  currentLang,
+  localeFor,
+  setLang,
+  applyStaticTranslations,
+} from './i18n.js';
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const $ = id => document.getElementById(id);
@@ -22,7 +33,17 @@ async function fetchJson(url, opts = {}) {
   const res = await fetch(url, opts);
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.detail || body.error || `HTTP ${res.status}`);
+    // detail may be a structured {code, message} object or a plain string
+    const detail = body.detail;
+    if (detail && typeof detail === 'object' && detail.code) {
+      const key = `error.${detail.code}`;
+      const translated = t(key);
+      // if key not found, fall back to the message field
+      throw new Error(translated !== key ? translated : (detail.message || `HTTP ${res.status}`));
+    }
+    throw new Error(
+      (typeof detail === 'string' ? detail : null) || body.error || `HTTP ${res.status}`
+    );
   }
   return res.json();
 }
@@ -41,23 +62,26 @@ function formatRelative(isoString) {
   const diff = Date.now() - d.getTime();
   if (diff < 0) {
     const s = Math.round(-diff / 1000);
-    if (s < 60) return `in ${s}s`;
+    if (s < 60) return t('time.inSeconds', { n: s });
     const m = Math.round(s / 60);
-    if (m < 60) return `in ${m} min`;
-    return `in ${Math.round(m / 60)} h`;
+    if (m < 60) return t('time.inMinutes', { n: m });
+    return t('time.inHours', { n: Math.round(m / 60) });
   }
   const s = Math.round(diff / 1000);
-  if (s < 60) return `vor ${s}s`;
+  if (s < 60) return t('time.agoSeconds', { n: s });
   const m = Math.round(s / 60);
-  if (m < 60) return `vor ${m} min`;
+  if (m < 60) return t('time.agoMinutes', { n: m });
   const h = Math.round(m / 60);
-  if (h < 24) return `vor ${h} h`;
-  return d.toLocaleDateString('de-DE');
+  if (h < 24) return t('time.agoHours', { n: h });
+  return d.toLocaleDateString(localeFor(currentLang()));
 }
 
 function formatTime(isoString) {
   if (!isoString) return '—';
-  return new Date(isoString).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+  return new Date(isoString).toLocaleTimeString(localeFor(currentLang()), {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 // "MountainBikeRide" → "Mountain Bike Ride"
@@ -70,6 +94,30 @@ function formatSportLabel(type) {
 let sportTypes    = [];
 let athleteLabels = {};
 let pollTimer     = null;
+
+// ── Language selector ─────────────────────────────────────────────────────────
+
+function initLangSelect() {
+  const sel = $('lang-select');
+  if (!sel) return;
+  for (const lang of SUPPORTED) {
+    const opt = document.createElement('option');
+    opt.value = lang;
+    opt.textContent = LANG_LABELS[lang];
+    if (lang === getLang()) opt.selected = true;
+    sel.appendChild(opt);
+  }
+  sel.addEventListener('change', () => {
+    setLang(sel.value, () => {
+      // Re-render dynamic areas after language change
+      pollStatus();
+      const activeFeedPane = document.querySelector('#tab-feed.active');
+      if (activeFeedPane) loadFeed();
+    });
+    // Keep select in sync (applyStaticTranslations won't touch it)
+    sel.value = sel.value;
+  });
+}
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────
 
@@ -96,7 +144,7 @@ function buildSportTypeSelect(selectedType = '') {
 
   const blank = document.createElement('option');
   blank.value = '';
-  blank.textContent = '— Sportart wählen —';
+  blank.textContent = t('table.sportType.placeholder');
   if (!selectedType) blank.selected = true;
   sel.appendChild(blank);
 
@@ -126,7 +174,7 @@ function makeRemoveBtn(onClick) {
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'btn-remove';
-  btn.title = 'Entfernen';
+  btn.title = t('table.removeBtn.title');
   btn.textContent = '×';
   btn.addEventListener('click', onClick);
   return btn;
@@ -183,7 +231,7 @@ function populateRulesTable(tbody, rules) {
 // ── Athlete list helpers ──────────────────────────────────────────────────────
 
 async function doAthleteNameLookup(id, nameEl, lookupBtn) {
-  if (!id) { toast('Bitte zuerst eine Athlete ID eingeben', 'info'); return; }
+  if (!id) { toast(t('athlete.missingId'), 'info'); return; }
   const prev = lookupBtn.textContent;
   lookupBtn.disabled = true;
   lookupBtn.textContent = '…';
@@ -196,10 +244,10 @@ async function doAthleteNameLookup(id, nameEl, lookupBtn) {
       nameEl.textContent = r.name;
       nameEl.className = 'athlete-name';
     } else {
-      nameEl.textContent = 'nicht gefunden';
+      nameEl.textContent = t('athlete.notFound');
     }
   } catch {
-    nameEl.textContent = 'Fehler';
+    nameEl.textContent = t('athlete.error');
   } finally {
     lookupBtn.disabled = false;
     lookupBtn.textContent = prev;
@@ -213,7 +261,7 @@ function addAthleteRow(listEl, id = '') {
   const idInput = document.createElement('input');
   idInput.type = 'text';
   idInput.value = id;
-  idInput.placeholder = 'Athlete ID';
+  idInput.placeholder = t('athlete.id.placeholder');
   idInput.className = 'athlete-id';
   idInput.inputMode = 'numeric';
 
@@ -225,7 +273,7 @@ function addAthleteRow(listEl, id = '') {
   const lookupBtn = document.createElement('button');
   lookupBtn.type = 'button';
   lookupBtn.className = 'btn-icon btn-lookup';
-  lookupBtn.title = 'Name von Strava laden';
+  lookupBtn.title = t('athlete.lookup.title');
   lookupBtn.textContent = '🔍';
   lookupBtn.addEventListener('click', () =>
     doAthleteNameLookup(idInput.value.trim(), nameEl, lookupBtn));
@@ -306,7 +354,7 @@ async function loadConfig() {
   const namesList = $('activity-names-list');
   namesList.innerHTML = '';
   for (const n of (cfg.kudoRules?.activityNames || [])) {
-    addListItem(namesList, n, 'Regex-Muster, z.B. Morning.*');
+    addListItem(namesList, n, t('config.activityNames.placeholder'));
   }
 }
 
@@ -325,7 +373,7 @@ async function saveConfig(e) {
     };
     if (!cfg.kudoRules.activityNames.length) delete cfg.kudoRules.activityNames;
     await putJson('/api/config', cfg);
-    toast('Konfiguration gespeichert ✓');
+    toast(t('toast.config.saved'));
   } catch (err) {
     toast(err.message, 'error');
   }
@@ -337,7 +385,7 @@ function initConfigTab() {
   $('btn-add-distance').addEventListener('click', () => addRuleRow($('tbody-distance')));
   $('btn-add-time').addEventListener('click', () => addRuleRow($('tbody-time')));
   $('btn-add-name').addEventListener('click', () =>
-    addListItem($('activity-names-list'), '', 'Regex-Muster, z.B. Morning.*'));
+    addListItem($('activity-names-list'), '', t('config.activityNames.placeholder')));
   $('btn-load-all-names')?.addEventListener('click', () =>
     autoLookupMissingNames($('ignore-list')));
 }
@@ -367,7 +415,7 @@ async function saveDefaults(e) {
       },
     };
     await putJson('/api/defaults', data);
-    toast('Defaults gespeichert ✓');
+    toast(t('toast.defaults.saved'));
   } catch (err) {
     toast(err.message, 'error');
   }
@@ -414,7 +462,7 @@ async function saveSettings(e) {
       shuffleOrder:          $('shuffleOrder').checked,
     };
     await putJson('/api/settings', data);
-    toast('Einstellungen gespeichert ✓');
+    toast(t('toast.settings.saved'));
     pollStatus();
   } catch (err) {
     toast(err.message, 'error');
@@ -435,16 +483,16 @@ async function pollStatus() {
     const badge = $('status-badge');
     if (s.running) {
       badge.className = 'badge badge-running';
-      badge.textContent = 'Läuft…';
+      badge.textContent = t('status.running');
     } else if (s.lastRun?.success === false) {
       badge.className = 'badge badge-error';
-      badge.textContent = 'Fehler';
+      badge.textContent = t('status.error');
     } else if (s.lastRun?.success === true) {
       badge.className = 'badge badge-ok';
-      badge.textContent = s.lastRun.dry_run ? 'Dry-Run OK' : 'OK';
+      badge.textContent = s.lastRun.dry_run ? t('status.dryRunOk') : t('status.ok');
     } else {
       badge.className = 'badge badge-idle';
-      badge.textContent = 'Bereit';
+      badge.textContent = t('status.ready');
     }
 
     $('btn-run').disabled     = s.running;
@@ -452,22 +500,29 @@ async function pollStatus() {
 
     if (s.lastRun) {
       const lr = s.lastRun;
-      const success = lr.success ? (lr.dry_run ? '🔍 Dry-Run' : '✅ OK') : '❌ Fehler';
-      $('val-last-run').textContent = `${success}  ${formatRelative(lr.finished_at)}`;
+      const successLabel = lr.success
+        ? (lr.dry_run ? t('run.dryRun') : t('run.success'))
+        : t('run.error');
+      $('val-last-run').textContent = `${successLabel}  ${formatRelative(lr.finished_at)}`;
       $('val-last-run').style.color = lr.success ? '' : 'var(--error)';
       const kudosCount = lr.dry_run ? lr.would_give : lr.given;
-      $('val-kudos').textContent = `${kudosCount} Kudos ${lr.dry_run ? '(simuliert)' : 'gesendet'}`;
+      $('val-kudos').textContent = lr.dry_run
+        ? t('status.kudosSimulated', { n: kudosCount })
+        : t('status.kudosSent', { n: kudosCount });
     } else {
-      $('val-last-run').textContent = 'Noch kein Lauf';
+      $('val-last-run').textContent = t('status.noRun');
       $('val-kudos').textContent    = '—';
     }
 
     if (s.schedulerEnabled && s.nextRunAt) {
       $('val-next-run').textContent = formatRelative(s.nextRunAt);
-      $('val-interval').textContent = `alle ${s.intervalMinutes} min · ${formatTime(s.nextRunAt)} Uhr`;
+      $('val-interval').textContent = t('status.interval', {
+        m: s.intervalMinutes,
+        t: formatTime(s.nextRunAt),
+      });
     } else {
-      $('val-next-run').textContent = 'Deaktiviert';
-      $('val-interval').textContent = 'Scheduler ist aus';
+      $('val-next-run').textContent = t('status.disabled');
+      $('val-interval').textContent = t('status.schedulerOff');
     }
 
     // Update footer version
@@ -502,22 +557,14 @@ function stopPolling() {
 
 // ── Feed tab ──────────────────────────────────────────────────────────────────
 
-const FEED_REASON_LABELS = {
-  already:    'bereits geliked',
-  ignore:     'Athlet ignoriert',
-  criteria:   'unter Schwellenwert',
-  name_match: 'Name-Treffer',
-  default:    'Standard',
-};
-
 async function loadFeed() {
   const container = $('feed-list');
   if (!container) return;
-  container.innerHTML = '<p class="hint">Lade Feed…</p>';
+  container.innerHTML = `<p class="hint">${t('feed.loading')}</p>`;
   try {
     const activities = await fetchJson('/api/feed');
     if (!activities.length) {
-      container.innerHTML = '<p class="hint feed-empty">Keine Aktivitäten im Feed gefunden. Prüfe ob der Session-Cookie gültig ist und führe ggf. einen Dry-Run aus.</p>';
+      container.innerHTML = `<p class="hint feed-empty">${t('feed.empty')}</p>`;
       return;
     }
     container.innerHTML = '';
@@ -525,15 +572,16 @@ async function loadFeed() {
       const card = document.createElement('div');
       card.className = 'feed-card';
 
-      const reasonLabel = FEED_REASON_LABELS[act.reason] || act.reason;
+      const reasonKey = `reason.${act.reason}`;
+      const reasonLabel = t(reasonKey) !== reasonKey ? t(reasonKey) : act.reason;
       const decisionClass = act.give_kudos ? 'feed-decision-give' : 'feed-decision-skip';
       const decisionText  = act.give_kudos
-        ? '→ würde Kudo geben'
-        : `– übersprungen: ${reasonLabel}`;
+        ? t('feed.decision.give')
+        : t('feed.decision.skip', { reason: reasonLabel });
 
       const kudosBadge = act.has_kudoed
-        ? '<span class="feed-kudo-badge feed-kudo-done">✅ Kudo gegeben</span>'
-        : '<span class="feed-kudo-badge feed-kudo-pending">○ noch kein Kudo</span>';
+        ? `<span class="feed-kudo-badge feed-kudo-done">${t('feed.kudo.done')}</span>`
+        : `<span class="feed-kudo-badge feed-kudo-pending">${t('feed.kudo.pending')}</span>`;
 
       const statsParts = Object.entries(act.stats)
         .map(([k, v]) => `<span class="feed-stat"><strong>${k}:</strong> ${v}</span>`)
@@ -547,7 +595,7 @@ async function loadFeed() {
           ${kudosBadge}
         </div>
         <div class="feed-card-body">
-          <div class="feed-activity-name">${act.activity_name || '(kein Name)'}</div>
+          <div class="feed-activity-name">${act.activity_name || t('feed.noName')}</div>
           <div class="feed-athlete-name">${act.athlete_name}</div>
           ${statsHtml}
         </div>
@@ -558,10 +606,14 @@ async function loadFeed() {
       container.appendChild(card);
     });
   } catch (err) {
-    const is401 = err.message && (err.message.includes('401') || err.message.toLowerCase().includes('cookie'));
+    const is401 = err.message && (
+      err.message.includes('AUTH_') ||
+      err.message.includes('401') ||
+      err.message.toLowerCase().includes('cookie')
+    );
     container.innerHTML = is401
-      ? '<p class="hint feed-error">⚠️ Session-Cookie ungültig oder abgelaufen. Bitte neuen Cookie in der Konfiguration eintragen.</p>'
-      : `<p class="hint feed-error">Fehler beim Laden des Feeds: ${err.message}</p>`;
+      ? `<p class="hint feed-error">${t('feed.auth.error')}</p>`
+      : `<p class="hint feed-error">${t('feed.load.error', { msg: err.message })}</p>`;
   }
 }
 
@@ -619,6 +671,10 @@ async function init() {
     sportTypes = [];
   }
 
+  // Apply static translations for the initial language
+  applyStaticTranslations();
+
+  initLangSelect();
   initTabs();
   initConfigTab();
   initDefaultsTab();
@@ -628,9 +684,9 @@ async function init() {
   initRevealButtons();
 
   await Promise.allSettled([
-    loadConfig().catch(err => toast('Config nicht geladen: ' + err.message, 'error')),
-    loadDefaults().catch(err => toast('Defaults nicht geladen: ' + err.message, 'error')),
-    loadSettings().catch(err => toast('Einstellungen nicht geladen: ' + err.message, 'error')),
+    loadConfig().catch(err => toast(t('toast.config.loadError', { msg: err.message }), 'error')),
+    loadDefaults().catch(err => toast(t('toast.defaults.loadError', { msg: err.message }), 'error')),
+    loadSettings().catch(err => toast(t('toast.settings.loadError', { msg: err.message }), 'error')),
   ]);
 
   await pollStatus();

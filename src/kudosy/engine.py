@@ -50,6 +50,7 @@ async def run_kudos(
     feed_parser: FeedParser,
     dry_run: bool = False,
     rng: random.Random | None = None,
+    kudoed_ids: set[str] | None = None,
 ) -> RunResult:
     """Execute one kudos run.
 
@@ -69,8 +70,11 @@ async def run_kudos(
     log.info(_RUN_HEADER.format(ts=started_at.isoformat(), dry=dry_run))
 
     effective = build_effective_config(user_cfg, defaults)
+    _cached_ids: set[str] = kudoed_ids if kudoed_ids is not None else set()
     total = 0
     to_give: list[Activity] = []
+    newly_kudoed: list[str] = []
+    skipped_cached = 0
     given = 0
     error: str | None = None
 
@@ -92,6 +96,12 @@ async def run_kudos(
 
         # 3. Decide for each activity
         for act in activities:
+            # Skip activities we already kudoed in a previous run (persistent cache)
+            if act.activity_id in _cached_ids:
+                skipped_cached += 1
+                log.debug("--- Skipped (cached): %s — %s", act.athlete_name, act.activity_name)
+                continue
+
             decision = decide(act, effective)
             stats_str = _fmt_stats(act.stats)
             log.debug(
@@ -139,6 +149,7 @@ async def run_kudos(
                 success = await client.send_kudos(act.activity_id, csrf_token)
                 if success:
                     given += 1
+                    newly_kudoed.append(act.activity_id)
                     log.info("✓ Kudos gesendet: %s — %s", act.athlete_name, act.activity_name)
                 else:
                     log.warning(
@@ -168,4 +179,6 @@ async def run_kudos(
         would_give=len(to_give),
         given=given if not dry_run else 0,
         error=error,
+        newly_kudoed=newly_kudoed,
+        skipped_cached=skipped_cached,
     )
