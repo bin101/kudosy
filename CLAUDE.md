@@ -133,3 +133,12 @@ GET  /api/log              — last-run.log as text/plain
 Conventional Commits: `feat:`, `fix:`, `chore:`, `docs:`, `test:`, `refactor:`.
 Branch: `main`. Releases: `release-please` creates a PR on each push to `main`, cutting a
 `v0.x.x` tag → GitHub Release → Docker image built+pushed to `ghcr.io/bin101/kudosy`.
+
+### Feature branches
+
+Every fix and every new feature gets its own branch — never commit directly to `main`.
+
+- Branch naming: `feat/<short-slug>`, `fix/<short-slug>`, `chore/<short-slug>`, etc.
+- When a feature branch is finished: commit all changes, push, and open a PR — do this
+  autonomously without asking for confirmation. Only pause if something is genuinely ambiguous
+  (e.g. a destructive force-push or a missing required value).
