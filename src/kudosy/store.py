@@ -92,10 +92,10 @@ _DEFAULTS_FILE = "defaults.yaml"
 _SETTINGS_FILE = "settings.json"
 _LABELS_FILE = "athlete-labels.json"
 _LOG_FILE = "last-run.log"
-_LEGACY_CONFIG = Path("/tmp/legacy-config.yaml")
 
 _DEFAULT_SETTINGS = AppSettings()
 _DEFAULT_DEFAULTS = Defaults()
+_DEFAULT_CONFIG = UserConfig()
 
 
 def read_user_config() -> UserConfig | None:
@@ -182,25 +182,28 @@ def read_log() -> str:
 
 
 def bootstrap() -> None:
-    """Create /data, seed missing defaults/settings, migrate legacy config."""
+    """Create /data and seed all missing files with safe defaults.
+
+    Idempotent: existing files are never overwritten (except settings.json,
+    which is merged to add any new fields while preserving existing values).
+    Safe to call on every startup.
+    """
     data_dir = _data_dir()
     data_dir.mkdir(parents=True, exist_ok=True)
 
-    # Migrate legacy config if not yet done
+    # Seed config.yaml if missing (user fills in cookie via the UI)
     config_path = _path(_CONFIG_FILE)
-    if not config_path.exists() and _LEGACY_CONFIG.exists():
-        log.info("[bootstrap] Migrating legacy config → %s", config_path)
-        raw = _read_yaml(_LEGACY_CONFIG)
-        if raw:
-            _write_yaml_atomic(config_path, raw)
+    if not config_path.exists():
+        log.info("[bootstrap] Creating %s", config_path)
+        _write_yaml_atomic(config_path, _DEFAULT_CONFIG.model_dump())
 
-    # Seed defaults file
+    # Seed defaults.yaml if missing
     defaults_path = _path(_DEFAULTS_FILE)
     if not defaults_path.exists():
         log.info("[bootstrap] Creating %s", defaults_path)
         _write_yaml_atomic(defaults_path, _DEFAULT_DEFAULTS.model_dump())
 
-    # Seed settings file (also adds new fields to existing settings.json)
+    # Seed settings.json (also merges new fields into existing settings.json)
     settings_path = _path(_SETTINGS_FILE)
     if settings_path.exists():
         existing = _read_json(settings_path) or {}
@@ -210,3 +213,9 @@ def bootstrap() -> None:
     else:
         log.info("[bootstrap] Creating %s", settings_path)
         _write_json_atomic(settings_path, _DEFAULT_SETTINGS.model_dump())
+
+    # Seed athlete-labels.json if missing
+    labels_path = _path(_LABELS_FILE)
+    if not labels_path.exists():
+        log.info("[bootstrap] Creating %s", labels_path)
+        _write_json_atomic(labels_path, {})

@@ -270,3 +270,114 @@ def test_post_run_409_when_already_running(app_client: TestClient) -> None:
 
     # Restore
     get_app_state()["scheduler"].is_running = False
+
+
+# ── /api/feed ─────────────────────────────────────────────────────────────────
+
+
+def test_get_feed_no_cookie_returns_400(app_client: TestClient, data_dir: Path) -> None:
+    """Returns 400 when no session cookie is configured."""
+    from kudosy import store
+
+    store.write_user_config_raw({"stravaSessionCookie": "", "athleteId": ""})
+    resp = app_client.get("/api/feed")
+    assert resp.status_code == 400
+
+
+def test_get_feed_returns_activities_with_decision(
+    app_client: TestClient, data_dir: Path
+) -> None:
+    """GET /api/feed returns activities enriched with give_kudos and reason."""
+    import json
+    from unittest.mock import AsyncMock, patch
+
+    from kudosy import store
+
+    store.write_user_config_raw(
+        {"stravaSessionCookie": "valid-cookie", "athleteId": "20000001"}
+    )
+
+    # HTML with a single activity via the pageView fallback format (generic shape)
+    feed_entry = {
+        "id": "55000000001",
+        "name": "Test Run",
+        "sport_type": "Run",
+        "has_kudoed": False,
+        "distance": 10000.0,
+        "moving_time": 2700,
+        "athlete": {"id": "300000001", "name": "Test Runner"},
+    }
+    feed_html = (
+        "<html><script>var pageView = "
+        + json.dumps({"entries": [feed_entry]})
+        + ";</script></html>"
+    )
+
+    mock_instance = AsyncMock()
+    mock_instance.fetch_following_feed.return_value = feed_html
+    mock_instance.aclose = AsyncMock()
+
+    with patch("kudosy.routes.StravaClient", return_value=mock_instance):
+        resp = app_client.get("/api/feed")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert isinstance(data, list)
+    assert len(data) == 1
+
+    act = data[0]
+    assert act["activity_id"] == "55000000001"
+    assert act["activity_name"] == "Test Run"
+    assert act["sport_type"] == "Run"
+    assert act["has_kudoed"] is False
+    assert "give_kudos" in act
+    assert isinstance(act["give_kudos"], bool)
+    assert "reason" in act
+    assert isinstance(act["reason"], str)
+
+
+def test_get_feed_auth_error_returns_401(
+    app_client: TestClient, data_dir: Path
+) -> None:
+    """AuthError from StravaClient propagates as HTTP 401."""
+    from unittest.mock import AsyncMock, patch
+
+    from kudosy import store
+    from kudosy.feed import AuthError
+
+    store.write_user_config_raw(
+        {"stravaSessionCookie": "expired-cookie", "athleteId": "20000001"}
+    )
+
+    mock_instance = AsyncMock()
+    mock_instance.fetch_following_feed.side_effect = AuthError("Cookie abgelaufen")
+    mock_instance.aclose = AsyncMock()
+
+    with patch("kudosy.routes.StravaClient", return_value=mock_instance):
+        resp = app_client.get("/api/feed")
+
+    assert resp.status_code == 401
+    assert "Cookie" in resp.json()["detail"]
+
+
+def test_get_feed_empty_feed_returns_empty_list(
+    app_client: TestClient, data_dir: Path
+) -> None:
+    """Empty feed returns an empty list (not an error)."""
+    from unittest.mock import AsyncMock, patch
+
+    from kudosy import store
+
+    store.write_user_config_raw(
+        {"stravaSessionCookie": "valid-cookie", "athleteId": "20000001"}
+    )
+
+    mock_instance = AsyncMock()
+    mock_instance.fetch_following_feed.return_value = "<html><body>no feed data</body></html>"
+    mock_instance.aclose = AsyncMock()
+
+    with patch("kudosy.routes.StravaClient", return_value=mock_instance):
+        resp = app_client.get("/api/feed")
+
+    assert resp.status_code == 200
+    assert resp.json() == []

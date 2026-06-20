@@ -35,6 +35,7 @@
     <button class="tab active" data-tab="config">Konfiguration</button>
     <button class="tab" data-tab="defaults">Defaults</button>
     <button class="tab" data-tab="settings">Einstellungen</button>
+    <button class="tab" data-tab="feed">Feed</button>
     <button class="tab" data-tab="log">Status &amp; Log</button>
   </nav>
 
@@ -238,6 +239,22 @@
         </div>
 
       </form>
+    </section>
+
+    <!-- ── FEED ──────────────────────────────────────────────────────── -->
+    <section id="tab-feed" class="tab-pane">
+
+      <div class="card">
+        <div class="card-header-row">
+          <h2>Strava Feed</h2>
+          <button type="button" class="btn btn-outline btn-sm" id="btn-refresh-feed">🔄 Aktualisieren</button>
+        </div>
+        <p class="hint">Aktivitäten aus deinem Strava-Feed — mit Kudo-Status und Regelentscheidung der Engine.</p>
+        <div id="feed-list" class="feed-list">
+          <p class="hint feed-empty">Klicke auf „Aktualisieren" oder öffne diesen Tab, um den Feed zu laden.</p>
+        </div>
+      </div>
+
     </section>
 
     <!-- ── LOG ───────────────────────────────────────────────────────── -->

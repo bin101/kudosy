@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Any
 
 import httpx
 
@@ -81,33 +80,19 @@ class StravaClient:
         log.debug("CSRF Token: %s…", token[:8])
         return token
 
-    async def fetch_following_feed(self, *, page: int = 1) -> dict[str, Any] | str:
-        """Fetch the following activity feed.
+    async def fetch_following_feed(self, *, num_entries: int = 60) -> str:
+        """Fetch the following activity feed as HTML.
 
-        Tries the JSON feed endpoint first; falls back to HTML dashboard.
-        Returns either a parsed dict (JSON) or raw HTML string.
+        Fetches the Strava dashboard page which embeds activity feed data as
+        JSON in data-react-props attributes (appContext.feedProps.preFetchedEntries).
+        Returns raw HTML string for the feed parser to extract activities from.
         """
         client = self._get_client()
-        # Try JSON API endpoint
-        try:
-            resp = await client.get(
-                _FEED_URL,
-                params={"feed_type": "following", "athlete_id": "", "page": page},
-                headers={
-                    "Accept": "application/json, text/javascript, */*; q=0.01",
-                    "X-Requested-With": "XMLHttpRequest",
-                },
-                timeout=15.0,
-            )
-            self._check_auth(resp)
-            if resp.headers.get("content-type", "").startswith("application/json"):
-                result: dict[str, Any] = resp.json()
-                return result
-        except (httpx.HTTPStatusError, httpx.RequestError) as exc:
-            log.debug("JSON feed request failed (%s); trying HTML dashboard", exc)
-
-        # Fallback: fetch HTML dashboard
-        resp = await client.get(_DASHBOARD_URL, timeout=15.0)
+        resp = await client.get(
+            _DASHBOARD_URL,
+            params={"num_entries": num_entries},
+            timeout=15.0,
+        )
         self._check_auth(resp)
         return resp.text
 

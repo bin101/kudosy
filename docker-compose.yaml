@@ -14,7 +14,3 @@ services:
       KUDOSY_LOG_LEVEL: INFO
       # Override port if needed:
       # KUDOSY_PORT: "8080"
-    # Optional: uncomment for legacy migration from old /tmp config
-    # volumes:
-    #   - ./data:/data
-    #   - ./legacy-config.yaml:/tmp/legacy-config.yaml:ro

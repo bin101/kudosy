@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import html
 import json
+from pathlib import Path
 
 from kudosy.feed import StravaHtmlFeedParser
+
+_FIXTURES = Path(__file__).parent.parent / "fixtures"
 
 
 def _parser() -> StravaHtmlFeedParser:
@@ -268,3 +272,223 @@ def test_parse_dict_uses_feed_key() -> None:
     result = _parser().parse(data)
     assert len(result) == 1
     assert result[0].activity_id == "90000000001"
+
+
+# ── data-react-props / preFetchedEntries (current Strava format) ───────────────
+
+
+def _make_react_html(entries: list) -> str:
+    """Wrap a preFetchedEntries list in a minimal data-react-props HTML page."""
+    payload = {"appContext": {"feedProps": {"preFetchedEntries": entries}}}
+    encoded = html.escape(json.dumps(payload), quote=False)
+    return f"<html><body><div data-react-props='{encoded}'></div></body></html>"
+
+
+def test_react_props_activity_entity() -> None:
+    """Activity entity type is extracted with correct field mapping."""
+    entries = [
+        {
+            "entity": "Activity",
+            "activity": {
+                "id": 11000000001,
+                "activityName": "Morning Run",
+                "type": "Run",
+                "distance": 10234.5,
+                "movingTime": 2700,
+                "athlete": {"athleteId": 300000001, "athleteName": "Alex Runner"},
+                "kudosAndComments": {"hasKudoed": False},
+            },
+        }
+    ]
+    result = _parser().parse(_make_react_html(entries))
+    assert len(result) == 1
+    act = result[0]
+    assert act.activity_id == "11000000001"
+    assert act.activity_name == "Morning Run"
+    assert act.sport_type == "Run"
+    assert act.athlete_id == "300000001"
+    assert act.athlete_name == "Alex Runner"
+    assert act.has_kudoed is False
+    assert "Distance" in act.stats
+    assert "10.23 km" in act.stats["Distance"]
+    assert "Time" in act.stats
+    assert "45m" in act.stats["Time"]
+
+
+def test_react_props_activity_already_kudoed() -> None:
+    """has_kudoed=True is correctly read from kudosAndComments.hasKudoed."""
+    entries = [
+        {
+            "entity": "Activity",
+            "activity": {
+                "id": 11000000002,
+                "activityName": "Evening Ride",
+                "type": "Ride",
+                "athlete": {"athleteId": 300000002, "athleteName": "Sam Cyclist"},
+                "kudosAndComments": {"hasKudoed": True},
+            },
+        }
+    ]
+    result = _parser().parse(_make_react_html(entries))
+    assert len(result) == 1
+    assert result[0].has_kudoed is True
+
+
+def test_react_props_group_activity_entity() -> None:
+    """GroupActivity entity extracts sub-activities using snake_case fields."""
+    entries = [
+        {
+            "entity": "GroupActivity",
+            "rowData": {
+                "activities": [
+                    {
+                        "activity_id": 11000000003,
+                        "name": "Yoga Session",
+                        "type": "Yoga",
+                        "has_kudoed": False,
+                        "athlete_id": 300000003,
+                        "athlete_name": "Jordan Yogi",
+                    }
+                ]
+            },
+        }
+    ]
+    result = _parser().parse(_make_react_html(entries))
+    assert len(result) == 1
+    act = result[0]
+    assert act.activity_id == "11000000003"
+    assert act.activity_name == "Yoga Session"
+    assert act.sport_type == "Yoga"
+    assert act.athlete_name == "Jordan Yogi"
+    assert act.has_kudoed is False
+
+
+def test_react_props_promotion_entity_is_skipped() -> None:
+    """Promotion entities are silently ignored."""
+    entries = [
+        {"entity": "Promotion", "promo": "some ad"},
+        {
+            "entity": "Activity",
+            "activity": {
+                "id": 11000000004,
+                "activityName": "After Promo",
+                "type": "Run",
+                "athlete": {"athleteId": 300000004, "athleteName": "Runner"},
+                "kudosAndComments": {"hasKudoed": False},
+            },
+        },
+    ]
+    result = _parser().parse(_make_react_html(entries))
+    assert len(result) == 1
+    assert result[0].activity_id == "11000000004"
+
+
+def test_react_props_html_entity_decoding() -> None:
+    """HTML entities in activity name are decoded correctly."""
+    name_raw = "Run & Ride <Special>"
+    entries = [
+        {
+            "entity": "Activity",
+            "activity": {
+                "id": 11000000005,
+                "activityName": name_raw,
+                "type": "Run",
+                "athlete": {"athleteId": 300000005, "athleteName": "Tester"},
+                "kudosAndComments": {"hasKudoed": False},
+            },
+        }
+    ]
+    result = _parser().parse(_make_react_html(entries))
+    assert len(result) == 1
+    assert result[0].activity_name == name_raw
+
+
+def test_react_props_empty_entries_returns_empty_list() -> None:
+    """Empty preFetchedEntries list → empty result (not None → not falling back)."""
+    result = _parser().parse(_make_react_html([]))
+    assert result == []
+
+
+def test_react_props_no_prefetched_entries_falls_through() -> None:
+    """data-react-props without preFetchedEntries falls through to pageView fallback."""
+    payload = {"appContext": {"other": "stuff"}}
+    encoded = html.escape(json.dumps(payload), quote=False)
+    entries_for_fallback = [
+        {
+            "id": "99000000001",
+            "name": "Fallback Run",
+            "sport_type": "Run",
+            "has_kudoed": False,
+            "athlete": {"id": "99", "name": "Fallback Athlete"},
+        }
+    ]
+    html_text = (
+        f"<html><body>"
+        f"<div data-react-props='{encoded}'></div>"
+        f"<script>var pageView = {{\"entries\": {json.dumps(entries_for_fallback)}}};</script>"
+        f"</body></html>"
+    )
+    result = _parser().parse(html_text)
+    assert len(result) == 1
+    assert result[0].activity_id == "99000000001"
+
+
+def test_react_props_fixture_file() -> None:
+    """Full fixture file with Activity, GroupActivity, and Promotion entries."""
+    html_text = (_FIXTURES / "feed_react_props.html").read_text(encoding="utf-8")
+    result = _parser().parse(html_text)
+    # Activity + GroupActivity sub-entry; Promotion skipped
+    assert len(result) == 3
+    ids = {act.activity_id for act in result}
+    assert "10000000001" in ids
+    assert "10000000002" in ids
+    assert "10000000003" in ids
+    # Check has_kudoed mapping
+    by_id = {act.activity_id: act for act in result}
+    assert by_id["10000000001"].has_kudoed is False
+    assert by_id["10000000002"].has_kudoed is True
+    assert by_id["10000000003"].has_kudoed is False
+
+
+def test_react_props_stats_from_structured_list() -> None:
+    """stats list [{label, value}] is used when present."""
+    entries = [
+        {
+            "entity": "Activity",
+            "activity": {
+                "id": 11000000006,
+                "activityName": "Stats Run",
+                "type": "Run",
+                "athlete": {"athleteId": 300000006, "athleteName": "Stats Athlete"},
+                "kudosAndComments": {"hasKudoed": False},
+                "stats": [
+                    {"label": "Distance", "value": "15.00 km"},
+                    {"label": "Time", "value": "1h 12m"},
+                ],
+            },
+        }
+    ]
+    result = _parser().parse(_make_react_html(entries))
+    assert len(result) == 1
+    assert result[0].stats == {"Distance": "15.00 km", "Time": "1h 12m"}
+
+
+def test_react_props_camel_case_moving_time() -> None:
+    """movingTime (camelCase) is handled as numeric fallback for stats."""
+    entries = [
+        {
+            "entity": "Activity",
+            "activity": {
+                "id": 11000000007,
+                "activityName": "Camel Run",
+                "type": "Run",
+                "movingTime": 3600,  # camelCase
+                "athlete": {"athleteId": 300000007, "athleteName": "Camel Runner"},
+                "kudosAndComments": {"hasKudoed": False},
+            },
+        }
+    ]
+    result = _parser().parse(_make_react_html(entries))
+    assert len(result) == 1
+    assert "Time" in result[0].stats
+    assert "1h" in result[0].stats["Time"]

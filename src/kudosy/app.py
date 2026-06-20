@@ -38,11 +38,16 @@ def get_app_state() -> dict[str, Any]:
 async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     """Startup: bootstrap, load sport types, start scheduler."""
     env = get_settings()
+
+    # Ensure the data directory exists before configure_logging tries to open
+    # the log file — on a fresh Docker volume /data does not exist yet.
+    log_path().parent.mkdir(parents=True, exist_ok=True)
+
     configure_logging(env.log_level, log_path())
 
     log.info("Kudosy %s starting up", __version__)
 
-    # Bootstrap /data directory and seed missing files
+    # Bootstrap /data directory and seed all missing files
     bootstrap()
 
     # Load sport types (try live fetch, fall back to hardcoded)

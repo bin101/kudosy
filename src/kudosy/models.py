@@ -128,6 +128,20 @@ class Decision(BaseModel):
 # ── Run result ────────────────────────────────────────────────────────────────
 
 
+class FeedActivity(BaseModel):
+    """A feed activity enriched with the engine's decision, for GET /api/feed."""
+
+    athlete_name: str
+    athlete_id: str
+    activity_id: str
+    activity_name: str
+    sport_type: str
+    has_kudoed: bool
+    stats: dict[str, str]
+    give_kudos: bool
+    reason: str  # DecisionReason value, e.g. "already", "default", "criteria"
+
+
 class RunResult(BaseModel):
     """Structured result returned by engine.run_kudos()."""
 

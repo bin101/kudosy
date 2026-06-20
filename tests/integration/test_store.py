@@ -201,3 +201,39 @@ def test_read_log_existing(data_dir: Path) -> None:
     log_file.write_text("=== Lauf: 2026-01-01 ===\n", encoding="utf-8")
     text = read_log()
     assert "Lauf" in text
+
+
+def test_bootstrap_seeds_config_yaml(data_dir: Path) -> None:
+    """bootstrap() creates config.yaml with default values if missing."""
+    bootstrap()
+    assert (data_dir / "config.yaml").exists()
+    cfg = read_user_config()
+    assert cfg is not None
+    assert cfg.stravaSessionCookie == ""
+    assert cfg.athleteId == ""
+
+
+def test_bootstrap_seeds_athlete_labels(data_dir: Path) -> None:
+    """bootstrap() creates athlete-labels.json as empty dict if missing."""
+    bootstrap()
+    assert (data_dir / "athlete-labels.json").exists()
+    assert read_athlete_labels() == {}
+
+
+def test_bootstrap_does_not_overwrite_existing_config(data_dir: Path) -> None:
+    """bootstrap() does not overwrite an existing config.yaml."""
+    write_user_config(UserConfig(stravaSessionCookie="my-existing-cookie", athleteId="12345"))
+    bootstrap()
+    cfg = read_user_config()
+    assert cfg is not None
+    assert cfg.stravaSessionCookie == "my-existing-cookie"
+
+
+def test_bootstrap_does_not_overwrite_existing_labels(data_dir: Path) -> None:
+    """bootstrap() does not overwrite existing athlete-labels.json."""
+    from kudosy.store import write_athlete_labels
+
+    write_athlete_labels({"123": "Existing Athlete"})
+    bootstrap()
+    labels = read_athlete_labels()
+    assert labels == {"123": "Existing Athlete"}

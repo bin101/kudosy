@@ -91,34 +91,9 @@ async def test_check_auth_raises_on_401() -> None:
 
 @pytest.mark.asyncio
 @respx.mock
-async def test_fetch_feed_json_success() -> None:
-    feed_data = {"entries": [{"id": "12345", "sport_type": "Run"}]}
-    respx.get("https://www.strava.com/dashboard/feed").mock(
-        return_value=httpx.Response(
-            200,
-            json=feed_data,
-            headers={"content-type": "application/json"},
-        )
-    )
-
-    client = StravaClient("test-cookie-value")
-    result = await client.fetch_following_feed()
-    await client.aclose()
-
-    assert isinstance(result, dict)
-    assert "entries" in result
-
-
-@pytest.mark.asyncio
-@respx.mock
-async def test_fetch_feed_falls_back_to_html() -> None:
-    html = _load("feed_sample.html")
-
-    # JSON endpoint fails
-    respx.get("https://www.strava.com/dashboard/feed").mock(
-        return_value=httpx.Response(500, text="Internal error")
-    )
-    # HTML fallback succeeds
+async def test_fetch_feed_returns_html() -> None:
+    """fetch_following_feed fetches /dashboard and returns raw HTML."""
+    html = _load("feed_react_props.html")
     respx.get("https://www.strava.com/dashboard").mock(return_value=httpx.Response(200, text=html))
 
     client = StravaClient("test-cookie-value")
@@ -126,7 +101,43 @@ async def test_fetch_feed_falls_back_to_html() -> None:
     await client.aclose()
 
     assert isinstance(result, str)
-    assert "pageView" in result
+    assert "data-react-props" in result
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_fetch_feed_passes_num_entries_param() -> None:
+    """fetch_following_feed passes num_entries as a query parameter."""
+    respx.get("https://www.strava.com/dashboard").mock(
+        return_value=httpx.Response(200, text="<html></html>")
+    )
+
+    client = StravaClient("test-cookie-value")
+    await client.fetch_following_feed(num_entries=30)
+    await client.aclose()
+
+    assert respx.calls.last.request.url.params["num_entries"] == "30"
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_fetch_feed_auth_redirect_raises() -> None:
+    """Auth redirect during feed fetch raises AuthError (redirect to login URL)."""
+    # Simulate Strava redirecting an expired cookie to the login page
+    respx.get("https://www.strava.com/dashboard").mock(
+        return_value=httpx.Response(
+            302,
+            headers={"location": "https://www.strava.com/login"},
+        )
+    )
+    respx.get("https://www.strava.com/login").mock(
+        return_value=httpx.Response(200, text="<html>login page</html>")
+    )
+
+    client = StravaClient("expired-cookie")
+    with pytest.raises(AuthError):
+        await client.fetch_following_feed()
+    await client.aclose()
 
 
 # ── send_kudos ────────────────────────────────────────────────────────────────

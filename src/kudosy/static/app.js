@@ -82,6 +82,7 @@ function initTabs() {
       const pane = $(`tab-${btn.dataset.tab}`);
       if (pane) pane.classList.add('active');
       if (btn.dataset.tab === 'log') startPolling();
+      else if (btn.dataset.tab === 'feed') { stopPolling(); pollStatus(); loadFeed(); }
       else { stopPolling(); pollStatus(); }
     });
   });
@@ -499,6 +500,76 @@ function stopPolling() {
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
 }
 
+// ── Feed tab ──────────────────────────────────────────────────────────────────
+
+const FEED_REASON_LABELS = {
+  already:    'bereits geliked',
+  ignore:     'Athlet ignoriert',
+  criteria:   'unter Schwellenwert',
+  name_match: 'Name-Treffer',
+  default:    'Standard',
+};
+
+async function loadFeed() {
+  const container = $('feed-list');
+  if (!container) return;
+  container.innerHTML = '<p class="hint">Lade Feed…</p>';
+  try {
+    const activities = await fetchJson('/api/feed');
+    if (!activities.length) {
+      container.innerHTML = '<p class="hint feed-empty">Keine Aktivitäten im Feed gefunden. Prüfe ob der Session-Cookie gültig ist und führe ggf. einen Dry-Run aus.</p>';
+      return;
+    }
+    container.innerHTML = '';
+    activities.forEach(act => {
+      const card = document.createElement('div');
+      card.className = 'feed-card';
+
+      const reasonLabel = FEED_REASON_LABELS[act.reason] || act.reason;
+      const decisionClass = act.give_kudos ? 'feed-decision-give' : 'feed-decision-skip';
+      const decisionText  = act.give_kudos
+        ? '→ würde Kudo geben'
+        : `– übersprungen: ${reasonLabel}`;
+
+      const kudosBadge = act.has_kudoed
+        ? '<span class="feed-kudo-badge feed-kudo-done">✅ Kudo gegeben</span>'
+        : '<span class="feed-kudo-badge feed-kudo-pending">○ noch kein Kudo</span>';
+
+      const statsParts = Object.entries(act.stats)
+        .map(([k, v]) => `<span class="feed-stat"><strong>${k}:</strong> ${v}</span>`)
+        .join('');
+      const statsHtml = statsParts ? `<div class="feed-stats">${statsParts}</div>` : '';
+      const sportLabel = act.sport_type ? formatSportLabel(act.sport_type) : '—';
+
+      card.innerHTML = `
+        <div class="feed-card-header">
+          <span class="feed-sport">${sportLabel}</span>
+          ${kudosBadge}
+        </div>
+        <div class="feed-card-body">
+          <div class="feed-activity-name">${act.activity_name || '(kein Name)'}</div>
+          <div class="feed-athlete-name">${act.athlete_name}</div>
+          ${statsHtml}
+        </div>
+        <div class="feed-card-footer">
+          <span class="feed-decision ${decisionClass}">${decisionText}</span>
+        </div>
+      `;
+      container.appendChild(card);
+    });
+  } catch (err) {
+    const is401 = err.message && (err.message.includes('401') || err.message.toLowerCase().includes('cookie'));
+    container.innerHTML = is401
+      ? '<p class="hint feed-error">⚠️ Session-Cookie ungültig oder abgelaufen. Bitte neuen Cookie in der Konfiguration eintragen.</p>'
+      : `<p class="hint feed-error">Fehler beim Laden des Feeds: ${err.message}</p>`;
+  }
+}
+
+function initFeedTab() {
+  const btn = $('btn-refresh-feed');
+  if (btn) btn.addEventListener('click', loadFeed);
+}
+
 // ── Run buttons ───────────────────────────────────────────────────────────────
 
 function initRunButtons() {
@@ -552,6 +623,7 @@ async function init() {
   initConfigTab();
   initDefaultsTab();
   initSettingsTab();
+  initFeedTab();
   initRunButtons();
   initRevealButtons();
 

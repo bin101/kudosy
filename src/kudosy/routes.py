@@ -13,7 +13,9 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, Response
 from fastapi.responses import PlainTextResponse
 
 from kudosy import __version__
-from kudosy.feed import AuthError
+from kudosy.decision import decide
+from kudosy.effective_config import build_effective_config
+from kudosy.feed import AuthError, StravaHtmlFeedParser
 from kudosy.models import RunResult, RunStatus
 from kudosy.store import (
     cache_athlete_label,
@@ -202,6 +204,36 @@ async def get_status(request: Request) -> dict[str, Any]:
         intervalMinutes=settings.intervalMinutes,
         version=__version__,
     ).model_dump(mode="json")
+
+
+# ── Feed ──────────────────────────────────────────────────────────────────────
+
+
+@router.get("/api/feed")
+async def get_feed() -> list[dict[str, Any]]:
+    """Fetch the Strava following feed and annotate each activity with the engine decision."""
+    cfg = read_user_config()
+    if not cfg or not cfg.stravaSessionCookie:
+        raise HTTPException(status_code=400, detail="Kein Session-Cookie konfiguriert")
+
+    defaults = read_defaults()
+    effective = build_effective_config(cfg, defaults)
+    client = StravaClient(cfg.stravaSessionCookie)
+    try:
+        raw_feed = await client.fetch_following_feed()
+        activities = StravaHtmlFeedParser().parse(raw_feed)
+        result: list[dict[str, Any]] = []
+        for act in activities:
+            decision = decide(act, effective)
+            entry = act.model_dump()
+            entry["give_kudos"] = decision.give_kudos
+            entry["reason"] = str(decision.reason)
+            result.append(entry)
+        return result
+    except AuthError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    finally:
+        await client.aclose()
 
 
 # ── Log ───────────────────────────────────────────────────────────────────────
