@@ -1,0 +1,37 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Kudosy — config.example.yaml
+#
+# Copy this file to config.yaml inside your /data mount and fill in your values.
+# /data/config.yaml is excluded from git and Docker images for security.
+# ──────────────────────────────────────────────────────────────────────────────
+
+# Your Strava session cookie: browser DevTools → Application → Cookies
+# Cookie name: _strava4_session
+stravaSessionCookie: "PASTE_YOUR_STRAVA4_SESSION_COOKIE_VALUE_HERE"
+
+# Your Strava Athlete ID (visible in your profile URL: strava.com/athletes/<ID>)
+athleteId: "YOUR_ATHLETE_ID"
+
+# Athlete IDs whose activities you want to skip entirely (optional)
+ignoreAthletes: []
+# Example:
+# ignoreAthletes:
+#   - "12345678"
+#   - "87654321"
+
+# Per-sport Kudos rules — activities BELOW these thresholds are skipped.
+# Distances in km, times in minutes.
+kudoRules:
+  minDistance:
+    Run: 5.0        # Skip runs shorter than 5 km
+    Ride: 20.0      # Skip rides shorter than 20 km
+    # VirtualRide: 10.0
+    # Walk: 3.0
+  minTime:
+    Swim: 20        # Skip swims shorter than 20 minutes
+    # Yoga: 30
+    # WeightTraining: 15
+  activityNames:
+    # Regex patterns — activities whose name matches get kudos regardless of distance/time
+    # - "Morning.*"
+    # - "^Epic"

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 48" fill="none">
+  <!-- Logomark: stylized "K" as a thumbs-up glyph -->
+  <g transform="translate(4, 4)">
+    <!-- Thumb body -->
+    <rect x="2" y="14" width="8" height="22" rx="3" fill="#6366F1"/>
+    <!-- Thumb up shape -->
+    <path d="M12 24 L12 8 C12 6 14 4 17 4 C19 4 20 5.5 20 7 L20 14 L26 14 C28.5 14 30 15.5 30 17.5 C30 18.5 29.5 19.5 28.5 20 C29.5 20.5 30 21.5 30 22.5 C30 24 29 25.2 27.5 25.5 C28 26 28.2 26.8 28.2 27.5 C28.2 29 27 30.2 25.5 30.5 C25.8 31 26 31.8 26 32.5 C26 34.5 24.5 36 22.5 36 L15 36 C12.8 36 12 34 12 32 L12 24 Z" fill="#6366F1"/>
+  </g>
+  <!-- Wordmark: Kudosy -->
+  <text x="48" y="33" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-weight="700" font-size="22" fill="#1a1a1a" letter-spacing="-0.5">Kudosy</text>
+</svg>

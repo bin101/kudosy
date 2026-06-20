@@ -1,0 +1,171 @@
+"""Kudos engine — orchestrates one run of the auto-kudos loop.
+
+Design principles:
+- All dependencies (client, feed parser) are injected → fully testable with fakes.
+- Dry-run: decisions are logged, delays are simulated (not waited), no POSTs sent.
+- Structured RunResult returned — no stdout-scraping needed.
+- Delays between kudos use humanizer.compute_delay (injectable RNG for tests).
+"""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+import random
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING
+
+from kudosy.decision import decide
+from kudosy.effective_config import build_effective_config
+from kudosy.humanizer import compute_delay
+from kudosy.models import Activity, AppSettings, DecisionReason, Defaults, RunResult, UserConfig
+
+if TYPE_CHECKING:
+    from kudosy.feed import FeedParser
+    from kudosy.strava_client import StravaClient
+
+log = logging.getLogger(__name__)
+
+_RUN_HEADER = "=== Lauf: {ts}  dryRun={dry} ==="
+_RUN_FOOTER = "=== Beendet: {ts}  Exit-Code: {code}  Kudos: {kudos} ==="
+
+_GIVE_MARKER = "+++ Would give kudos" if True else None  # used in dry-run log
+_SKIP_REASONS = {
+    DecisionReason.IGNORE: "--- Athlete is in ignore list",
+    DecisionReason.ALREADY: "--- Already kudoed this activity",
+    DecisionReason.CRITERIA: "--- Activity stats do not meet criteria",
+}
+
+
+def _fmt_stats(stats: dict[str, str]) -> str:
+    return str(stats)
+
+
+async def run_kudos(
+    user_cfg: UserConfig | None,
+    defaults: Defaults,
+    settings: AppSettings,
+    *,
+    client: StravaClient,
+    feed_parser: FeedParser,
+    dry_run: bool = False,
+    rng: random.Random | None = None,
+) -> RunResult:
+    """Execute one kudos run.
+
+    Args:
+        user_cfg:    The user's config (None → no cookie, likely fails auth).
+        defaults:    Merged defaults from defaults.yaml.
+        settings:    App settings (delay params, shuffle, etc.).
+        client:      Injected StravaClient (or fake for tests).
+        feed_parser: Injected FeedParser (or fake for tests).
+        dry_run:     When True, log decisions but do not send any kudos.
+        rng:         Optional seeded RNG for deterministic tests.
+
+    Returns:
+        A :class:`RunResult` with structured outcome data.
+    """
+    started_at = datetime.now(UTC)
+    log.info(_RUN_HEADER.format(ts=started_at.isoformat(), dry=dry_run))
+
+    effective = build_effective_config(user_cfg, defaults)
+    total = 0
+    to_give: list[Activity] = []
+    given = 0
+    error: str | None = None
+
+    try:
+        # 1. Authenticate & get CSRF token
+        csrf_token = await client.get_csrf_token()
+
+        # 2. Fetch feed
+        raw_feed = await client.fetch_following_feed()
+        activities = feed_parser.parse(raw_feed)
+        total = len(activities)
+        log.info("Found %d activities", total)
+
+        if total == 0:
+            log.warning(
+                "0 activities in feed — Strava's feed format may have changed. "
+                "Run a Dry-Run after refreshing your session cookie."
+            )
+
+        # 3. Decide for each activity
+        for act in activities:
+            decision = decide(act, effective)
+            stats_str = _fmt_stats(act.stats)
+            log.debug(
+                "Athlete: %s, Activity: %s, Type: %s, Has Kudoed: %s, Stats: %s",
+                act.athlete_name,
+                act.activity_name,
+                act.sport_type,
+                act.has_kudoed,
+                stats_str,
+            )
+            if decision.give_kudos:
+                log.debug("+++ Would give kudos")
+                to_give.append(act)
+            else:
+                reason_msg = _SKIP_REASONS.get(decision.reason, f"--- {decision.reason.value}")
+                log.debug(reason_msg)
+
+        # 4. Optionally shuffle order for more human-like sending
+        if settings.shuffleOrder and not dry_run:
+            if rng is None:
+                rng = random.Random()
+            rng.shuffle(to_give)
+
+        # 5. Summary
+        log.info("Would send kudos to %d out of %d activities", len(to_give), total)
+
+        if dry_run:
+            log.info("Dry run mode - no kudos will be sent")
+            for act in to_give:
+                log.info("Would send kudos to: %s - %s", act.athlete_name, act.activity_name)
+        else:
+            # 6. Send kudos with human-like delays
+            if rng is None:
+                rng = random.Random()
+            for i, act in enumerate(to_give):
+                if i > 0:
+                    delay = compute_delay(
+                        settings.minKudosDelaySeconds,
+                        settings.maxKudosDelaySeconds,
+                        rng,
+                    )
+                    log.debug("Waiting %.1fs before next kudo…", delay)
+                    await asyncio.sleep(delay)
+
+                success = await client.send_kudos(act.activity_id, csrf_token)
+                if success:
+                    given += 1
+                    log.info("✓ Kudos gesendet: %s — %s", act.athlete_name, act.activity_name)
+                else:
+                    log.warning(
+                        "✗ Kudos fehlgeschlagen: %s — %s", act.athlete_name, act.activity_name
+                    )
+
+    except Exception as exc:
+        error = str(exc)
+        log.error("Kudos run failed: %s", error, exc_info=True)
+
+    finished_at = datetime.now(UTC)
+    kudos_count = len(to_give) if dry_run else given
+    log.info(
+        _RUN_FOOTER.format(
+            ts=finished_at.isoformat(),
+            code=0 if error is None else 1,
+            kudos=kudos_count,
+        )
+    )
+
+    return RunResult(
+        started_at=started_at,
+        finished_at=finished_at,
+        success=error is None,
+        dry_run=dry_run,
+        total=total,
+        would_give=len(to_give),
+        given=given if not dry_run else 0,
+        error=error,
+    )

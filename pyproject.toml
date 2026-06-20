@@ -1,0 +1,110 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "kudosy"
+version = "0.1.0"
+description = "Automatically give kudos on Strava, with human-like timing"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.13"
+authors = [{ name = "Jens van Almsick" }]
+keywords = ["strava", "kudos", "automation"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.13",
+]
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.34",
+    "httpx>=0.28",
+    "apscheduler>=3.11",
+    "pyyaml>=6.0",
+    "pydantic>=2.10",
+    "pydantic-settings>=2.7",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.25",
+    "respx>=0.22",
+    "pytest-cov>=6.0",
+    "ruff>=0.9",
+    "mypy>=1.14",
+    "types-PyYAML>=6.0",
+    "httpx>=0.28",
+]
+
+[project.scripts]
+kudosy = "kudosy.__main__:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/kudosy"]
+
+# ── Ruff ──────────────────────────────────────────────────────────────────────
+
+[tool.ruff]
+line-length = 100
+src = ["src"]
+target-version = "py313"
+
+[tool.ruff.lint]
+select = [
+    "E", "W",   # pycodestyle
+    "F",         # pyflakes
+    "I",         # isort
+    "UP",        # pyupgrade
+    "B",         # flake8-bugbear
+    "SIM",       # flake8-simplify
+    "TCH",       # flake8-type-checking
+    "RUF",       # ruff-specific
+]
+ignore = [
+    "B008",       # FastAPI Depends() is a common pattern
+    "TC001",      # src imports that are Pydantic fields must stay at runtime
+    "TC002",      # third-party imports like httpx are used at runtime
+    "TC003",      # stdlib imports used in Pydantic fields / pytest fixtures
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["E501"]  # test docstrings may be longer
+
+[tool.ruff.lint.isort]
+known-first-party = ["kudosy"]
+
+# ── mypy ──────────────────────────────────────────────────────────────────────
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+files = ["src"]
+mypy_path = "src"
+explicit_package_bases = true
+
+[[tool.mypy.overrides]]
+module = ["apscheduler.*", "yaml"]
+ignore_missing_imports = true
+
+# ── pytest ────────────────────────────────────────────────────────────────────
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "-v --tb=short"
+
+# ── coverage ──────────────────────────────────────────────────────────────────
+
+[tool.coverage.run]
+source = ["kudosy"]
+omit = ["*/tests/*", "*/static/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "\\.\\.\\.",
+]

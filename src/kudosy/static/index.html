@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kudosy</title>
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link rel="manifest" href="/assets/site.webmanifest">
+  <meta name="theme-color" content="#6366F1">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <div class="header-inner">
+      <div class="header-brand">
+        <svg class="logo-icon" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+          <rect x="2" y="17" width="7" height="21" rx="2.5" fill="currentColor"/>
+          <path d="M11 25 L11 8.5 C11 7 13 5 15.5 5 C17.5 5 19 6.5 19 8.5 L19 15 L24.5 15 C27 15 28.5 16.5 28.5 18.5 C28.5 19.5 28 20.3 27.2 20.8 C28 21.3 28.5 22.2 28.5 23.2 C28.5 24.3 27.7 25.3 26.5 25.7 C27 26.2 27.2 27 27.2 27.7 C27.2 29.2 26.2 30.3 24.7 30.5 C25 31 25.2 31.8 25.2 32.5 C25.2 34.5 23.8 35.5 22.2 35.5 L14.5 35.5 C12 35.5 11 33.8 11 32 L11 25 Z" fill="currentColor"/>
+        </svg>
+        <span class="header-title">Kudosy</span>
+        <span id="status-badge" class="badge badge-idle">Lade…</span>
+      </div>
+      <div class="header-actions">
+        <button id="btn-dry-run" class="btn btn-secondary" title="Dry-Run: zeigt welche Kudos gesendet würden, ohne sie wirklich zu senden">
+          <span>🔍</span> Dry-Run
+        </button>
+        <button id="btn-run" class="btn btn-primary">
+          <span>▶</span> Jetzt ausführen
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab active" data-tab="config">Konfiguration</button>
+    <button class="tab" data-tab="defaults">Defaults</button>
+    <button class="tab" data-tab="settings">Einstellungen</button>
+    <button class="tab" data-tab="log">Status &amp; Log</button>
+  </nav>
+
+  <main class="content">
+
+    <!-- ── CONFIG ────────────────────────────────────────────────────── -->
+    <section id="tab-config" class="tab-pane active">
+      <form id="form-config">
+
+        <div class="card">
+          <h2>Zugangsdaten</h2>
+          <div class="form-group">
+            <label for="cookieInput">Strava Session Cookie</label>
+            <div class="input-reveal">
+              <input type="password" id="cookieInput" placeholder="Aus Browser DevTools: _strava4_session" autocomplete="off">
+              <button type="button" class="btn-icon" data-reveal="cookieInput" title="Anzeigen/Verbergen">👁</button>
+            </div>
+            <small>Browser → DevTools → Application → Cookies → <code>_strava4_session</code></small>
+          </div>
+          <div class="form-group">
+            <label for="athleteIdInput">Athlete ID</label>
+            <input type="text" id="athleteIdInput" placeholder="z.B. 105191432" inputmode="numeric">
+            <small>Strava Profil-URL: strava.com/athletes/<strong>&lt;deine-ID&gt;</strong></small>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header-row">
+            <h2>Ignorierte Athleten</h2>
+            <button type="button" class="btn btn-outline btn-sm" id="btn-load-all-names"
+                    title="Namen aller Athleten von Strava abrufen">🔍 Alle Namen laden</button>
+          </div>
+          <p class="hint">Aktivitäten dieser Athleten werden übersprungen. Der Name wird von Strava geladen und lokal gecacht.</p>
+          <ul class="dynamic-list" id="ignore-list"></ul>
+          <button type="button" class="btn btn-outline btn-sm" id="btn-add-athlete">+ Athlet hinzufügen</button>
+        </div>
+
+        <div class="card">
+          <h2>Kudo-Regeln: Min. Distanz</h2>
+          <p class="hint">Aktivitäten <em>unter</em> dieser Distanz (km) werden übersprungen. Leer lassen = keine Regel.</p>
+          <div class="table-wrap">
+            <table class="rules-table">
+              <thead><tr><th>Sportart</th><th>Min. km</th><th></th></tr></thead>
+              <tbody id="tbody-distance"></tbody>
+            </table>
+          </div>
+          <button type="button" class="btn btn-outline btn-sm" id="btn-add-distance">+ Regel hinzufügen</button>
+        </div>
+
+        <div class="card">
+          <h2>Kudo-Regeln: Min. Dauer</h2>
+          <p class="hint">Aktivitäten <em>unter</em> dieser Dauer (Minuten) werden übersprungen. Leer lassen = keine Regel.</p>
+          <div class="table-wrap">
+            <table class="rules-table">
+              <thead><tr><th>Sportart</th><th>Min. min</th><th></th></tr></thead>
+              <tbody id="tbody-time"></tbody>
+            </table>
+          </div>
+          <button type="button" class="btn btn-outline btn-sm" id="btn-add-time">+ Regel hinzufügen</button>
+        </div>
+
+        <div class="card">
+          <h2>Auto-Kudos nach Aktivitätsname</h2>
+          <p class="hint">Regex-Muster — passende Aktivitäten erhalten immer Kudos, unabhängig von Distanz/Dauer.</p>
+          <ul class="dynamic-list" id="activity-names-list"></ul>
+          <button type="button" class="btn btn-outline btn-sm" id="btn-add-name">+ Muster hinzufügen</button>
+        </div>
+
+        <div class="form-footer">
+          <button type="submit" class="btn btn-primary btn-lg">💾 Konfiguration speichern</button>
+        </div>
+
+      </form>
+    </section>
+
+    <!-- ── DEFAULTS ───────────────────────────────────────────────────── -->
+    <section id="tab-defaults" class="tab-pane">
+      <form id="form-defaults">
+
+        <div class="card">
+          <h2>Catch-all Regel</h2>
+          <p class="hint">Gilt für <strong>alle</strong> Sportarten ohne eigene Regel, und auch als Fallback wenn die Konfiguration fehlt.<br>
+          Auf <strong>0</strong> setzen, um den jeweiligen Catch-all zu deaktivieren.</p>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="catchAllDist">Standard Min. Distanz (km)</label>
+              <input type="number" id="catchAllDist" min="0" step="0.1" placeholder="0 = deaktiviert">
+            </div>
+            <div class="form-group">
+              <label for="catchAllTime">Standard Min. Dauer (min)</label>
+              <input type="number" id="catchAllTime" min="0" step="1" placeholder="0 = deaktiviert">
+            </div>
+          </div>
+
+          <div class="info-box">
+            <strong>Priorität (hoch → niedrig):</strong>
+            <ol>
+              <li>Konfigurationsregeln (Config-Tab)</li>
+              <li>Sportartspezifische Default-Regeln (unten)</li>
+              <li>Catch-all für alle restlichen Sportarten</li>
+            </ol>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Default-Distanzregeln (pro Sportart)</h2>
+          <p class="hint">Überschreiben den Catch-all für einzelne Sportarten. Leeres Feld = Catch-all greift.</p>
+          <div class="table-wrap">
+            <table class="rules-table">
+              <thead><tr><th>Sportart</th><th>Min. km</th><th></th></tr></thead>
+              <tbody id="tbody-def-distance"></tbody>
+            </table>
+          </div>
+          <button type="button" class="btn btn-outline btn-sm" id="btn-add-def-distance">+ Regel hinzufügen</button>
+        </div>
+
+        <div class="card">
+          <h2>Default-Dauerregeln (pro Sportart)</h2>
+          <p class="hint">Überschreiben den Catch-all für einzelne Sportarten.</p>
+          <div class="table-wrap">
+            <table class="rules-table">
+              <thead><tr><th>Sportart</th><th>Min. min</th><th></th></tr></thead>
+              <tbody id="tbody-def-time"></tbody>
+            </table>
+          </div>
+          <button type="button" class="btn btn-outline btn-sm" id="btn-add-def-time">+ Regel hinzufügen</button>
+        </div>
+
+        <div class="form-footer">
+          <button type="submit" class="btn btn-primary btn-lg">💾 Defaults speichern</button>
+        </div>
+
+      </form>
+    </section>
+
+    <!-- ── SETTINGS ───────────────────────────────────────────────────── -->
+    <section id="tab-settings" class="tab-pane">
+      <form id="form-settings">
+
+        <div class="card">
+          <h2>Scheduler</h2>
+          <div class="form-group">
+            <label class="toggle-row">
+              <input type="checkbox" id="schedulerEnabled">
+              <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              <span>Automatisch ausführen</span>
+            </label>
+          </div>
+          <div class="form-group" id="interval-group">
+            <label for="intervalMinutes">Intervall (Minuten)</label>
+            <input type="number" id="intervalMinutes" min="5" max="1440" step="5">
+            <small>Minimum 5 Minuten. Empfohlen: 60 (stündlich).</small>
+          </div>
+          <div class="form-group" id="jitter-group">
+            <label for="jitterMinutes">Jitter ± (Minuten)</label>
+            <input type="number" id="jitterMinutes" min="0" max="120" step="1">
+            <small>Zufälliger Versatz zum Intervall (±). Macht den Takt unvorhersehbar. Empfohlen: 15.</small>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Menschliche Timing-Delays</h2>
+          <p class="hint">Zwischen den einzelnen Kudos-Anfragen wird eine zufällige Pause eingelegt — verhindert maschinenhaftes Verhalten.</p>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="minKudosDelaySeconds">Min. Pause (Sekunden)</label>
+              <input type="number" id="minKudosDelaySeconds" min="0" step="0.5">
+              <small>Minimum 0. Empfohlen: 3.</small>
+            </div>
+            <div class="form-group">
+              <label for="maxKudosDelaySeconds">Max. Pause (Sekunden)</label>
+              <input type="number" id="maxKudosDelaySeconds" min="0" step="0.5">
+              <small>Muss ≥ Min. sein. Empfohlen: 25.</small>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="toggle-row">
+              <input type="checkbox" id="shuffleOrder">
+              <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              <span>Reihenfolge zufällig mischen</span>
+            </label>
+            <small style="margin-top:6px">Kudos werden in zufälliger Reihenfolge vergeben (nur im Nicht-Dry-Run).</small>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Ausführungsmodus</h2>
+          <div class="form-group">
+            <label class="toggle-row">
+              <input type="checkbox" id="globalDryRun">
+              <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              <span>Globaler Dry-Run</span>
+            </label>
+            <small>Wenn aktiv, sendet der Scheduler <strong>keine echten Kudos</strong>.</small>
+          </div>
+        </div>
+
+        <div class="form-footer">
+          <button type="submit" class="btn btn-primary btn-lg">💾 Einstellungen speichern</button>
+        </div>
+
+      </form>
+    </section>
+
+    <!-- ── LOG ───────────────────────────────────────────────────────── -->
+    <section id="tab-log" class="tab-pane">
+
+      <div class="status-grid">
+        <div class="card status-card" id="card-last-run">
+          <div class="status-label">Letzter Lauf</div>
+          <div class="status-value" id="val-last-run">—</div>
+          <div class="status-sub" id="val-kudos">—</div>
+        </div>
+        <div class="card status-card" id="card-next-run">
+          <div class="status-label">Nächster Lauf</div>
+          <div class="status-value" id="val-next-run">—</div>
+          <div class="status-sub" id="val-interval">—</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="log-header">
+          <h2>Log-Ausgabe</h2>
+          <label class="toggle-row toggle-compact">
+            <input type="checkbox" id="auto-refresh" checked>
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+            <span>Auto-Refresh (3s)</span>
+          </label>
+        </div>
+        <pre id="log-output" class="log-output">Lade…</pre>
+      </div>
+
+    </section>
+
+  </main>
+
+  <footer class="app-footer">
+    <span id="footer-version">Kudosy</span>
+    <span>·</span>
+    <a href="https://github.com/bin101/kudosy" target="_blank" rel="noopener">GitHub</a>
+  </footer>
+
+  <div id="toast-container"></div>
+
+  <script src="app.js" type="module"></script>
+</body>
+</html>
