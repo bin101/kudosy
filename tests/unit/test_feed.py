@@ -425,7 +425,7 @@ def test_react_props_no_prefetched_entries_falls_through() -> None:
     html_text = (
         f"<html><body>"
         f"<div data-react-props='{encoded}'></div>"
-        f"<script>var pageView = {{\"entries\": {json.dumps(entries_for_fallback)}}};</script>"
+        f'<script>var pageView = {{"entries": {json.dumps(entries_for_fallback)}}};</script>'
         f"</body></html>"
     )
     result = _parser().parse(html_text)

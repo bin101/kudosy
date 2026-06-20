@@ -1,66 +1,34 @@
-name: Release — Build & Push Docker Image
+name: Release — Build & Push Docker Image (manual tag)
 
 on:
   push:
     tags:
       - "v*.*.*"
 
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: bin101/kudosy
-
 jobs:
-  build-and-push:
-    name: Build multi-arch image and push to GHCR
+  derive:
+    name: Derive version from tag
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      major_minor: ${{ steps.v.outputs.major_minor }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up QEMU (for multi-arch builds)
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract version from tag
-        id: version
+      - id: v
+        name: Extract version numbers
         run: |
           # Strip leading 'v' from tag (v0.1.0 → 0.1.0)
           VERSION="${GITHUB_REF_NAME#v}"
-          MAJOR_MINOR="${VERSION%.*}"
-          echo "full=${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "major_minor=${MAJOR_MINOR}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "major_minor=${VERSION%.*}" >> "$GITHUB_OUTPUT"
 
-      - name: Docker metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest
-            type=sha,prefix=sha-
-
-      - name: Build and push
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+  build:
+    name: Build & push Docker image
+    needs: derive
+    uses: ./.github/workflows/docker-publish.yaml
+    permissions:
+      contents: read
+      packages: write
+    with:
+      ref: ${{ github.ref_name }}
+      version: ${{ needs.derive.outputs.version }}
+      major_minor: ${{ needs.derive.outputs.major_minor }}

@@ -284,18 +284,14 @@ def test_get_feed_no_cookie_returns_400(app_client: TestClient, data_dir: Path) 
     assert resp.status_code == 400
 
 
-def test_get_feed_returns_activities_with_decision(
-    app_client: TestClient, data_dir: Path
-) -> None:
+def test_get_feed_returns_activities_with_decision(app_client: TestClient, data_dir: Path) -> None:
     """GET /api/feed returns activities enriched with give_kudos and reason."""
     import json
     from unittest.mock import AsyncMock, patch
 
     from kudosy import store
 
-    store.write_user_config_raw(
-        {"stravaSessionCookie": "valid-cookie", "athleteId": "20000001"}
-    )
+    store.write_user_config_raw({"stravaSessionCookie": "valid-cookie", "athleteId": "20000001"})
 
     # HTML with a single activity via the pageView fallback format (generic shape)
     feed_entry = {
@@ -336,18 +332,14 @@ def test_get_feed_returns_activities_with_decision(
     assert isinstance(act["reason"], str)
 
 
-def test_get_feed_auth_error_returns_401(
-    app_client: TestClient, data_dir: Path
-) -> None:
+def test_get_feed_auth_error_returns_401(app_client: TestClient, data_dir: Path) -> None:
     """AuthError from StravaClient propagates as HTTP 401."""
     from unittest.mock import AsyncMock, patch
 
     from kudosy import store
     from kudosy.feed import AuthError
 
-    store.write_user_config_raw(
-        {"stravaSessionCookie": "expired-cookie", "athleteId": "20000001"}
-    )
+    store.write_user_config_raw({"stravaSessionCookie": "expired-cookie", "athleteId": "20000001"})
 
     mock_instance = AsyncMock()
     mock_instance.fetch_following_feed.side_effect = AuthError("Cookie abgelaufen")
@@ -360,17 +352,13 @@ def test_get_feed_auth_error_returns_401(
     assert "Cookie" in resp.json()["detail"]
 
 
-def test_get_feed_empty_feed_returns_empty_list(
-    app_client: TestClient, data_dir: Path
-) -> None:
+def test_get_feed_empty_feed_returns_empty_list(app_client: TestClient, data_dir: Path) -> None:
     """Empty feed returns an empty list (not an error)."""
     from unittest.mock import AsyncMock, patch
 
     from kudosy import store
 
-    store.write_user_config_raw(
-        {"stravaSessionCookie": "valid-cookie", "athleteId": "20000001"}
-    )
+    store.write_user_config_raw({"stravaSessionCookie": "valid-cookie", "athleteId": "20000001"})
 
     mock_instance = AsyncMock()
     mock_instance.fetch_following_feed.return_value = "<html><body>no feed data</body></html>"

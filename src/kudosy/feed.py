@@ -60,9 +60,7 @@ class StravaHtmlFeedParser:
     """
 
     # Primary: current Strava format — data-react-props='...' HTML attribute
-    _REACT_PROPS_RE: ClassVar[re.Pattern[str]] = re.compile(
-        r"data-react-props='([^']+)'"
-    )
+    _REACT_PROPS_RE: ClassVar[re.Pattern[str]] = re.compile(r"data-react-props='([^']+)'")
 
     # Fallback: older embedded-JSON patterns in <script> tags
     _HYDRATION_PATTERNS: ClassVar[list[re.Pattern[str]]] = [
@@ -114,17 +112,11 @@ class StravaHtmlFeedParser:
             try:
                 decoded = _html_stdlib.unescape(raw)
                 data = json.loads(decoded)
-                entries = (
-                    data.get("appContext", {})
-                    .get("feedProps", {})
-                    .get("preFetchedEntries")
-                )
+                entries = data.get("appContext", {}).get("feedProps", {}).get("preFetchedEntries")
                 if not isinstance(entries, list):
                     continue
                 activities = self._parse_pre_fetched_entries(entries)
-                log.debug(
-                    "Feed parsed via data-react-props (%d activities)", len(activities)
-                )
+                log.debug("Feed parsed via data-react-props (%d activities)", len(activities))
                 return activities
             except (json.JSONDecodeError, KeyError, TypeError):
                 continue
@@ -157,9 +149,7 @@ class StravaHtmlFeedParser:
                 )
         return results
 
-    def _parse_react_activity(
-        self, activity: dict[str, Any], *, is_group: bool
-    ) -> Activity | None:
+    def _parse_react_activity(self, activity: dict[str, Any], *, is_group: bool) -> Activity | None:
         """Parse a single activity from the data-react-props feed format.
 
         Activity entries use camelCase fields from the React component;
@@ -167,9 +157,7 @@ class StravaHtmlFeedParser:
         """
         if is_group:
             activity_id = str(activity.get("activity_id") or "")
-            activity_name = (
-                str(activity.get("name") or "").replace("\n", " ").strip()
-            )
+            activity_name = str(activity.get("name") or "").replace("\n", " ").strip()
             athlete_id = str(activity.get("athlete_id") or "")
             athlete_name = str(activity.get("athlete_name") or "Unknown")
             has_kudoed = bool(activity.get("has_kudoed"))
@@ -187,16 +175,10 @@ class StravaHtmlFeedParser:
                 .strip()
             )
             athlete = activity.get("athlete", {})
-            athlete_id = str(
-                athlete.get("athleteId") or athlete.get("id") or ""
-            )
-            athlete_name = str(
-                athlete.get("athleteName") or athlete.get("name") or "Unknown"
-            )
+            athlete_id = str(athlete.get("athleteId") or athlete.get("id") or "")
+            athlete_name = str(athlete.get("athleteName") or athlete.get("name") or "Unknown")
             kudos_data = activity.get("kudosAndComments", {})
-            has_kudoed = bool(
-                kudos_data.get("hasKudoed") or activity.get("has_kudoed")
-            )
+            has_kudoed = bool(kudos_data.get("hasKudoed") or activity.get("has_kudoed"))
             sport_type = str(
                 activity.get("type")
                 or activity.get("sportType")
