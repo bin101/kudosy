@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <rect width="32" height="32" rx="7" fill="#6366F1"/>
+  <!-- White thumbs-up on indigo background -->
+  <rect x="2" y="17" width="6" height="13" rx="2" fill="white"/>
+  <path d="M10 21 L10 8 C10 6.5 11.8 5 14 5 C15.8 5 17 6.2 17 8 L17 13 L21.5 13 C23.5 13 25 14.5 25 16.2 C25 17 24.6 17.8 23.8 18.2 C24.5 18.7 25 19.5 25 20.5 C25 21.5 24.3 22.5 23.2 22.8 C23.6 23.3 23.8 23.9 23.8 24.5 C23.8 25.8 22.8 26.8 21.5 27 C21.8 27.5 22 28 22 28.5 C22 30 20.8 30.8 19.2 30.8 L13 30.8 C11 30.8 10 29.5 10 28 L10 21 Z" fill="white"/>
+</svg>

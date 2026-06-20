@@ -1,0 +1,219 @@
+"""Unit tests for decision.py — pure filter logic.
+
+Decision precedence: ignore → already → criteria → name_match → default (give kudos)
+
+Test corpus is derived from the real last-run.log to guarantee behavioral parity.
+"""
+
+from kudosy.decision import decide
+from kudosy.effective_config import build_effective_config
+from kudosy.models import Activity, CatchAll, DecisionReason, Defaults, KudoRules, UserConfig
+
+
+def _eff(
+    *,
+    catch_min_dist: float = 0,
+    catch_min_time: float = 0,
+    per_dist: dict[str, float] | None = None,
+    per_time: dict[str, float] | None = None,
+    names: list[str] | None = None,
+    ignore: list[str] | None = None,
+) -> object:
+    """Build an EffectiveConfig via the real merge function."""
+    user = UserConfig(
+        stravaSessionCookie="x",
+        athleteId="99",
+        ignoreAthletes=ignore or [],
+        kudoRules=KudoRules(
+            minDistance=per_dist or {},
+            minTime=per_time or {},
+            activityNames=names or [],
+        ),
+    )
+    defaults = Defaults(
+        catchAll=CatchAll(minDistance=catch_min_dist, minTime=catch_min_time),
+        kudoRules=KudoRules(minDistance={}, minTime={}),
+    )
+    return build_effective_config(user, defaults)
+
+
+def _act(
+    *,
+    athlete_id: str = "111",
+    activity_id: str = "act001",
+    activity_name: str = "Morning Ride",
+    sport_type: str = "Ride",
+    has_kudoed: bool = False,
+    stats: dict[str, str] | None = None,
+) -> Activity:
+    return Activity(
+        athlete_name="Test Athlete",
+        athlete_id=athlete_id,
+        activity_id=activity_id,
+        activity_name=activity_name,
+        sport_type=sport_type,
+        has_kudoed=has_kudoed,
+        stats=stats or {},
+    )
+
+
+class TestIgnoreList:
+    """Athlete in ignore list → always skip, even if not yet kudoed."""
+
+    def test_athlete_in_ignore_list(self) -> None:
+        eff = _eff(ignore=["111"])
+        act = _act(athlete_id="111")
+        d = decide(act, eff)  # type: ignore[arg-type]
+        assert d.give_kudos is False
+        assert d.reason == DecisionReason.IGNORE
+
+    def test_athlete_not_in_ignore_list(self) -> None:
+        eff = _eff(ignore=["999"])
+        act = _act(athlete_id="111", stats={"Distance": "30.10 km"})
+        d = decide(act, eff)  # type: ignore[arg-type]
+        # Not ignored — should give kudos (no criteria set)
+        assert d.give_kudos is True
+
+    def test_ignore_takes_precedence_over_kudoed(self) -> None:
+        """Even if already kudoed, ignore must fire — but in practice we won't re-kudo anyway."""
+        eff = _eff(ignore=["111"])
+        act = _act(athlete_id="111", has_kudoed=True)
+        d = decide(act, eff)  # type: ignore[arg-type]
+        assert d.reason == DecisionReason.IGNORE
+
+
+class TestAlreadyKudoed:
+    def test_already_kudoed_skipped(self) -> None:
+        eff = _eff()
+        act = _act(has_kudoed=True)
+        d = decide(act, eff)  # type: ignore[arg-type]
+        assert d.give_kudos is False
+        assert d.reason == DecisionReason.ALREADY
+
+
+class TestCriteriaSkip:
+    """Activity stats do not meet criteria → skip."""
+
+    def test_below_min_distance(self) -> None:
+        # catch-all minDistance = 10 km = 10000 m; activity is 1.36 km = 1360 m
+        eff = _eff(catch_min_dist=10)
+        act = _act(sport_type="Ride", stats={"Distance": "1.36 km"})
+        d = decide(act, eff)  # type: ignore[arg-type]
+        assert d.give_kudos is False
+        assert d.reason == DecisionReason.CRITERIA
+
+    def test_below_min_time(self) -> None:
+        # catch-all minTime = 45 min = 2700 s; activity is 5m 5s = 305 s
+        eff = _eff(catch_min_time=45)
+        act = _act(sport_type="Ride", stats={"Time": "5m 5s"})
+        d = decide(act, eff)  # type: ignore[arg-type]
+        assert d.give_kudos is False
+        assert d.reason == DecisionReason.CRITERIA
+
+    def test_zero_duration_fails_time_criteria(self) -> None:
+        # "0h 0m" = 0 s; minTime = 45 → skip
+        eff = _eff(catch_min_time=45)
+        act = _act(sport_type="Run", stats={"Time": "0h 0m"})
+        d = decide(act, eff)  # type: ignore[arg-type]
+        assert d.give_kudos is False
+
+    def test_above_criteria_gives_kudos(self) -> None:
+        # 30.10 km > 10 km threshold
+        eff = _eff(catch_min_dist=10)
+        act = _act(sport_type="Ride", stats={"Distance": "30.10 km"})
+        d = decide(act, eff)  # type: ignore[arg-type]
+        assert d.give_kudos is True
+
+    def test_missing_stat_does_not_fail_criteria(self) -> None:
+        """WeightTraining has no Distance; a minDistance rule must not block it."""
+        eff = _eff(catch_min_dist=10)
+        act = _act(sport_type="WeightTraining", stats={"Time": "49m 48s"})
+        d = decide(act, eff)  # type: ignore[arg-type]
+        # Missing distance → treat as "not failing" → give kudos
+        assert d.give_kudos is True
+
+
+class TestNameMatch:
+    """activityNames regex match → always give kudos, even below threshold."""
+
+    def test_name_match_overrides_criteria(self) -> None:
+        eff = _eff(catch_min_dist=10, names=["^Race"])
+        # Only 1 km but name matches
+        act = _act(activity_name="Race Day 5k", sport_type="Run", stats={"Distance": "1 km"})
+        d = decide(act, eff)  # type: ignore[arg-type]
+        assert d.give_kudos is True
+        assert d.reason == DecisionReason.NAME_MATCH
+
+    def test_name_no_match_falls_through(self) -> None:
+        eff = _eff(catch_min_dist=10, names=["^Race"])
+        act = _act(activity_name="Morning Run", sport_type="Run", stats={"Distance": "1 km"})
+        d = decide(act, eff)  # type: ignore[arg-type]
+        assert d.give_kudos is False
+        assert d.reason == DecisionReason.CRITERIA
+
+    def test_regex_partial_match(self) -> None:
+        # re.search, not re.fullmatch
+        eff = _eff(names=["GBI"])
+        act = _act(activity_name="GBI Europe 2026 Day 7 Part 1", sport_type="Ride")
+        d = decide(act, eff)  # type: ignore[arg-type]
+        assert d.give_kudos is True
+        assert d.reason == DecisionReason.NAME_MATCH
+
+    def test_invalid_regex_skipped_gracefully(self) -> None:
+        # Invalid regex should not crash — just ignore that pattern
+        eff = _eff(names=["[invalid", "^Race"])
+        act = _act(activity_name="Race Day", sport_type="Run")
+        d = decide(act, eff)  # type: ignore[arg-type]
+        assert d.give_kudos is True  # valid "^Race" still matches
+
+
+class TestDefaultGiveKudos:
+    def test_no_criteria_gives_kudos(self) -> None:
+        eff = _eff()
+        act = _act()
+        d = decide(act, eff)  # type: ignore[arg-type]
+        assert d.give_kudos is True
+        assert d.reason == DecisionReason.DEFAULT
+
+    def test_sport_with_no_rule_gives_kudos(self) -> None:
+        # Only Run has a rule; Padel has none → give kudos
+        eff = _eff(per_dist={"Run": 5})
+        act = _act(sport_type="Padel")
+        d = decide(act, eff)  # type: ignore[arg-type]
+        assert d.give_kudos is True
+
+
+class TestRealLogOracle:
+    """Replay representative rows from last-run.log and assert outcomes."""
+
+    def setup_method(self) -> None:
+        # The real defaults: catchAll minDistance=10km, minTime=45min
+        self.eff = _eff(
+            catch_min_dist=10,
+            catch_min_time=45,
+            ignore=["real-id-redacted"],  # placeholder; tested conceptually
+        )
+
+    def test_fortuna_martin_ride_30km_gives_kudos(self) -> None:
+        # log: "+++ Would give kudos" — 30.10 km Ride
+        eff = _eff(catch_min_dist=10, catch_min_time=45)
+        act = _act(
+            sport_type="Ride",
+            stats={"Distance": "30.10 km", "Time": "1h 5m"},
+        )
+        assert decide(act, eff).give_kudos is True  # type: ignore[arg-type]
+
+    def test_short_run_below_distance_skipped(self) -> None:
+        # log: "--- Activity stats do not meet criteria" — 4.02 km Run
+        eff = _eff(catch_min_dist=10, catch_min_time=45)
+        act = _act(sport_type="Run", stats={"Distance": "4.02 km", "Time": "41m 29s"})
+        d = decide(act, eff)  # type: ignore[arg-type]
+        assert d.give_kudos is False
+        assert d.reason == DecisionReason.CRITERIA
+
+    def test_zero_time_run_skipped(self) -> None:
+        # log: "--- Activity stats do not meet criteria" — 0h 0m Run
+        eff = _eff(catch_min_dist=10, catch_min_time=45)
+        act = _act(sport_type="Run", stats={"Time": "0h 0m", "Distance": "5.01 km"})
+        d = decide(act, eff)  # type: ignore[arg-type]
+        assert d.give_kudos is False

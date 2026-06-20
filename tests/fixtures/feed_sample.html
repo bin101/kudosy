@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="csrf-token" content="feed-csrf-token-xyz">
+  <title>Dashboard | Fitness App</title>
+  <script>
+    window.__NEXT_DATA__ = {
+      "props": {
+        "pageProps": {}
+      }
+    };
+  </script>
+  <script>
+    var pageView = {
+      "entries": [
+        {
+          "id": "10000000001",
+          "name": "Morning Run",
+          "sport_type": "Run",
+          "has_kudoed": false,
+          "distance": 10234.5,
+          "moving_time": 2700,
+          "athlete": {
+            "id": "200000001",
+            "name": "Alex Runner"
+          }
+        },
+        {
+          "id": "10000000002",
+          "name": "Evening Ride",
+          "sport_type": "Ride",
+          "has_kudoed": true,
+          "distance": 32000,
+          "moving_time": 5400,
+          "athlete": {
+            "id": "200000002",
+            "name": "Sam Cyclist"
+          }
+        },
+        {
+          "id": "10000000003",
+          "name": "Yoga Session",
+          "sport_type": "Yoga",
+          "has_kudoed": false,
+          "athlete": {
+            "id": "200000003",
+            "name": "Jordan Yogi"
+          }
+        }
+      ]
+    };
+  </script>
+</head>
+<body>
+  <div class="feed-container">
+    <div class="activity-entry" data-activity-id="10000000001">
+      <span class="athlete-name">Alex Runner</span>
+    </div>
+  </div>
+</body>
+</html>

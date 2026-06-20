@@ -1,0 +1,12 @@
+{
+  "name": "Kudosy",
+  "short_name": "Kudosy",
+  "description": "Automatic kudos, human-like timing",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F8F7FF",
+  "theme_color": "#6366F1",
+  "icons": [
+    { "src": "/assets/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

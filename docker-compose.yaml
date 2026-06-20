@@ -1,0 +1,20 @@
+services:
+  kudosy:
+    image: ghcr.io/bin101/kudosy:latest
+    # Or build locally: comment out `image` and uncomment `build`:
+    # build: .
+    container_name: kudosy
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/data
+    environment:
+      TZ: Europe/Berlin
+      KUDOSY_LOG_LEVEL: INFO
+      # Override port if needed:
+      # KUDOSY_PORT: "8080"
+    # Optional: uncomment for legacy migration from old /tmp config
+    # volumes:
+    #   - ./data:/data
+    #   - ./legacy-config.yaml:/tmp/legacy-config.yaml:ro

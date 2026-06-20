@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ruff:*)",
+      "Bash(python:*)",
+      "Bash(pytest:*)",
+      "Bash(mypy:*)",
+      "Bash(pip:*)",
+      "Bash(uv:*)",
+      "Bash(git:*)",
+      "Bash(gh:*)",
+      "Bash(docker:*)",
+      "Bash(docker compose:*)",
+      "Bash(cairosvg:*)",
+      "Bash(rsvg-convert:*)",
+      "Bash(convert:*)",
+      "Bash(grep:*)",
+      "Bash(find:*)",
+      "Bash(ls:*)",
+      "Bash(mkdir:*)",
+      "Bash(cat:*)"
+    ],
+    "deny": []
+  }
+}
