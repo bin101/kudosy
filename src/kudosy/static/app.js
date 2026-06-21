@@ -114,6 +114,15 @@ let feedActivities = [];
 let feedLoaded     = false;   // true after the first successful feed fetch
 let feedFilter     = { status: 'all', text: '', sport: '' };
 
+// ── Run-button spinner state ───────────────────────────────────────────────────
+// The button whose spinner is currently active (null when idle).
+let runningButton      = null;
+// The lastRun.finished_at that was current when the user clicked Run/DryRun.
+// pollStatus() clears the spinner once a *newer* finished_at appears.
+let runStartStamp      = null;
+// Updated by pollStatus() every tick so startRun() can snapshot it.
+let currentLastRunStamp = null;
+
 // ── Language selector ─────────────────────────────────────────────────────────
 
 function initLangSelect() {
@@ -839,8 +848,30 @@ async function pollStatus() {
       badge.textContent = t('status.ready');
     }
 
-    $('btn-run').disabled     = s.running;
-    $('btn-dry-run').disabled = s.running;
+    // Keep the spinner visible until the run we triggered actually finishes.
+    // We compare finished_at rather than relying on s.running alone so that
+    // even very short runs (where the poller may miss the running:true window)
+    // are handled correctly.
+    const finishedStamp = s.lastRun?.finished_at ?? null;
+    if (runningButton) {
+      const completed = !s.running && finishedStamp && finishedStamp !== runStartStamp;
+      if (completed) {
+        setButtonLoading(runningButton, false);
+        runningButton = null;
+        runStartStamp = null;
+        $('btn-run').disabled     = false;
+        $('btn-dry-run').disabled = false;
+      } else {
+        // Run still in progress — keep spinner, keep both buttons disabled.
+        $('btn-run').disabled     = true;
+        $('btn-dry-run').disabled = true;
+      }
+    } else {
+      // No locally-started run — mirror server state (e.g. a scheduled run).
+      $('btn-run').disabled     = s.running;
+      $('btn-dry-run').disabled = s.running;
+    }
+    currentLastRunStamp = finishedStamp;
 
     if (s.lastRun) {
       const lr = s.lastRun;
@@ -1134,37 +1165,46 @@ function initFeedTab() {
 
 // ── Run buttons ───────────────────────────────────────────────────────────────
 
+/**
+ * Fire a run request and hand off spinner ownership to pollStatus().
+ *
+ * The spinner is shown immediately and is NOT cleared in the finally-block —
+ * pollStatus() clears it once a new lastRun.finished_at appears (i.e. when
+ * the background run actually completes).  On error (e.g. 409 already running)
+ * the spinner is cleared right away since there is nothing to wait for.
+ */
+async function startRun(btn, url) {
+  if (runningButton) return;          // double-click guard
+  runningButton  = btn;
+  runStartStamp  = currentLastRunStamp;
+  setButtonLoading(btn, true);
+  $('btn-run').disabled     = true;
+  $('btn-dry-run').disabled = true;
+  try {
+    await fetchJson(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    // Switch to the Log tab — this starts the 3-second poller which will
+    // eventually detect the new finished_at and clear the spinner.
+    document.querySelector('.tab[data-tab="log"]').click();
+  } catch (err) {
+    toast(err.message, 'error');
+    // No run was started — restore the button immediately.
+    setButtonLoading(btn, false);
+    runningButton = null;
+    $('btn-run').disabled     = false;
+    $('btn-dry-run').disabled = false;
+  }
+}
+
 function initRunButtons() {
   const btnRun    = $('btn-run');
   const btnDryRun = $('btn-dry-run');
 
-  btnRun.addEventListener('click', async () => {
-    setButtonLoading(btnRun, true);
-    try {
-      await fetchJson('/api/run', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: '{}',
-      });
-      document.querySelector('.tab[data-tab="log"]').click();
-    } catch (err) {
-      toast(err.message, 'error');
-    } finally {
-      setButtonLoading(btnRun, false);
-    }
-  });
-
-  btnDryRun.addEventListener('click', async () => {
-    setButtonLoading(btnDryRun, true);
-    try {
-      await fetch('/api/run?dryRun=1', { method: 'POST' });
-      document.querySelector('.tab[data-tab="log"]').click();
-    } catch (err) {
-      toast(err.message, 'error');
-    } finally {
-      setButtonLoading(btnDryRun, false);
-    }
-  });
+  btnRun.addEventListener('click',    () => startRun(btnRun,    '/api/run'));
+  btnDryRun.addEventListener('click', () => startRun(btnDryRun, '/api/run?dryRun=1'));
 }
 
 // ── Password reveal ───────────────────────────────────────────────────────────
