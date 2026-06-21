@@ -23,11 +23,9 @@ from kudosy.store import (
     mark_kudoed,
     read_athlete_avatars,
     read_athlete_labels,
-    read_defaults,
     read_log,
     read_settings,
     read_user_config,
-    write_defaults_raw,
     write_settings,
     write_user_config_raw,
 )
@@ -57,21 +55,6 @@ async def put_config(request: Request) -> dict[str, Any]:
             detail={"code": "EMPTY_COOKIE", "message": "stravaSessionCookie darf nicht leer sein"},
         )
     write_user_config_raw(data)
-    return {"ok": True}
-
-
-# ── Defaults ──────────────────────────────────────────────────────────────────
-
-
-@router.get("/api/defaults")
-async def get_defaults() -> dict[str, Any]:
-    return read_defaults().model_dump()
-
-
-@router.put("/api/defaults")
-async def put_defaults(request: Request) -> dict[str, Any]:
-    data = await request.json()
-    write_defaults_raw(data)
     return {"ok": True}
 
 
@@ -281,8 +264,7 @@ async def get_feed() -> list[dict[str, Any]]:
             detail={"code": "NO_COOKIE", "message": "Kein Session-Cookie konfiguriert"},
         )
 
-    defaults = read_defaults()
-    effective = build_effective_config(cfg, defaults)
+    effective = build_effective_config(cfg)
     client = StravaClient(cfg.stravaSessionCookie)
     try:
         raw_feed = await client.fetch_following_feed()

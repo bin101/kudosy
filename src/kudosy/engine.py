@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING
 from kudosy.decision import decide
 from kudosy.effective_config import build_effective_config
 from kudosy.humanizer import compute_delay
-from kudosy.models import Activity, AppSettings, DecisionReason, Defaults, RunResult, UserConfig
+from kudosy.models import Activity, AppSettings, DecisionReason, RunResult, UserConfig
 
 if TYPE_CHECKING:
     from kudosy.feed import FeedParser
@@ -43,7 +43,6 @@ def _fmt_stats(stats: dict[str, str]) -> str:
 
 async def run_kudos(
     user_cfg: UserConfig | None,
-    defaults: Defaults,
     settings: AppSettings,
     *,
     client: StravaClient,
@@ -56,7 +55,6 @@ async def run_kudos(
 
     Args:
         user_cfg:    The user's config (None → no cookie, likely fails auth).
-        defaults:    Merged defaults from defaults.yaml.
         settings:    App settings (delay params, shuffle, etc.).
         client:      Injected StravaClient (or fake for tests).
         feed_parser: Injected FeedParser (or fake for tests).
@@ -69,7 +67,7 @@ async def run_kudos(
     started_at = datetime.now(UTC)
     log.info(_RUN_HEADER.format(ts=started_at.isoformat(), dry=dry_run))
 
-    effective = build_effective_config(user_cfg, defaults)
+    effective = build_effective_config(user_cfg)
     _cached_ids: set[str] = kudoed_ids if kudoed_ids is not None else set()
     total = 0
     to_give: list[Activity] = []

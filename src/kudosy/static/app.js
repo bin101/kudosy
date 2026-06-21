@@ -480,6 +480,10 @@ async function loadConfig() {
   $('cookieInput').value    = cfg.stravaSessionCookie || '';
   $('athleteIdInput').value = cfg.athleteId || '';
 
+  // Catch-all thresholds
+  $('catchAllDist').value = cfg.catchAll?.minDistance ?? 0;
+  $('catchAllTime').value = cfg.catchAll?.minTime ?? 0;
+
   // Unified athlete management list: merge ignoreAthletes + allowAthletes
   const manageList = $('athlete-manage-list');
   manageList.innerHTML = '';
@@ -509,6 +513,10 @@ async function saveConfig(e) {
       athleteId:           $('athleteIdInput').value.trim(),
       ignoreAthletes,
       allowAthletes,
+      catchAll: {
+        minDistance: parseFloat($('catchAllDist').value) || 0,
+        minTime:     parseFloat($('catchAllTime').value) || 0,
+      },
       kudoRules: {
         minDistance:   getRulesFromTable($('tbody-distance')),
         minTime:       getRulesFromTable($('tbody-time')),
@@ -547,43 +555,6 @@ function initConfigTab() {
       toast(t('toast.config.loadError', { msg: '' }), 'error');
     }
   });
-}
-
-// ── Defaults tab ──────────────────────────────────────────────────────────────
-
-async function loadDefaults() {
-  const d = await fetchJson('/api/defaults');
-  $('catchAllDist').value = d.catchAll?.minDistance || 0;
-  $('catchAllTime').value = d.catchAll?.minTime     || 0;
-  populateRulesTable($('tbody-def-distance'), d.kudoRules?.minDistance);
-  populateRulesTable($('tbody-def-time'),     d.kudoRules?.minTime);
-}
-
-async function saveDefaults(e) {
-  e.preventDefault();
-  try {
-    const data = {
-      catchAll: {
-        minDistance: parseFloat($('catchAllDist').value) || 0,
-        minTime:     parseFloat($('catchAllTime').value) || 0,
-      },
-      kudoRules: {
-        minDistance:   getRulesFromTable($('tbody-def-distance')),
-        minTime:       getRulesFromTable($('tbody-def-time')),
-        activityNames: [],
-      },
-    };
-    await putJson('/api/defaults', data);
-    toast(t('toast.defaults.saved'));
-  } catch (err) {
-    toast(err.message, 'error');
-  }
-}
-
-function initDefaultsTab() {
-  $('form-defaults').addEventListener('submit', saveDefaults);
-  $('btn-add-def-distance').addEventListener('click', () => addRuleRow($('tbody-def-distance')));
-  $('btn-add-def-time').addEventListener('click', () => addRuleRow($('tbody-def-time')));
 }
 
 // ── Settings tab ──────────────────────────────────────────────────────────────
@@ -1090,7 +1061,6 @@ async function init() {
   initLangSelect();
   initTabs();
   initConfigTab();
-  initDefaultsTab();
   initSettingsTab();
   initFeedTab();
   initRunButtons();
@@ -1099,7 +1069,6 @@ async function init() {
 
   await Promise.allSettled([
     loadConfig().catch(err => toast(t('toast.config.loadError', { msg: err.message }), 'error')),
-    loadDefaults().catch(err => toast(t('toast.defaults.loadError', { msg: err.message }), 'error')),
     loadSettings().catch(err => toast(t('toast.settings.loadError', { msg: err.message }), 'error')),
   ]);
 

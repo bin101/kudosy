@@ -31,7 +31,9 @@ FastAPI app (app.py / routes.py)
 ## Key Design Decisions
 
 - **`KUDOSY_DATA_DIR`** (default `/data`): all user data lives here — `config.yaml`,
-  `defaults.yaml`, `settings.json`, `athlete-labels.json`, `last-run.log`. Override in tests.
+  `settings.json`, `athlete-labels.json`, `last-run.log`. Override in tests.
+  Legacy `defaults.yaml` files are automatically migrated into `config.yaml` on first boot
+  and renamed to `defaults.yaml.migrated`.
 - **Clean-room**: no code from `aexel90/strava_kudos` — that repo has no license. Engine behavior
   is derived only from observed run-log output and the user's own wrapper code.
 - **Human-like timing**: `humanizer.py` provides `compute_jitter` (interval ± jitter) and
@@ -107,13 +109,13 @@ docker compose up --build   # builds image, starts on :8080
 | `parsers.py` | Pure: `parse_distance`, `parse_duration`, `parse_athlete_name`, `decode_html_entities` |
 | `sport_types.py` | `ALL_SPORT_TYPES` enum list, `fetch_sport_types`, `merge_sport_types` |
 | `humanizer.py` | Pure: `compute_jitter`, `compute_delay` — RNG injected for tests |
-| `models.py` | Pydantic v2: `UserConfig`, `Defaults`, `AppSettings`, `Activity`, `Decision`, `RunResult` |
-| `effective_config.py` | Pure: `build_effective_config(user, defaults)` — three-layer merge |
+| `models.py` | Pydantic v2: `UserConfig` (incl. `catchAll`), `AppSettings`, `Activity`, `Decision`, `RunResult` |
+| `effective_config.py` | Pure: `build_effective_config(user)` — two-layer merge (catchAll → user per-sport) |
 | `decision.py` | Pure: `decide(activity, effective_config) -> Decision` |
 | `feed.py` | `FeedParser` protocol + `StravaHtmlFeedParser` — all format assumptions here |
 | `strava_client.py` | httpx async: CSRF, feed fetch, kudo POST, athlete lookup, name search |
 | `engine.py` | Orchestrator: run-kudos loop with delays, dry-run, RunResult |
-| `store.py` | `/data` file I/O — atomic YAML/JSON writes, bootstrap, migration; athlete-labels.json + athlete-avatars.json |
+| `store.py` | `/data` file I/O — atomic YAML/JSON writes, bootstrap, one-time migration of legacy `defaults.yaml`; athlete-labels.json + athlete-avatars.json |
 | `scheduler.py` | APScheduler wrapper with jitter, reschedule, in-flight guard |
 | `logging_conf.py` | stdout + `/data/last-run.log` handler setup |
 | `app.py` | FastAPI app factory + lifespan |
@@ -125,10 +127,8 @@ docker compose up --build   # builds image, starts on :8080
 All endpoints match the legacy Node.js wrapper exactly (so the frontend works unchanged):
 
 ```
-GET  /api/config                    — read user config
+GET  /api/config                    — read user config (includes catchAll)
 PUT  /api/config                    — write user config (empty cookie → 400)
-GET  /api/defaults                  — read defaults
-PUT  /api/defaults                  — write defaults
 GET  /api/settings                  — read scheduler/delay settings
 PUT  /api/settings                  — write settings + reschedule
 GET  /api/sport-types               — list of Strava sport types

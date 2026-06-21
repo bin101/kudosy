@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from kudosy.engine import run_kudos
-from kudosy.models import Activity, AppSettings, Defaults, UserConfig
+from kudosy.models import Activity, AppSettings, UserConfig
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -61,7 +61,6 @@ async def test_cached_activity_is_skipped() -> None:
 
     result = await run_kudos(
         user_cfg=_USER_CFG,
-        defaults=Defaults(),
         settings=AppSettings(),
         client=client,
         feed_parser=parser,
@@ -85,7 +84,6 @@ async def test_uncached_activity_is_processed() -> None:
 
     result = await run_kudos(
         user_cfg=_USER_CFG,
-        defaults=Defaults(),
         settings=AppSettings(minKudosDelaySeconds=0, maxKudosDelaySeconds=0),
         client=client,
         feed_parser=parser,
@@ -108,7 +106,6 @@ async def test_newly_kudoed_populated_after_successful_send() -> None:
 
     result = await run_kudos(
         user_cfg=_USER_CFG,
-        defaults=Defaults(),
         settings=AppSettings(minKudosDelaySeconds=0, maxKudosDelaySeconds=0),
         client=client,
         feed_parser=parser,
@@ -128,7 +125,6 @@ async def test_dry_run_does_not_populate_newly_kudoed() -> None:
 
     result = await run_kudos(
         user_cfg=_USER_CFG,
-        defaults=Defaults(),
         settings=AppSettings(),
         client=client,
         feed_parser=parser,
@@ -150,7 +146,6 @@ async def test_mixed_cached_and_new_activities() -> None:
 
     result = await run_kudos(
         user_cfg=_USER_CFG,
-        defaults=Defaults(),
         settings=AppSettings(minKudosDelaySeconds=0, maxKudosDelaySeconds=0),
         client=client,
         feed_parser=parser,
@@ -173,7 +168,6 @@ async def test_failed_send_not_added_to_newly_kudoed() -> None:
 
     result = await run_kudos(
         user_cfg=_USER_CFG,
-        defaults=Defaults(),
         settings=AppSettings(minKudosDelaySeconds=0, maxKudosDelaySeconds=0),
         client=client,
         feed_parser=parser,
@@ -193,7 +187,6 @@ async def test_no_kudoed_ids_arg_behaves_like_empty_set() -> None:
 
     result = await run_kudos(
         user_cfg=_USER_CFG,
-        defaults=Defaults(),
         settings=AppSettings(minKudosDelaySeconds=0, maxKudosDelaySeconds=0),
         client=client,
         feed_parser=parser,
