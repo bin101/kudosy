@@ -190,16 +190,36 @@ class StravaHtmlFeedParser:
         if not activity_id:
             return None
 
-        # Build stats: try structured stats list first, then numeric fallback
+        # Build stats: try structured stats list first, then numeric fallback.
+        #
+        # Real Strava feeds deliver stats as two adjacent items per stat:
+        #   {"key": "stat_one", "value": "10.2 km"}
+        #   {"key": "stat_one_subtitle", "value": "Distance"}
+        # We pair these so the subtitle becomes the human-readable label.
+        # Also handles inline {"subtitle": "Distance", "value": "10.2 km"} shape
+        # and the idealised {"label": "Distance", "value": "15.00 km"} shape used
+        # in tests/fixtures.
         stats: dict[str, str] = {}
         raw_stats = activity.get("stats")
         if isinstance(raw_stats, list):
+            # Two-pass approach: collect value-items and subtitle-items separately.
+            ordered: list[tuple[str, str, str]] = []  # (machine_key, value, inline_subtitle)
+            subtitle_map: dict[str, str] = {}  # machine_key -> human label from *_subtitle item
             for item in raw_stats:
-                if isinstance(item, dict):
-                    label = str(item.get("label") or item.get("key") or "")
-                    value = str(item.get("value") or "")
-                    if label and value:
-                        stats[label] = value
+                if not isinstance(item, dict):
+                    continue
+                key = str(item.get("label") or item.get("key") or "")
+                value = str(item.get("value") or "")
+                if not key or not value:
+                    continue
+                if key.endswith("_subtitle"):
+                    # This item IS the human-readable label for the matching stat.
+                    subtitle_map[key[: -len("_subtitle")]] = value
+                else:
+                    ordered.append((key, value, str(item.get("subtitle") or "")))
+            for key, value, inline_sub in ordered:
+                label = inline_sub or subtitle_map.get(key) or key
+                stats[label] = value
 
         # Numeric fallback (covers both camelCase movingTime and snake_case moving_time)
         if "Distance" not in stats:

@@ -228,85 +228,198 @@ function populateRulesTable(tbody, rules) {
   }
 }
 
-// ── Athlete list helpers ──────────────────────────────────────────────────────
+// ── Athlete management list helpers ──────────────────────────────────────────
+// Each athlete row has: name/id display, Allow/Deny switch, remove button.
+// The switch state determines which list (allowAthletes / ignoreAthletes) the ID goes into.
 
-async function doAthleteNameLookup(id, nameEl, lookupBtn) {
-  if (!id) { toast(t('athlete.missingId'), 'info'); return; }
-  const prev = lookupBtn.textContent;
-  lookupBtn.disabled = true;
-  lookupBtn.textContent = '…';
-  nameEl.textContent = '…';
-  nameEl.className = 'athlete-name muted';
-  try {
-    const r = await fetchJson(`/api/athletes/${id}`);
-    if (r.name) {
-      athleteLabels[id] = r.name;
-      nameEl.textContent = r.name;
-      nameEl.className = 'athlete-name';
-    } else {
-      nameEl.textContent = t('athlete.notFound');
-    }
-  } catch {
-    nameEl.textContent = t('athlete.error');
-  } finally {
-    lookupBtn.disabled = false;
-    lookupBtn.textContent = prev;
-  }
-}
-
-function addAthleteRow(listEl, id = '') {
+/**
+ * Add an athlete to the unified management list.
+ * @param {HTMLElement} listEl - the <ul> element
+ * @param {string} id         - athlete ID
+ * @param {string} name       - display name (from cache or search)
+ * @param {string} mode       - 'allow' | 'deny' (default 'deny')
+ */
+function addAthleteManagedRow(listEl, id = '', name = '', mode = 'deny') {
   const li = document.createElement('li');
-  li.className = 'athlete-row';
+  li.className = 'athlete-manage-row';
+  li.dataset.athleteId = id;
 
-  const idInput = document.createElement('input');
-  idInput.type = 'text';
-  idInput.value = id;
-  idInput.placeholder = t('athlete.id.placeholder');
-  idInput.className = 'athlete-id';
-  idInput.inputMode = 'numeric';
+  const displayName = name || (id ? (athleteLabels[id] || id) : '');
 
-  const nameEl = document.createElement('span');
-  const cachedName = id ? athleteLabels[id] : null;
-  nameEl.className = 'athlete-name' + (cachedName ? '' : ' muted');
-  nameEl.textContent = cachedName || (id ? '—' : '');
+  // Avatar placeholder (shown as initials circle when no avatarUrl)
+  const avatar = document.createElement('span');
+  avatar.className = 'athlete-avatar';
+  avatar.textContent = displayName ? displayName[0].toUpperCase() : '?';
 
-  const lookupBtn = document.createElement('button');
-  lookupBtn.type = 'button';
-  lookupBtn.className = 'btn-icon btn-lookup';
-  lookupBtn.title = t('athlete.lookup.title');
-  lookupBtn.textContent = '🔍';
-  lookupBtn.addEventListener('click', () =>
-    doAthleteNameLookup(idInput.value.trim(), nameEl, lookupBtn));
+  const info = document.createElement('span');
+  info.className = 'athlete-info';
+  const nameSpan = document.createElement('strong');
+  nameSpan.className = 'athlete-info-name';
+  nameSpan.textContent = displayName || id;
+  const idSpan = document.createElement('small');
+  idSpan.className = 'athlete-info-id';
+  idSpan.textContent = `ID: ${id}`;
+  info.appendChild(nameSpan);
+  info.appendChild(idSpan);
 
-  li.appendChild(idInput);
-  li.appendChild(nameEl);
-  li.appendChild(lookupBtn);
+  // Allow / Deny switch
+  const switchLabel = document.createElement('label');
+  switchLabel.className = 'athlete-switch';
+
+  const allowBtn = document.createElement('button');
+  allowBtn.type = 'button';
+  allowBtn.className = 'athlete-switch-btn athlete-switch-allow' + (mode === 'allow' ? ' active' : '');
+  allowBtn.textContent = t('config.athletes.allow');
+
+  const denyBtn = document.createElement('button');
+  denyBtn.type = 'button';
+  denyBtn.className = 'athlete-switch-btn athlete-switch-deny' + (mode === 'deny' ? ' active' : '');
+  denyBtn.textContent = t('config.athletes.deny');
+
+  allowBtn.addEventListener('click', () => {
+    allowBtn.classList.add('active');
+    denyBtn.classList.remove('active');
+    li.dataset.mode = 'allow';
+  });
+  denyBtn.addEventListener('click', () => {
+    denyBtn.classList.add('active');
+    allowBtn.classList.remove('active');
+    li.dataset.mode = 'deny';
+  });
+
+  li.dataset.mode = mode;
+  switchLabel.appendChild(allowBtn);
+  switchLabel.appendChild(denyBtn);
+
+  li.appendChild(avatar);
+  li.appendChild(info);
+  li.appendChild(switchLabel);
   li.appendChild(makeRemoveBtn(() => li.remove()));
   listEl.appendChild(li);
+  return li;
+}
 
-  if (!id) idInput.focus();
-  return { li, idInput, nameEl, lookupBtn };
+/**
+ * Get the allow/deny lists from the athlete management list.
+ * Returns { allowAthletes: string[], ignoreAthletes: string[] }
+ */
+function getAthleteLists(listEl) {
+  const allowAthletes = [];
+  const ignoreAthletes = [];
+  listEl.querySelectorAll('.athlete-manage-row').forEach(li => {
+    const id = li.dataset.athleteId;
+    if (!id) return;
+    if (li.dataset.mode === 'allow') {
+      allowAthletes.push(id);
+    } else {
+      ignoreAthletes.push(id);
+    }
+  });
+  return { allowAthletes, ignoreAthletes };
 }
 
 async function autoLookupMissingNames(listEl) {
-  const rows = listEl.querySelectorAll('.athlete-row');
-  const pending = [];
-  rows.forEach(li => {
-    const idInput   = li.querySelector('.athlete-id');
-    const nameEl    = li.querySelector('.athlete-name');
-    const lookupBtn = li.querySelector('.btn-lookup');
-    const id = idInput?.value.trim();
-    if (id && !athleteLabels[id]) {
-      pending.push(doAthleteNameLookup(id, nameEl, lookupBtn));
-    }
-  });
-  await Promise.allSettled(pending);
+  // No-op for the new managed list (names come from search); kept for compatibility
+  // with btn-load-all-names which re-fetches all labels from Strava.
 }
 
-function getAthleteIds(listEl) {
-  return Array.from(listEl.querySelectorAll('.athlete-id'))
-    .map(i => i.value.trim())
-    .filter(Boolean);
+// ── Athlete search modal ──────────────────────────────────────────────────────
+
+let _athleteSearchDebounceTimer = null;
+
+function openAthleteSearchModal() {
+  const modal = $('athlete-search-modal');
+  if (!modal) return;
+  modal.hidden = false;
+  const input = $('athlete-search-input');
+  if (input) { input.value = ''; input.focus(); }
+  const results = $('athlete-search-results');
+  if (results) results.innerHTML = `<p class="hint">${t('config.athletes.search.hint')}</p>`;
+}
+
+function closeAthleteSearchModal() {
+  const modal = $('athlete-search-modal');
+  if (modal) modal.hidden = true;
+  clearTimeout(_athleteSearchDebounceTimer);
+}
+
+async function performAthleteSearch(query) {
+  const results = $('athlete-search-results');
+  if (!results) return;
+  if (!query || query.length < 2) {
+    results.innerHTML = `<p class="hint">${t('config.athletes.search.hint')}</p>`;
+    return;
+  }
+  results.innerHTML = `<p class="hint">${t('config.athletes.search.searching')}</p>`;
+  try {
+    const athletes = await fetchJson(`/api/athletes/search?q=${encodeURIComponent(query)}`);
+    if (!athletes.length) {
+      results.innerHTML = `<p class="hint">${t('config.athletes.search.noResults')}</p>`;
+      return;
+    }
+    results.innerHTML = '';
+    athletes.forEach(athlete => {
+      const item = document.createElement('div');
+      item.className = 'athlete-search-item';
+
+      const avatar = document.createElement('span');
+      avatar.className = 'athlete-avatar';
+      if (athlete.avatarUrl) {
+        const img = document.createElement('img');
+        img.src = athlete.avatarUrl;
+        img.alt = athlete.name;
+        img.onerror = () => { avatar.textContent = athlete.name[0]?.toUpperCase() || '?'; };
+        avatar.appendChild(img);
+      } else {
+        avatar.textContent = athlete.name[0]?.toUpperCase() || '?';
+      }
+
+      const info = document.createElement('span');
+      info.className = 'athlete-search-item-info';
+      const nameEl = document.createElement('strong');
+      nameEl.textContent = athlete.name;
+      const idEl = document.createElement('small');
+      idEl.textContent = `ID: ${athlete.id}`;
+      info.appendChild(nameEl);
+      info.appendChild(idEl);
+
+      item.appendChild(avatar);
+      item.appendChild(info);
+      item.addEventListener('click', () => {
+        athleteLabels[athlete.id] = athlete.name;
+        addAthleteManagedRow($('athlete-manage-list'), athlete.id, athlete.name, 'deny');
+        closeAthleteSearchModal();
+      });
+      results.appendChild(item);
+    });
+  } catch {
+    results.innerHTML = `<p class="hint feed-error">${t('config.athletes.search.error')}</p>`;
+  }
+}
+
+function initAthleteSearchModal() {
+  const closeBtn = $('btn-close-athlete-modal');
+  if (closeBtn) closeBtn.addEventListener('click', closeAthleteSearchModal);
+
+  const overlay = $('athlete-search-modal');
+  if (overlay) {
+    overlay.addEventListener('click', e => {
+      if (e.target === overlay) closeAthleteSearchModal();
+    });
+  }
+
+  const input = $('athlete-search-input');
+  if (input) {
+    input.addEventListener('input', e => {
+      clearTimeout(_athleteSearchDebounceTimer);
+      const q = e.target.value.trim();
+      _athleteSearchDebounceTimer = setTimeout(() => performAthleteSearch(q), 350);
+    });
+  }
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeAthleteSearchModal();
+  });
 }
 
 // ── Activity names list helpers ───────────────────────────────────────────────
@@ -341,12 +454,15 @@ async function loadConfig() {
   $('cookieInput').value    = cfg.stravaSessionCookie || '';
   $('athleteIdInput').value = cfg.athleteId || '';
 
-  const ignoreList = $('ignore-list');
-  ignoreList.innerHTML = '';
+  // Unified athlete management list: merge ignoreAthletes + allowAthletes
+  const manageList = $('athlete-manage-list');
+  manageList.innerHTML = '';
   for (const id of (cfg.ignoreAthletes || [])) {
-    addAthleteRow(ignoreList, id);
+    addAthleteManagedRow(manageList, id, athleteLabels[id] || '', 'deny');
   }
-  autoLookupMissingNames(ignoreList);
+  for (const id of (cfg.allowAthletes || [])) {
+    addAthleteManagedRow(manageList, id, athleteLabels[id] || '', 'allow');
+  }
 
   populateRulesTable($('tbody-distance'), cfg.kudoRules?.minDistance);
   populateRulesTable($('tbody-time'),     cfg.kudoRules?.minTime);
@@ -361,10 +477,12 @@ async function loadConfig() {
 async function saveConfig(e) {
   e.preventDefault();
   try {
+    const { allowAthletes, ignoreAthletes } = getAthleteLists($('athlete-manage-list'));
     const cfg = {
       stravaSessionCookie: $('cookieInput').value.trim(),
       athleteId:           $('athleteIdInput').value.trim(),
-      ignoreAthletes:      getAthleteIds($('ignore-list')),
+      ignoreAthletes,
+      allowAthletes,
       kudoRules: {
         minDistance:   getRulesFromTable($('tbody-distance')),
         minTime:       getRulesFromTable($('tbody-time')),
@@ -381,13 +499,28 @@ async function saveConfig(e) {
 
 function initConfigTab() {
   $('form-config').addEventListener('submit', saveConfig);
-  $('btn-add-athlete').addEventListener('click', () => addAthleteRow($('ignore-list'), ''));
+  $('btn-add-athlete').addEventListener('click', openAthleteSearchModal);
   $('btn-add-distance').addEventListener('click', () => addRuleRow($('tbody-distance')));
   $('btn-add-time').addEventListener('click', () => addRuleRow($('tbody-time')));
   $('btn-add-name').addEventListener('click', () =>
     addListItem($('activity-names-list'), '', t('config.activityNames.placeholder')));
-  $('btn-load-all-names')?.addEventListener('click', () =>
-    autoLookupMissingNames($('ignore-list')));
+  // "Load all names" now just caches labels from the API; for managed list just refresh labels
+  $('btn-load-all-names')?.addEventListener('click', async () => {
+    try {
+      const labels = await fetchJson('/api/athlete-labels');
+      athleteLabels = { ...athleteLabels, ...labels };
+      // Refresh displayed names in the managed list
+      $('athlete-manage-list').querySelectorAll('.athlete-manage-row').forEach(li => {
+        const id = li.dataset.athleteId;
+        if (id && labels[id]) {
+          const nameEl = li.querySelector('.athlete-info-name');
+          if (nameEl) nameEl.textContent = labels[id];
+        }
+      });
+    } catch {
+      toast(t('toast.config.loadError', { msg: '' }), 'error');
+    }
+  });
 }
 
 // ── Defaults tab ──────────────────────────────────────────────────────────────
@@ -429,6 +562,96 @@ function initDefaultsTab() {
 
 // ── Settings tab ──────────────────────────────────────────────────────────────
 
+// ── Schedule matrix helpers ───────────────────────────────────────────────────
+
+/** Render the 7×24 schedule matrix into #schedule-matrix. */
+function renderScheduleMatrix(matrix) {
+  const container = $('schedule-matrix');
+  if (!container) return;
+  container.innerHTML = '';
+
+  const days = t('settings.schedule.days') || ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+
+  // Header row: corner + hours 0–23
+  const headerRow = document.createElement('div');
+  headerRow.className = 'schedule-row schedule-header';
+  const corner = document.createElement('div');
+  corner.className = 'schedule-cell schedule-corner';
+  headerRow.appendChild(corner);
+  for (let h = 0; h < 24; h++) {
+    const cell = document.createElement('div');
+    cell.className = 'schedule-cell schedule-hour-label';
+    cell.textContent = h;
+    cell.dataset.col = h;
+    cell.title = `Toggle hour ${h} (all days)`;
+    cell.addEventListener('click', () => toggleScheduleColumn(h));
+    headerRow.appendChild(cell);
+  }
+  container.appendChild(headerRow);
+
+  // Day rows
+  for (let d = 0; d < 7; d++) {
+    const row = document.createElement('div');
+    row.className = 'schedule-row';
+
+    const dayLabel = document.createElement('div');
+    dayLabel.className = 'schedule-cell schedule-day-label';
+    dayLabel.textContent = days[d] || d;
+    dayLabel.dataset.row = d;
+    dayLabel.title = `Toggle ${days[d] || d} (all hours)`;
+    dayLabel.addEventListener('click', () => toggleScheduleRow(d));
+    row.appendChild(dayLabel);
+
+    for (let h = 0; h < 24; h++) {
+      const cell = document.createElement('div');
+      const allowed = matrix[d]?.[h] !== false; // undefined → allowed
+      cell.className = 'schedule-cell schedule-slot' + (allowed ? ' allowed' : '');
+      cell.dataset.row = d;
+      cell.dataset.col = h;
+      cell.addEventListener('click', () => {
+        cell.classList.toggle('allowed');
+      });
+      row.appendChild(cell);
+    }
+    container.appendChild(row);
+  }
+}
+
+function toggleScheduleRow(rowIdx) {
+  const slots = document.querySelectorAll(`#schedule-matrix .schedule-slot[data-row="${rowIdx}"]`);
+  const anyOff = Array.from(slots).some(c => !c.classList.contains('allowed'));
+  slots.forEach(c => c.classList.toggle('allowed', anyOff));
+}
+
+function toggleScheduleColumn(colIdx) {
+  const slots = document.querySelectorAll(`#schedule-matrix .schedule-slot[data-col="${colIdx}"]`);
+  const anyOff = Array.from(slots).some(c => !c.classList.contains('allowed'));
+  slots.forEach(c => c.classList.toggle('allowed', anyOff));
+}
+
+function getScheduleMatrix() {
+  const matrix = [];
+  for (let d = 0; d < 7; d++) {
+    const row = [];
+    for (let h = 0; h < 24; h++) {
+      const cell = document.querySelector(`#schedule-matrix .schedule-slot[data-row="${d}"][data-col="${h}"]`);
+      row.push(cell ? cell.classList.contains('allowed') : true);
+    }
+    matrix.push(row);
+  }
+  return matrix;
+}
+
+function toggleScheduleMatrixEnabled(enabled) {
+  const wrap = $('schedule-matrix-wrap');
+  const tzGroup = $('timezone-group');
+  if (wrap) wrap.style.opacity = enabled ? '1' : '0.4';
+  if (wrap) wrap.style.pointerEvents = enabled ? '' : 'none';
+  if (tzGroup) tzGroup.style.opacity = enabled ? '1' : '0.4';
+}
+
+// ── Settings tab ──────────────────────────────────────────────────────────────
+
 async function loadSettings() {
   const s = await fetchJson('/api/settings');
   $('schedulerEnabled').checked     = s.schedulerEnabled;
@@ -438,7 +661,14 @@ async function loadSettings() {
   $('minKudosDelaySeconds').value    = s.minKudosDelaySeconds ?? 3;
   $('maxKudosDelaySeconds').value    = s.maxKudosDelaySeconds ?? 25;
   $('shuffleOrder').checked          = s.shuffleOrder ?? true;
+  $('kudosScheduleEnabled').checked  = s.kudosScheduleEnabled ?? false;
+  $('timezone').value                = s.timezone ?? 'Europe/Berlin';
   toggleIntervalVisibility(s.schedulerEnabled);
+  toggleScheduleMatrixEnabled(s.kudosScheduleEnabled ?? false);
+
+  // Render the schedule matrix (all-true by default)
+  const matrix = s.kudosScheduleMatrix || Array.from({ length: 7 }, () => Array(24).fill(true));
+  renderScheduleMatrix(matrix);
 }
 
 function toggleIntervalVisibility(enabled) {
@@ -460,6 +690,9 @@ async function saveSettings(e) {
       minKudosDelaySeconds:  Math.max(0, parseFloat($('minKudosDelaySeconds').value) || 0),
       maxKudosDelaySeconds:  Math.max(0, parseFloat($('maxKudosDelaySeconds').value) || 0),
       shuffleOrder:          $('shuffleOrder').checked,
+      kudosScheduleEnabled:  $('kudosScheduleEnabled').checked,
+      timezone:              $('timezone').value.trim() || 'Europe/Berlin',
+      kudosScheduleMatrix:   getScheduleMatrix(),
     };
     await putJson('/api/settings', data);
     toast(t('toast.settings.saved'));
@@ -473,6 +706,8 @@ function initSettingsTab() {
   $('form-settings').addEventListener('submit', saveSettings);
   $('schedulerEnabled').addEventListener('change', e =>
     toggleIntervalVisibility(e.target.checked));
+  $('kudosScheduleEnabled').addEventListener('change', e =>
+    toggleScheduleMatrixEnabled(e.target.checked));
 }
 
 // ── Status & log polling ──────────────────────────────────────────────────────
@@ -571,6 +806,7 @@ async function loadFeed() {
     activities.forEach(act => {
       const card = document.createElement('div');
       card.className = 'feed-card';
+      card.title = t('feed.kudo.openActivity');
 
       const reasonKey = `reason.${act.reason}`;
       const reasonLabel = t(reasonKey) !== reasonKey ? t(reasonKey) : act.reason;
@@ -589,6 +825,11 @@ async function loadFeed() {
       const statsHtml = statsParts ? `<div class="feed-stats">${statsParts}</div>` : '';
       const sportLabel = act.sport_type ? formatSportLabel(act.sport_type) : '—';
 
+      // Kudos button — only shown when kudos haven't been given yet
+      const kudosBtnHtml = !act.has_kudoed
+        ? `<button class="feed-kudo-btn" data-activity-id="${act.activity_id}">${t('feed.kudo.give')}</button>`
+        : '';
+
       card.innerHTML = `
         <div class="feed-card-header">
           <span class="feed-sport">${sportLabel}</span>
@@ -601,8 +842,46 @@ async function loadFeed() {
         </div>
         <div class="feed-card-footer">
           <span class="feed-decision ${decisionClass}">${decisionText}</span>
+          ${kudosBtnHtml}
         </div>
       `;
+
+      // Open activity on Strava when clicking anywhere on the card
+      const activityUrl = `https://www.strava.com/activities/${act.activity_id}`;
+      card.addEventListener('click', (e) => {
+        // Don't navigate when the kudos button was clicked
+        if (e.target.closest('.feed-kudo-btn')) return;
+        window.open(activityUrl, '_blank', 'noopener,noreferrer');
+      });
+
+      // Kudos button handler
+      const kudosBtn = card.querySelector('.feed-kudo-btn');
+      if (kudosBtn) {
+        kudosBtn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          kudosBtn.disabled = true;
+          kudosBtn.textContent = t('feed.kudo.giving');
+          try {
+            const res = await fetchJson(`/api/kudos/${act.activity_id}`, { method: 'POST' });
+            if (res.ok) {
+              // Update badge to "done" and remove button
+              const badge = card.querySelector('.feed-kudo-badge');
+              if (badge) {
+                badge.className = 'feed-kudo-badge feed-kudo-done';
+                badge.textContent = t('feed.kudo.done');
+              }
+              kudosBtn.remove();
+            } else {
+              kudosBtn.disabled = false;
+              kudosBtn.textContent = t('feed.kudo.give');
+            }
+          } catch {
+            kudosBtn.disabled = false;
+            kudosBtn.textContent = t('feed.kudo.give');
+          }
+        });
+      }
+
       container.appendChild(card);
     });
   } catch (err) {
@@ -682,6 +961,7 @@ async function init() {
   initFeedTab();
   initRunButtons();
   initRevealButtons();
+  initAthleteSearchModal();
 
   await Promise.allSettled([
     loadConfig().catch(err => toast(t('toast.config.loadError', { msg: err.message }), 'error')),

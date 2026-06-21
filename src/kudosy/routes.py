@@ -19,6 +19,7 @@ from kudosy.feed import AuthError, StravaHtmlFeedParser
 from kudosy.models import RunResult, RunStatus
 from kudosy.store import (
     cache_athlete_label,
+    mark_kudoed,
     read_athlete_labels,
     read_defaults,
     read_log,
@@ -113,6 +114,43 @@ async def get_sport_types(request: Request) -> list[str]:
 
 
 # ── Athlete lookup ────────────────────────────────────────────────────────────
+
+
+@router.get("/api/athletes/search")
+async def search_athletes_route(q: str = "") -> list[dict[str, Any]]:
+    """Search for athletes by name using the Strava search endpoint.
+
+    Returns a list of ``{"id": str, "name": str, "avatarUrl": str}`` objects.
+    The Strava search API is undocumented — results depend on the current
+    Strava session and may vary.  On any error, returns an empty list.
+
+    NOTE: This endpoint must be declared before /api/athletes/{athlete_id}
+    so FastAPI does not treat 'search' as a path parameter.
+    """
+    if not q or not q.strip():
+        return []
+
+    cfg = read_user_config()
+    if not cfg or not cfg.stravaSessionCookie:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "NO_COOKIE", "message": "Kein Session-Cookie konfiguriert"},
+        )
+
+    client = StravaClient(cfg.stravaSessionCookie)
+    try:
+        results = await client.search_athletes(q.strip())
+        # Cache any names we found so they appear in athlete-labels
+        labels = read_athlete_labels()
+        for item in results:
+            if item["id"] and item["name"] and item["id"] not in labels:
+                cache_athlete_label(item["id"], item["name"])
+        return results
+    except AuthError as exc:
+        code = getattr(exc, "code", "AUTH_FAILED")
+        raise HTTPException(status_code=401, detail={"code": code, "message": str(exc)}) from exc
+    finally:
+        await client.aclose()
 
 
 @router.get("/api/athletes/{athlete_id}")
@@ -246,6 +284,39 @@ async def get_feed() -> list[dict[str, Any]]:
             entry["reason"] = str(decision.reason)
             result.append(entry)
         return result
+    except AuthError as exc:
+        code = getattr(exc, "code", "AUTH_FAILED")
+        raise HTTPException(status_code=401, detail={"code": code, "message": str(exc)}) from exc
+    finally:
+        await client.aclose()
+
+
+# ── Single-kudo ───────────────────────────────────────────────────────────────
+
+
+@router.post("/api/kudos/{activity_id}")
+async def post_single_kudos(activity_id: str) -> dict[str, Any]:
+    """Give kudos to a single activity from the feed UI.
+
+    Fetches a fresh CSRF token, sends the kudo, and caches the activity_id so
+    the scheduler does not re-kudo it during the next run.
+    """
+    import datetime as _dt
+
+    cfg = read_user_config()
+    if not cfg or not cfg.stravaSessionCookie:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "NO_COOKIE", "message": "Kein Session-Cookie konfiguriert"},
+        )
+
+    client = StravaClient(cfg.stravaSessionCookie)
+    try:
+        csrf_token = await client.get_csrf_token()
+        ok = await client.send_kudos(activity_id, csrf_token)
+        if ok:
+            mark_kudoed(activity_id, _dt.datetime.now(_dt.UTC).isoformat())
+        return {"ok": ok}
     except AuthError as exc:
         code = getattr(exc, "code", "AUTH_FAILED")
         raise HTTPException(status_code=401, detail={"code": code, "message": str(exc)}) from exc

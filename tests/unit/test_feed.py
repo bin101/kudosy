@@ -451,7 +451,7 @@ def test_react_props_fixture_file() -> None:
 
 
 def test_react_props_stats_from_structured_list() -> None:
-    """stats list [{label, value}] is used when present."""
+    """stats list [{label, value}] is used when present (idealised fixture format)."""
     entries = [
         {
             "entity": "Activity",
@@ -471,6 +471,63 @@ def test_react_props_stats_from_structured_list() -> None:
     result = _parser().parse(_make_react_html(entries))
     assert len(result) == 1
     assert result[0].stats == {"Distance": "15.00 km", "Time": "1h 12m"}
+
+
+def test_react_props_stats_subtitle_pairs() -> None:
+    """Real Strava feed: stat_N / stat_N_subtitle pairs are resolved to human labels.
+
+    Strava emits stats as alternating value + subtitle items:
+      {"key": "stat_one", "value": "10.20 km"}
+      {"key": "stat_one_subtitle", "value": "Distance"}
+    The subtitle value becomes the label; the raw machine key is discarded.
+    """
+    entries = [
+        {
+            "entity": "Activity",
+            "activity": {
+                "id": 11000000050,
+                "activityName": "Real Stats Run",
+                "type": "Run",
+                "athlete": {"athleteId": 300000050, "athleteName": "Real Athlete"},
+                "kudosAndComments": {"hasKudoed": False},
+                "stats": [
+                    {"key": "stat_one", "value": "10.20 km"},
+                    {"key": "stat_one_subtitle", "value": "Distance"},
+                    {"key": "stat_two", "value": "1h 02m"},
+                    {"key": "stat_two_subtitle", "value": "Time"},
+                    {"key": "stat_three", "value": "164 bpm"},
+                    {"key": "stat_three_subtitle", "value": "Avg Heart Rate"},
+                ],
+            },
+        }
+    ]
+    result = _parser().parse(_make_react_html(entries))
+    assert len(result) == 1
+    stats = result[0].stats
+    assert stats == {"Distance": "10.20 km", "Time": "1h 02m", "Avg Heart Rate": "164 bpm"}
+
+
+def test_react_props_stats_inline_subtitle() -> None:
+    """Inline subtitle field on each stat item is used as the label."""
+    entries = [
+        {
+            "entity": "Activity",
+            "activity": {
+                "id": 11000000051,
+                "activityName": "Inline Stats Run",
+                "type": "Run",
+                "athlete": {"athleteId": 300000051, "athleteName": "Inline Athlete"},
+                "kudosAndComments": {"hasKudoed": False},
+                "stats": [
+                    {"key": "stat_one", "value": "5.00 km", "subtitle": "Distance"},
+                    {"key": "stat_two", "value": "28m 30s", "subtitle": "Time"},
+                ],
+            },
+        }
+    ]
+    result = _parser().parse(_make_react_html(entries))
+    assert len(result) == 1
+    assert result[0].stats == {"Distance": "5.00 km", "Time": "28m 30s"}
 
 
 def test_react_props_camel_case_moving_time() -> None:

@@ -1,6 +1,7 @@
 """Unit tests for decision.py — pure filter logic.
 
-Decision precedence: ignore → already → criteria → name_match → default (give kudos)
+Decision precedence (highest → lowest):
+  ignore → already → allow → name_match → criteria → default (give kudos)
 
 Test corpus is derived from the real last-run.log to guarantee behavioral parity.
 """
@@ -18,12 +19,14 @@ def _eff(
     per_time: dict[str, float] | None = None,
     names: list[str] | None = None,
     ignore: list[str] | None = None,
+    allow: list[str] | None = None,
 ) -> object:
     """Build an EffectiveConfig via the real merge function."""
     user = UserConfig(
         stravaSessionCookie="x",
         athleteId="99",
         ignoreAthletes=ignore or [],
+        allowAthletes=allow or [],
         kudoRules=KudoRules(
             minDistance=per_dist or {},
             minTime=per_time or {},
@@ -217,3 +220,53 @@ class TestRealLogOracle:
         act = _act(sport_type="Run", stats={"Time": "0h 0m", "Distance": "5.01 km"})
         d = decide(act, eff)  # type: ignore[arg-type]
         assert d.give_kudos is False
+
+
+class TestAllowList:
+    """Athlete in allow list → always give kudos (overrides criteria, not IGNORE/ALREADY)."""
+
+    def test_allow_overrides_criteria(self) -> None:
+        """Activity below distance threshold is still kudoed when athlete is allowed."""
+        eff = _eff(catch_min_dist=10, allow=["111"])
+        act = _act(athlete_id="111", sport_type="Run", stats={"Distance": "1 km"})
+        d = decide(act, eff)  # type: ignore[arg-type]
+        assert d.give_kudos is True
+        assert d.reason == DecisionReason.ALLOW
+
+    def test_allow_overrides_criteria_time(self) -> None:
+        eff = _eff(catch_min_time=45, allow=["222"])
+        act = _act(athlete_id="222", sport_type="Run", stats={"Time": "5m 0s"})
+        d = decide(act, eff)  # type: ignore[arg-type]
+        assert d.give_kudos is True
+        assert d.reason == DecisionReason.ALLOW
+
+    def test_allow_does_not_override_already_kudoed(self) -> None:
+        """ALREADY takes precedence over ALLOW: never re-kudo the same activity."""
+        eff = _eff(allow=["111"])
+        act = _act(athlete_id="111", has_kudoed=True)
+        d = decide(act, eff)  # type: ignore[arg-type]
+        assert d.give_kudos is False
+        assert d.reason == DecisionReason.ALREADY
+
+    def test_ignore_takes_precedence_over_allow(self) -> None:
+        """IGNORE beats ALLOW — if someone is both listed, they are still skipped."""
+        eff = _eff(ignore=["111"], allow=["111"])
+        act = _act(athlete_id="111")
+        d = decide(act, eff)  # type: ignore[arg-type]
+        assert d.give_kudos is False
+        assert d.reason == DecisionReason.IGNORE
+
+    def test_athlete_not_in_allow_list_still_blocked_by_criteria(self) -> None:
+        eff = _eff(catch_min_dist=10, allow=["999"])
+        act = _act(athlete_id="111", sport_type="Run", stats={"Distance": "1 km"})
+        d = decide(act, eff)  # type: ignore[arg-type]
+        assert d.give_kudos is False
+        assert d.reason == DecisionReason.CRITERIA
+
+    def test_allow_athlete_no_criteria_gives_default(self) -> None:
+        """Athlete in allow list with no criteria → ALLOW (not DEFAULT, allow fires first)."""
+        eff = _eff(allow=["111"])
+        act = _act(athlete_id="111")
+        d = decide(act, eff)  # type: ignore[arg-type]
+        assert d.give_kudos is True
+        assert d.reason == DecisionReason.ALLOW

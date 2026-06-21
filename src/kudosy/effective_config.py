@@ -72,6 +72,7 @@ def build_effective_config(
         stravaSessionCookie=user.stravaSessionCookie if user else "",
         athleteId=user.athleteId if user else "",
         ignoreAthletes=user.ignoreAthletes if user else [],
+        allowAthletes=user.allowAthletes if user else [],
         kudoRules=KudoRules(
             minDistance=min_distance,
             minTime=min_time,
