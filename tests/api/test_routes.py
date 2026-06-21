@@ -429,3 +429,197 @@ def test_get_feed_empty_feed_returns_empty_list(app_client: TestClient, data_dir
 
     assert resp.status_code == 200
     assert resp.json() == []
+
+
+# ── /api/feed — activity cache ─────────────────────────────────────────────────
+
+_CACHED_ACTIVITY = {
+    "athlete_name": "Alice Mustermann",
+    "athlete_id": "300000001",
+    "activity_id": "55000000001",
+    "activity_name": "Morning Run",
+    "sport_type": "Run",
+    "has_kudoed": False,
+    "stats": {"Distance": "10.00 km"},
+}
+_CACHE_TS = "2026-06-21T08:00:00+00:00"
+
+
+def test_get_feed_serves_from_cache_without_strava(app_client: TestClient, data_dir: Path) -> None:
+    """Cache-first: when a populated cache exists, Strava is not called."""
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    from kudosy import store
+
+    store.write_user_config_raw({"stravaSessionCookie": "valid-cookie", "athleteId": "20000001"})
+    store.write_activity_cache([dict(_CACHED_ACTIVITY)], _CACHE_TS)
+
+    mock_cls = MagicMock()
+    mock_instance = AsyncMock()
+    mock_cls.return_value = mock_instance
+
+    with patch("kudosy.routes.StravaClient", mock_cls):
+        resp = app_client.get("/api/feed")
+
+    assert resp.status_code == 200
+    mock_instance.fetch_following_feed.assert_not_called()
+
+    data = resp.json()
+    assert len(data) == 1
+    assert data[0]["activity_id"] == "55000000001"
+    assert "give_kudos" in data[0]
+    assert "reason" in data[0]
+
+
+def test_get_feed_refresh_true_fetches_from_strava_and_writes_cache(
+    app_client: TestClient, data_dir: Path
+) -> None:
+    """?refresh=true forces a live Strava fetch and writes the result to the cache."""
+    import json
+    from unittest.mock import AsyncMock, patch
+
+    from kudosy import store
+
+    store.write_user_config_raw({"stravaSessionCookie": "valid-cookie", "athleteId": "20000001"})
+
+    # Pre-populate cache with stale activity
+    store.write_activity_cache([dict(_CACHED_ACTIVITY)], _CACHE_TS)
+
+    new_entry = {
+        "id": "55000000002",
+        "name": "Evening Ride",
+        "sport_type": "Ride",
+        "has_kudoed": False,
+        "distance": 30000.0,
+        "moving_time": 3600,
+        "athlete": {"id": "300000002", "name": "Bob Radler"},
+    }
+    feed_html = (
+        "<html><script>var pageView = " + json.dumps({"entries": [new_entry]}) + ";</script></html>"
+    )
+
+    mock_instance = AsyncMock()
+    mock_instance.fetch_following_feed.return_value = feed_html
+    mock_instance.aclose = AsyncMock()
+
+    with patch("kudosy.routes.StravaClient", return_value=mock_instance):
+        resp = app_client.get("/api/feed?refresh=true")
+
+    assert resp.status_code == 200
+    mock_instance.fetch_following_feed.assert_called_once()
+
+    data = resp.json()
+    assert len(data) == 1
+    assert data[0]["activity_id"] == "55000000002"
+
+    # Cache must now contain the fresh activity
+    cached_acts, fetched_at = store.read_activity_cache()
+    assert fetched_at is not None
+    assert len(cached_acts) == 1
+    assert cached_acts[0]["activity_id"] == "55000000002"
+
+
+def test_get_feed_first_boot_empty_cache_fetches_live_and_writes(
+    app_client: TestClient, data_dir: Path
+) -> None:
+    """Empty cache on first boot: fetches live and populates the cache."""
+    import json
+    from unittest.mock import AsyncMock, patch
+
+    from kudosy import store
+
+    store.write_user_config_raw({"stravaSessionCookie": "valid-cookie", "athleteId": "20000001"})
+    # bootstrap seeded fetched_at=None — cache is empty
+
+    feed_entry = {
+        "id": "55000000003",
+        "name": "First Run",
+        "sport_type": "Run",
+        "has_kudoed": False,
+        "distance": 5000.0,
+        "moving_time": 1500,
+        "athlete": {"id": "300000003", "name": "Carol Läuferin"},
+    }
+    feed_html = (
+        "<html><script>var pageView = "
+        + json.dumps({"entries": [feed_entry]})
+        + ";</script></html>"
+    )
+
+    mock_instance = AsyncMock()
+    mock_instance.fetch_following_feed.return_value = feed_html
+    mock_instance.aclose = AsyncMock()
+
+    with patch("kudosy.routes.StravaClient", return_value=mock_instance):
+        resp = app_client.get("/api/feed")
+
+    assert resp.status_code == 200
+    mock_instance.fetch_following_feed.assert_called_once()
+
+    cached_acts, fetched_at = store.read_activity_cache()
+    assert fetched_at is not None
+    assert len(cached_acts) == 1
+    assert cached_acts[0]["activity_id"] == "55000000003"
+
+
+def test_get_feed_recomputes_decisions_on_config_change(
+    app_client: TestClient, data_dir: Path
+) -> None:
+    """Decisions are recomputed from the current config, not stored in the cache."""
+    from unittest.mock import MagicMock, patch
+
+    from kudosy import store
+
+    store.write_user_config_raw({"stravaSessionCookie": "valid-cookie", "athleteId": "20000001"})
+    store.write_activity_cache([dict(_CACHED_ACTIVITY)], _CACHE_TS)
+
+    mock_cls = MagicMock()
+    mock_instance = MagicMock()
+    mock_cls.return_value = mock_instance
+
+    with patch("kudosy.routes.StravaClient", mock_cls):
+        resp1 = app_client.get("/api/feed")
+    assert resp1.status_code == 200
+    assert resp1.json()[0]["give_kudos"] is True
+
+    # Now ignore that athlete — decision should flip without any Strava call
+    store.write_user_config_raw(
+        {
+            "stravaSessionCookie": "valid-cookie",
+            "athleteId": "20000001",
+            "ignoreAthletes": ["300000001"],
+        }
+    )
+
+    with patch("kudosy.routes.StravaClient", mock_cls):
+        resp2 = app_client.get("/api/feed")
+    assert resp2.status_code == 200
+    act = resp2.json()[0]
+    assert act["give_kudos"] is False
+    assert act["reason"] == "ignore"
+
+    mock_instance.fetch_following_feed.assert_not_called()
+
+
+def test_post_kudos_flips_has_kudoed_in_cache(app_client: TestClient, data_dir: Path) -> None:
+    """POST /api/kudos/{id} marks the activity as kudoed in the activity cache."""
+    from unittest.mock import AsyncMock, patch
+
+    from kudosy import store
+
+    store.write_user_config_raw({"stravaSessionCookie": "valid-cookie", "athleteId": "20000001"})
+    store.write_activity_cache([dict(_CACHED_ACTIVITY)], _CACHE_TS)
+
+    mock_instance = AsyncMock()
+    mock_instance.get_csrf_token.return_value = "csrf-token"
+    mock_instance.send_kudos.return_value = True
+    mock_instance.aclose = AsyncMock()
+
+    with patch("kudosy.routes.StravaClient", return_value=mock_instance):
+        resp = app_client.post("/api/kudos/55000000001")
+
+    assert resp.status_code == 200
+    assert resp.json()["ok"] is True
+
+    cached_acts, _ = store.read_activity_cache()
+    assert cached_acts[0]["has_kudoed"] is True

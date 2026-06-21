@@ -94,6 +94,7 @@ _SETTINGS_FILE = "settings.json"
 _LABELS_FILE = "athlete-labels.json"
 _AVATARS_FILE = "athlete-avatars.json"
 _KUDOED_FILE = "kudoed-activities.json"
+_ACTIVITY_CACHE_FILE = "activity-cache.json"
 _LOG_FILE = "last-run.log"
 
 _DEFAULT_SETTINGS = AppSettings()
@@ -209,6 +210,38 @@ def _parse_ts(ts: str) -> _dt.datetime:
         return _dt.datetime.fromisoformat(ts)
     except (ValueError, TypeError):
         return _dt.datetime(1970, 1, 1, tzinfo=_dt.UTC)
+
+
+def read_activity_cache() -> tuple[list[dict[str, Any]], str | None]:
+    """Return (activities, fetched_at_iso). Returns ([], None) when missing or corrupt."""
+    raw = _read_json(_path(_ACTIVITY_CACHE_FILE))
+    if not isinstance(raw, dict):
+        return [], None
+    acts = raw.get("activities")
+    fetched_at = raw.get("fetched_at")
+    if not isinstance(acts, list):
+        return [], None
+    return acts, (fetched_at if isinstance(fetched_at, str) else None)
+
+
+def write_activity_cache(activities: list[dict[str, Any]], fetched_at: str) -> None:
+    """Persist the activity feed snapshot atomically."""
+    _write_json_atomic(
+        _path(_ACTIVITY_CACHE_FILE),
+        {"fetched_at": fetched_at, "activities": activities},
+    )
+
+
+def mark_activity_kudoed_in_cache(activity_id: str) -> None:
+    """Flip has_kudoed=True for a single cached activity. No-op if not present."""
+    activities, fetched_at = read_activity_cache()
+    if fetched_at is None:
+        return
+    for act in activities:
+        if act.get("activity_id") == activity_id and not act.get("has_kudoed"):
+            act["has_kudoed"] = True
+            write_activity_cache(activities, fetched_at)
+            return
 
 
 def log_path() -> Path:
@@ -332,3 +365,9 @@ def bootstrap() -> None:
     if not kudoed_path.exists():
         log.info("[bootstrap] Creating %s", kudoed_path)
         _write_json_atomic(kudoed_path, {})
+
+    # Seed activity-cache.json if missing
+    activity_cache_path = _path(_ACTIVITY_CACHE_FILE)
+    if not activity_cache_path.exists():
+        log.info("[bootstrap] Creating %s", activity_cache_path)
+        _write_json_atomic(activity_cache_path, {"fetched_at": None, "activities": []})

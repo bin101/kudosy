@@ -70,6 +70,7 @@ async def run_kudos(
     effective = build_effective_config(user_cfg)
     _cached_ids: set[str] = kudoed_ids if kudoed_ids is not None else set()
     total = 0
+    activities: list[Activity] = []
     to_give: list[Activity] = []
     newly_kudoed: list[str] = []
     skipped_cached = 0
@@ -82,7 +83,7 @@ async def run_kudos(
 
         # 2. Fetch feed
         raw_feed = await client.fetch_following_feed()
-        activities = feed_parser.parse(raw_feed)
+        activities = feed_parser.parse(raw_feed)  # reassigns the pre-init'd list
         total = len(activities)
         log.info("Found %d activities", total)
 
@@ -179,4 +180,5 @@ async def run_kudos(
         error=error,
         newly_kudoed=newly_kudoed,
         skipped_cached=skipped_cached,
+        activities=[a.model_dump() for a in activities],
     )
