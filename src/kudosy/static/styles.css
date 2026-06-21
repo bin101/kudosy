@@ -578,23 +578,12 @@ small, .hint {
   font-size: 13px;
 }
 
-/* Button loading state */
+/* Button loading state — content is swapped to a .spinner in JS */
 .btn.is-loading {
   opacity: .7;
   cursor: not-allowed;
   pointer-events: none;
-}
-.btn.is-loading .btn-label { opacity: 0; width: 0; overflow: hidden; margin: 0; padding: 0; }
-.btn.is-loading::before {
-  content: '';
-  display: inline-block;
-  width: 13px;
-  height: 13px;
-  border: 2px solid transparent;
-  border-top-color: currentColor;
-  border-radius: 50%;
-  animation: spin .6s linear infinite;
-  flex-shrink: 0;
+  min-width: 36px;  /* prevent layout jump when text is replaced by spinner */
 }
 
 /* ── code ────────────────────────────────────────────────────────────────────── */

@@ -56,6 +56,21 @@ async function putJson(url, data) {
   });
 }
 
+function setButtonLoading(btn, loading) {
+  if (!btn) return;
+  if (loading) {
+    btn._savedHTML = btn.innerHTML;
+    btn.innerHTML = '<span class="spinner" aria-hidden="true"></span>';
+    btn.disabled = true;
+    btn.classList.add('is-loading');
+  } else {
+    if (btn._savedHTML !== undefined) btn.innerHTML = btn._savedHTML;
+    btn.disabled = false;
+    btn.classList.remove('is-loading');
+    delete btn._savedHTML;
+  }
+}
+
 function formatRelative(isoString) {
   if (!isoString) return '—';
   const d = new Date(isoString);
@@ -616,65 +631,97 @@ function renderScheduleMatrix(matrix) {
     container.appendChild(row);
   }
 
-  // ── Drag-to-paint (mouse + touch) ──────────────────────────────────────────
-  // Painting state is local to this render; replaced on every re-render.
-  let painting   = false;
-  let paintValue = false; // the value we're painting (true = allow, false = block)
+  // ── Rectangle-select drag (mouse + touch) ────────────────────────────────
+  // State is local to this render call; replaced on every re-render.
+  let painting       = false;
+  let paintValue     = false;   // the value we're painting (true = allow, false = block)
+  let paintStart     = null;    // { row, col } of the cell where the drag started
+  let dragSnapshot   = null;    // bool[7][24] — matrix state at the moment drag began
+
+  // O(1) cell lookup built during the render above
+  const cellMap = {};
+  container.querySelectorAll('.schedule-slot').forEach(c => {
+    cellMap[`${c.dataset.row},${c.dataset.col}`] = c;
+  });
 
   function slotFromTarget(el) {
-    return el && el.classList.contains('schedule-slot') ? el : null;
+    return el && el.classList && el.classList.contains('schedule-slot') ? el : null;
   }
 
-  function startPaint(slot) {
-    painting   = true;
-    // The paint value is the OPPOSITE of the clicked cell, so dragging paints uniformly.
-    paintValue = !slot.classList.contains('allowed');
-    slot.classList.toggle('allowed', paintValue);
+  function snapshotNow() {
+    const snap = [];
+    for (let d = 0; d < 7; d++) {
+      const row = [];
+      for (let h = 0; h < 24; h++) {
+        row.push(cellMap[`${d},${h}`].classList.contains('allowed'));
+      }
+      snap.push(row);
+    }
+    return snap;
+  }
+
+  // Restore from snapshot, then paint all cells in the rectangle start→(endRow,endCol).
+  function applyRect(endRow, endCol) {
+    const r0 = Math.min(paintStart.row, endRow);
+    const r1 = Math.max(paintStart.row, endRow);
+    const c0 = Math.min(paintStart.col, endCol);
+    const c1 = Math.max(paintStart.col, endCol);
+    for (let d = 0; d < 7; d++) {
+      for (let h = 0; h < 24; h++) {
+        const inRect = d >= r0 && d <= r1 && h >= c0 && h <= c1;
+        cellMap[`${d},${h}`].classList.toggle('allowed', inRect ? paintValue : dragSnapshot[d][h]);
+      }
+    }
+  }
+
+  function startDrag(slot) {
+    const row = parseInt(slot.dataset.row, 10);
+    const col = parseInt(slot.dataset.col, 10);
+    dragSnapshot = snapshotNow();
+    paintValue   = !slot.classList.contains('allowed');
+    paintStart   = { row, col };
+    painting     = true;
     container.classList.add('painting');
+    applyRect(row, col);
   }
 
-  function applyPaint(slot) {
+  function moveDrag(slot) {
     if (!painting || !slot) return;
-    slot.classList.toggle('allowed', paintValue);
+    applyRect(parseInt(slot.dataset.row, 10), parseInt(slot.dataset.col, 10));
   }
 
-  function stopPaint() {
-    painting = false;
+  function stopDrag() {
+    painting     = false;
+    paintStart   = null;
+    dragSnapshot = null;
     container.classList.remove('painting');
   }
 
-  // Mouse events
+  // Mouse
   container.addEventListener('mousedown', e => {
     const slot = slotFromTarget(e.target);
     if (!slot) return;
-    e.preventDefault(); // prevent text selection
-    startPaint(slot);
+    e.preventDefault();
+    startDrag(slot);
   });
+  container.addEventListener('mouseover', e => moveDrag(slotFromTarget(e.target)));
+  document.addEventListener('mouseup', stopDrag);
 
-  container.addEventListener('mouseover', e => {
-    applyPaint(slotFromTarget(e.target));
-  });
-
-  document.addEventListener('mouseup', stopPaint);
-
-  // Touch events
+  // Touch
   container.addEventListener('touchstart', e => {
     const slot = slotFromTarget(e.target);
     if (!slot) return;
-    e.preventDefault(); // prevent scroll while painting
-    startPaint(slot);
+    e.preventDefault();
+    startDrag(slot);
   }, { passive: false });
-
   container.addEventListener('touchmove', e => {
     if (!painting) return;
     e.preventDefault();
-    const touch = e.touches[0];
-    const el = document.elementFromPoint(touch.clientX, touch.clientY);
-    applyPaint(slotFromTarget(el));
+    const t = e.touches[0];
+    moveDrag(slotFromTarget(document.elementFromPoint(t.clientX, t.clientY)));
   }, { passive: false });
-
-  container.addEventListener('touchend', stopPaint);
-  container.addEventListener('touchcancel', stopPaint);
+  container.addEventListener('touchend', stopDrag);
+  container.addEventListener('touchcancel', stopDrag);
 }
 
 function toggleScheduleRow(rowIdx) {
@@ -887,8 +934,7 @@ async function loadFeed() {
     </div>`;
   if (filters) filters.hidden = true;
 
-  // Disable refresh button during fetch
-  if (refreshBtn) { refreshBtn.disabled = true; refreshBtn.classList.add('is-loading'); }
+  setButtonLoading(refreshBtn, true);
 
   try {
     feedActivities = await fetchJson('/api/feed');
@@ -921,7 +967,7 @@ async function loadFeed() {
       ? `<p class="hint feed-error">${t('feed.auth.error')}</p>`
       : `<p class="hint feed-error">${t('feed.load.error', { msg: err.message })}</p>`;
   } finally {
-    if (refreshBtn) { refreshBtn.disabled = false; refreshBtn.classList.remove('is-loading'); }
+    setButtonLoading(refreshBtn, false);
   }
 }
 
@@ -1091,7 +1137,7 @@ function initRunButtons() {
   const btnDryRun = $('btn-dry-run');
 
   btnRun.addEventListener('click', async () => {
-    btnRun.disabled = true; btnRun.classList.add('is-loading');
+    setButtonLoading(btnRun, true);
     try {
       await fetchJson('/api/run', {
         method: 'POST',
@@ -1102,19 +1148,19 @@ function initRunButtons() {
     } catch (err) {
       toast(err.message, 'error');
     } finally {
-      btnRun.disabled = false; btnRun.classList.remove('is-loading');
+      setButtonLoading(btnRun, false);
     }
   });
 
   btnDryRun.addEventListener('click', async () => {
-    btnDryRun.disabled = true; btnDryRun.classList.add('is-loading');
+    setButtonLoading(btnDryRun, true);
     try {
       await fetch('/api/run?dryRun=1', { method: 'POST' });
       document.querySelector('.tab[data-tab="log"]').click();
     } catch (err) {
       toast(err.message, 'error');
     } finally {
-      btnDryRun.disabled = false; btnDryRun.classList.remove('is-loading');
+      setButtonLoading(btnDryRun, false);
     }
   });
 }
