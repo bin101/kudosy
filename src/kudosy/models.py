@@ -66,7 +66,7 @@ class AppSettings(BaseModel):
 
     schedulerEnabled: bool = True
     intervalMinutes: int = 60
-    dryRun: bool = False
+    dryRun: bool = True
     # Human-like timing
     jitterMinutes: float = 15.0
     minKudosDelaySeconds: float = 3.0

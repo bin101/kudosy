@@ -859,17 +859,14 @@ async function pollStatus() {
         setButtonLoading(runningButton, false);
         runningButton = null;
         runStartStamp = null;
-        $('btn-run').disabled     = false;
-        $('btn-dry-run').disabled = false;
+        $('btn-run').disabled = false;
       } else {
-        // Run still in progress — keep spinner, keep both buttons disabled.
-        $('btn-run').disabled     = true;
-        $('btn-dry-run').disabled = true;
+        // Run still in progress — keep spinner, keep button disabled.
+        $('btn-run').disabled = true;
       }
     } else {
       // No locally-started run — mirror server state (e.g. a scheduled run).
-      $('btn-run').disabled     = s.running;
-      $('btn-dry-run').disabled = s.running;
+      $('btn-run').disabled = s.running;
     }
     currentLastRunStamp = finishedStamp;
 
@@ -1175,11 +1172,11 @@ function initFeedTab() {
  */
 async function startRun(btn, url) {
   if (runningButton) return;          // double-click guard
+  if ($('globalDryRun')?.checked) toast(t('toast.dryRunHint'), 'info');
   runningButton  = btn;
   runStartStamp  = currentLastRunStamp;
   setButtonLoading(btn, true);
-  $('btn-run').disabled     = true;
-  $('btn-dry-run').disabled = true;
+  $('btn-run').disabled = true;
   try {
     await fetchJson(url, {
       method: 'POST',
@@ -1194,20 +1191,16 @@ async function startRun(btn, url) {
     // No run was started — restore the button immediately.
     setButtonLoading(btn, false);
     runningButton = null;
-    $('btn-run').disabled     = false;
-    $('btn-dry-run').disabled = false;
+    $('btn-run').disabled = false;
   }
 }
 
 function initRunButtons() {
-  const btnRun    = $('btn-run');
-  const btnDryRun = $('btn-dry-run');
-
+  const btnRun = $('btn-run');
   btnRun.addEventListener('click', () => {
     const url = $('globalDryRun')?.checked ? '/api/run?dryRun=1' : '/api/run';
     startRun(btnRun, url);
   });
-  btnDryRun.addEventListener('click', () => startRun(btnDryRun, '/api/run?dryRun=1'));
 }
 
 // ── Password reveal ───────────────────────────────────────────────────────────
