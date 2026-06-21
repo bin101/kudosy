@@ -1203,7 +1203,10 @@ function initRunButtons() {
   const btnRun    = $('btn-run');
   const btnDryRun = $('btn-dry-run');
 
-  btnRun.addEventListener('click',    () => startRun(btnRun,    '/api/run'));
+  btnRun.addEventListener('click', () => {
+    const url = $('globalDryRun')?.checked ? '/api/run?dryRun=1' : '/api/run';
+    startRun(btnRun, url);
+  });
   btnDryRun.addEventListener('click', () => startRun(btnDryRun, '/api/run?dryRun=1'));
 }
 
