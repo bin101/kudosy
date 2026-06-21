@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8" /><title>Athlete Search</title></head>
+<body>
+<script id="__NEXT_DATA__" type="application/json">
+{
+  "props": {
+    "pageProps": {
+      "searchResults": [
+        {
+          "id": 11111111,
+          "firstname": "Alice",
+          "name": "Alice Example",
+          "picture": "https://example.com/avatars/11111111/large.jpg",
+          "memberType": "premium",
+          "location": "Berlin, Germany",
+          "followingStatus": "following",
+          "subtitle": "Alice follows you on Strava",
+          "topSports": [{"sportType": "Run", "count": 120}]
+        },
+        {
+          "id": 22222222,
+          "firstname": "Bob",
+          "name": "Bob Sample",
+          "picture": "https://example.com/avatars/22222222/large.jpg",
+          "memberType": "free",
+          "location": "Hamburg, Germany",
+          "followingStatus": "not_following",
+          "subtitle": "",
+          "topSports": [{"sportType": "Ride", "count": 45}]
+        },
+        {
+          "id": 0,
+          "name": "Should Be Skipped",
+          "picture": ""
+        }
+      ]
+    }
+  },
+  "page": "/athletes/search",
+  "query": {"text": "test"},
+  "buildId": "test-build"
+}
+</script>
+</body>
+</html>

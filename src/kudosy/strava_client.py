@@ -9,8 +9,10 @@ The CSRF token is extracted from a page's <meta name="csrf-token"> tag.
 
 from __future__ import annotations
 
+import json
 import logging
 import re
+from typing import Any
 
 import httpx
 
@@ -19,7 +21,7 @@ from kudosy.parsers import parse_athlete_name
 
 log = logging.getLogger(__name__)
 
-# Strava endpoints (hypotheses — verify via DevTools if the feed stops working)
+# Strava endpoints — verified via browser DevTools / HAR captures.
 _BASE = "https://www.strava.com"
 _DASHBOARD_URL = f"{_BASE}/dashboard"
 _FEED_URL = f"{_BASE}/dashboard/feed"
@@ -28,6 +30,13 @@ _ATHLETE_URL = f"{_BASE}/athletes/{{athlete_id}}"
 _ATHLETE_SEARCH_URL = f"{_BASE}/athletes/search"
 
 _CSRF_RE = re.compile(r'<meta\s+name="csrf-token"\s+content="([^"]+)"', re.IGNORECASE)
+
+# Athlete search: results are embedded in a <script id="__NEXT_DATA__"> tag
+# under props.pageProps.searchResults (verified from HAR traffic capture).
+_NEXT_DATA_RE = re.compile(
+    r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>',
+    re.DOTALL,
+)
 
 _BROWSER_HEADERS = {
     "User-Agent": (
@@ -130,33 +139,30 @@ class StravaClient:
     async def search_athletes(self, query: str) -> list[dict[str, str]]:
         """Search for athletes by name on Strava.
 
-        Uses the Strava search endpoint — the exact API shape is derived from
-        browser network traffic (see strava_client.py brittleness-firewall note).
-        Returns a list of dicts with at least ``id`` and ``name`` keys.
-        On any error or unexpected response shape, returns an empty list.
+        Fetches ``/athletes/search?text=<query>&gsf=1`` as a regular browser
+        document (text/html).  The results are embedded in the page as a
+        Next.js ``__NEXT_DATA__`` JSON blob under
+        ``props.pageProps.searchResults``.
 
-        NOTE: The actual Strava search endpoint/response shape must be verified
-        via browser DevTools when deploying for the first time, as Strava may
-        change their undocumented API without notice.
+        Verified via HAR traffic capture — not a JSON API, not XHR.
+        On any error or unexpected response shape, returns an empty list.
         """
         client = self._get_client()
         try:
             resp = await client.get(
                 _ATHLETE_SEARCH_URL,
-                params={"text": query},
+                params={"text": query, "gsf": "1"},
                 headers={
                     **_BROWSER_HEADERS,
-                    "Accept": "application/json, text/javascript, */*; q=0.01",
-                    "X-Requested-With": "XMLHttpRequest",
+                    "Referer": _DASHBOARD_URL,
                 },
-                timeout=8.0,
+                timeout=15.0,
             )
             self._check_auth(resp)
             if not resp.is_success:
                 log.warning("Athlete search returned %d for query %r", resp.status_code, query)
                 return []
-            data = resp.json()
-            return _parse_athlete_search_results(data)
+            return _parse_athlete_search_results(_extract_search_results(resp.text))
         except httpx.RequestError as exc:
             log.warning("Athlete search network error: %s", exc)
             return []
@@ -189,25 +195,48 @@ class StravaClient:
             raise err
 
 
+def _extract_search_results(html: str) -> list[Any]:
+    """Pull ``props.pageProps.searchResults`` out of the ``__NEXT_DATA__`` blob.
+
+    Strava's athlete search page embeds results as JSON in a
+    ``<script id="__NEXT_DATA__" type="application/json">`` tag.
+    Returns the raw list of athlete dicts, or [] on any failure.
+    """
+    m = _NEXT_DATA_RE.search(html)
+    if not m:
+        return []
+    try:
+        data = json.loads(m.group(1))
+    except (json.JSONDecodeError, ValueError):
+        log.warning("__NEXT_DATA__ JSON could not be parsed in athlete search response")
+        return []
+    results = data.get("props", {}).get("pageProps", {}).get("searchResults")
+    return results if isinstance(results, list) else []
+
+
 def _parse_athlete_search_results(data: object) -> list[dict[str, str]]:
-    """Parse the JSON response from Strava's athlete search endpoint.
+    """Normalise a raw athlete list from Strava's search page into uniform dicts.
 
-    Strava's search API (undocumented) typically returns either:
-      - A list of athlete objects, or
-      - An object with an ``athletes`` key holding the list.
+    Each Strava athlete object (from ``props.pageProps.searchResults``) carries:
+      - ``id`` (int) — numeric athlete ID
+      - ``name`` — full display name
+      - ``firstname`` — fallback if ``name`` is absent
+      - ``picture`` — avatar URL (large; the real Strava field name)
 
-    Each athlete object may have:
-      - ``id`` / ``athlete_id`` — the numeric athlete ID (we normalise to string)
-      - ``name`` / ``display_name`` / ``firstname`` + ``lastname`` — display name
-      - ``profile_medium`` / ``avatar_url`` — avatar image URL (optional)
+    Also handles legacy/alternative shapes as fallbacks (``athlete_id``,
+    ``display_name``, ``profile_medium``, ``avatar_url``, etc.) in case the
+    response structure changes.
 
-    Returns normalised dicts: ``{"id": str, "name": str, "avatarUrl": str}``.
-    Unknown shapes yield an empty list — never raises.
+    Returns normalised ``{"id": str, "name": str, "avatarUrl": str}`` dicts.
+    Unknown shapes and errors yield an empty list — never raises.
     """
     try:
+        # Support both a bare list (from _extract_search_results) and legacy
+        # wrapped shapes {"athletes": [...]} or {"results": [...]}
         if isinstance(data, dict):
-            # Might be wrapped: {"athletes": [...]} or {"results": [...]}
-            athletes_raw = data.get("athletes") or data.get("results") or data.get("data") or []
+            athletes_raw: list[Any] = (
+                data.get("athletes") or data.get("results") or data.get("data") or []
+            )
         elif isinstance(data, list):
             athletes_raw = data
         else:
@@ -220,17 +249,19 @@ def _parse_athlete_search_results(data: object) -> list[dict[str, str]]:
             athlete_id = str(
                 item.get("id") or item.get("athlete_id") or item.get("athleteId") or ""
             )
-            if not athlete_id:
+            if not athlete_id or athlete_id == "0":
                 continue
             name = str(
                 item.get("name")
                 or item.get("display_name")
                 or item.get("displayName")
                 or (f"{item.get('firstname', '')} {item.get('lastname', '')}".strip())
-                or "Unknown"
+                or "Unbekannt"
             )
+            # Real Strava field is "picture"; keep fallbacks for robustness.
             avatar = str(
-                item.get("profile_medium")
+                item.get("picture")
+                or item.get("profile_medium")
                 or item.get("avatar_url")
                 or item.get("avatarUrl")
                 or item.get("profile")
