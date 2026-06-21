@@ -16,16 +16,19 @@ from kudosy import __version__
 from kudosy.decision import decide
 from kudosy.effective_config import build_effective_config
 from kudosy.feed import AuthError, StravaHtmlFeedParser
-from kudosy.models import RunResult, RunStatus
+from kudosy.models import Activity, RunResult, RunStatus
 from kudosy.store import (
     cache_athlete_avatar,
     cache_athlete_label,
+    mark_activity_kudoed_in_cache,
     mark_kudoed,
+    read_activity_cache,
     read_athlete_avatars,
     read_athlete_labels,
     read_log,
     read_settings,
     read_user_config,
+    write_activity_cache,
     write_settings,
     write_user_config_raw,
 )
@@ -269,9 +272,36 @@ async def get_status(request: Request) -> dict[str, Any]:
 # ── Feed ──────────────────────────────────────────────────────────────────────
 
 
+def _decorate_feed(raw_acts: list[dict[str, Any]], effective: Any) -> list[dict[str, Any]]:
+    """Re-compute engine decisions over raw Activity dicts and return decorated entries.
+
+    Decisions are never persisted — they are always recomputed from the current
+    config so that config changes are reflected immediately without a live Strava
+    fetch.  Entries that fail Activity validation are silently skipped.
+    """
+    out: list[dict[str, Any]] = []
+    for raw in raw_acts:
+        try:
+            act = Activity.model_validate(raw)
+        except Exception:
+            log.debug("_decorate_feed: skipping invalid activity entry: %s", raw)
+            continue
+        decision = decide(act, effective)
+        entry = act.model_dump()
+        entry["give_kudos"] = decision.give_kudos
+        entry["reason"] = str(decision.reason)
+        out.append(entry)
+    return out
+
+
 @router.get("/api/feed")
-async def get_feed() -> list[dict[str, Any]]:
-    """Fetch the Strava following feed and annotate each activity with the engine decision."""
+async def get_feed(request: Request) -> list[dict[str, Any]]:
+    """Return the Strava following feed annotated with engine decisions.
+
+    By default serves from the persistent activity cache (populated by the
+    background scheduler and by explicit refreshes).  Pass ``?refresh=true``
+    to force a live Strava fetch and update the cache.
+    """
     cfg = read_user_config()
     if not cfg or not cfg.stravaSessionCookie:
         raise HTTPException(
@@ -280,18 +310,25 @@ async def get_feed() -> list[dict[str, Any]]:
         )
 
     effective = build_effective_config(cfg)
+    refresh = request.query_params.get("refresh") == "true"
+
+    # Cache-first: serve the persisted snapshot when not explicitly refreshing.
+    if not refresh:
+        cached_acts, fetched_at = read_activity_cache()
+        if fetched_at is not None:
+            log.debug("Serving feed from activity cache (%d entries)", len(cached_acts))
+            return _decorate_feed(cached_acts, effective)
+
+    # Live fetch (explicit refresh or empty cache / first boot).
+    import datetime as _dt
+
     client = StravaClient(cfg.stravaSessionCookie)
     try:
         raw_feed = await client.fetch_following_feed()
         activities = StravaHtmlFeedParser().parse(raw_feed)
-        result: list[dict[str, Any]] = []
-        for act in activities:
-            decision = decide(act, effective)
-            entry = act.model_dump()
-            entry["give_kudos"] = decision.give_kudos
-            entry["reason"] = str(decision.reason)
-            result.append(entry)
-        return result
+        raw_acts = [a.model_dump() for a in activities]
+        write_activity_cache(raw_acts, _dt.datetime.now(_dt.UTC).isoformat())
+        return _decorate_feed(raw_acts, effective)
     except AuthError as exc:
         code = getattr(exc, "code", "AUTH_FAILED")
         raise HTTPException(status_code=401, detail={"code": code, "message": str(exc)}) from exc
@@ -324,6 +361,7 @@ async def post_single_kudos(activity_id: str) -> dict[str, Any]:
         ok = await client.send_kudos(activity_id, csrf_token)
         if ok:
             mark_kudoed(activity_id, _dt.datetime.now(_dt.UTC).isoformat())
+            mark_activity_kudoed_in_cache(activity_id)
         return {"ok": ok}
     except AuthError as exc:
         code = getattr(exc, "code", "AUTH_FAILED")

@@ -30,6 +30,7 @@ from kudosy.store import (
     read_kudoed_ids,
     read_settings,
     read_user_config,
+    write_activity_cache,
 )
 
 log = logging.getLogger(__name__)
@@ -113,6 +114,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
                         result.skipped_cached,
                         len(result.newly_kudoed),
                     )
+            # Persist activity feed snapshot (survives restarts; never overwrite with
+            # a failed or empty run to protect the last valid cache).
+            if result and result.success and result.activities:
+                acts = result.activities
+                if not dry_run and result.newly_kudoed:
+                    # Reconcile: the snapshot was captured before kudos were sent,
+                    # so flip has_kudoed=True for any ID we just successfully kudoed.
+                    given_ids = set(result.newly_kudoed)
+                    for act in acts:
+                        if act.get("activity_id") in given_ids:
+                            act["has_kudoed"] = True
+                write_activity_cache(acts, result.started_at.isoformat())
+                log.debug("Activity cache updated (%d entries)", len(acts))
             return result
         finally:
             await client.aclose()

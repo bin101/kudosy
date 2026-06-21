@@ -950,7 +950,7 @@ function matchesFilter(act) {
   return true;
 }
 
-async function loadFeed() {
+async function loadFeed(refresh = false) {
   const container   = $('feed-list');
   const filters     = $('feed-filters');
   const refreshBtn  = $('btn-refresh-feed');
@@ -967,7 +967,8 @@ async function loadFeed() {
   setButtonLoading(refreshBtn, true);
 
   try {
-    feedActivities = await fetchJson('/api/feed');
+    const feedUrl = refresh ? '/api/feed?refresh=true' : '/api/feed';
+    feedActivities = await fetchJson(feedUrl);
     feedLoaded = true;
 
     // Populate sport-type dropdown with types present in this feed
@@ -1126,7 +1127,7 @@ function renderFeed() {
 
 function initFeedTab() {
   const btn = $('btn-refresh-feed');
-  if (btn) btn.addEventListener('click', loadFeed);
+  if (btn) btn.addEventListener('click', () => loadFeed(true));
 
   // Status filter buttons
   const statusGroup = document.getElementById('feed-filter-status');
