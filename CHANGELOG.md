@@ -5,6 +5,14 @@ All notable changes to Kudosy will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0](https://github.com/bin101/kudosy/compare/v1.0.0...v1.1.0) (2026-06-21)
+
+
+### Features
+
+* add feed filter bar and visual activity state indicators ([8b97d0f](https://github.com/bin101/kudosy/commit/8b97d0f29459bbf744ad241269e9e7f72e9f93f1))
+* feed filter bar and visual activity state indicators ([ae0961a](https://github.com/bin101/kudosy/commit/ae0961a1124bc1e4b20023bc4eb45955b598e654))
+
 ## [1.0.0](https://github.com/bin101/kudosy/compare/v0.4.0...v1.0.0) (2026-06-21)
 
 
