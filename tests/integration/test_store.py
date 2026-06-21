@@ -10,20 +10,18 @@ from pathlib import Path
 
 import pytest
 
-from kudosy.models import AppSettings, Defaults, KudoRules, UserConfig
+from kudosy.models import AppSettings, KudoRules, UserConfig
 from kudosy.store import (
     bootstrap,
     cache_athlete_avatar,
     cache_athlete_label,
     read_athlete_avatars,
     read_athlete_labels,
-    read_defaults,
     read_log,
     read_settings,
     read_user_config,
     write_athlete_avatars,
     write_athlete_labels,
-    write_defaults,
     write_settings,
     write_user_config,
     write_user_config_raw,
@@ -37,9 +35,10 @@ def test_bootstrap_creates_data_dir(data_dir: Path) -> None:
     assert data_dir.is_dir()
 
 
-def test_bootstrap_seeds_defaults(data_dir: Path) -> None:
+def test_bootstrap_does_not_create_defaults_yaml(data_dir: Path) -> None:
+    """bootstrap() no longer seeds defaults.yaml — that file is legacy."""
     bootstrap()
-    assert (data_dir / "defaults.yaml").exists()
+    assert not (data_dir / "defaults.yaml").exists()
 
 
 def test_bootstrap_seeds_settings(data_dir: Path) -> None:
@@ -119,24 +118,87 @@ def test_write_is_atomic(data_dir: Path) -> None:
     assert tmp_files == []
 
 
-# ── Defaults ──────────────────────────────────────────────────────────────────
+# ── Migration: legacy defaults.yaml → config.yaml ─────────────────────────────
 
 
-def test_read_defaults_returns_defaults_when_missing(data_dir: Path) -> None:
-    d = read_defaults()
-    assert isinstance(d, Defaults)
-    assert d.catchAll.minDistance == 0.0
+def test_migration_merges_catchall_into_config(data_dir: Path) -> None:
+    """bootstrap() migrates catchAll from defaults.yaml into config.yaml."""
+    import yaml
 
-
-def test_write_read_defaults(data_dir: Path) -> None:
-    d = Defaults(
-        catchAll={"minDistance": 3.0, "minTime": 15.0},  # type: ignore[arg-type]
-        kudoRules=KudoRules(minDistance={"Run": 5.0}),
+    # Write a legacy defaults.yaml with catchAll
+    (data_dir / "defaults.yaml").write_text(
+        yaml.dump({"catchAll": {"minDistance": 8.0, "minTime": 20.0}, "kudoRules": {}}),
+        encoding="utf-8",
     )
-    write_defaults(d)
-    loaded = read_defaults()
-    assert loaded.catchAll.minDistance == 3.0
-    assert loaded.kudoRules.minDistance == {"Run": 5.0}
+    # Write a config.yaml without catchAll
+    (data_dir / "config.yaml").write_text(
+        yaml.dump({"stravaSessionCookie": "c", "athleteId": "1", "kudoRules": {}}),
+        encoding="utf-8",
+    )
+
+    bootstrap()
+
+    # defaults.yaml should be renamed, not left as-is
+    assert not (data_dir / "defaults.yaml").exists()
+    assert (data_dir / "defaults.yaml.migrated").exists()
+
+    # config.yaml must contain the merged catchAll
+    cfg = read_user_config()
+    assert cfg is not None
+    assert cfg.catchAll.minDistance == 8.0
+    assert cfg.catchAll.minTime == 20.0
+
+
+def test_migration_merges_per_sport_rules(data_dir: Path) -> None:
+    """Per-sport rules from defaults are merged into config; config values win on conflict."""
+    import yaml
+
+    (data_dir / "defaults.yaml").write_text(
+        yaml.dump(
+            {
+                "catchAll": {"minDistance": 0.0, "minTime": 0.0},
+                "kudoRules": {
+                    "minDistance": {"Run": 3.0, "Ride": 10.0},
+                    "minTime": {},
+                    "activityNames": ["^Race"],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    (data_dir / "config.yaml").write_text(
+        yaml.dump(
+            {
+                "stravaSessionCookie": "c",
+                "athleteId": "1",
+                "kudoRules": {
+                    "minDistance": {"Run": 5.0},  # user override → should win
+                    "minTime": {},
+                    "activityNames": ["^Morning"],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    bootstrap()
+
+    cfg = read_user_config()
+    assert cfg is not None
+    # User value (5.0) wins over defaults value (3.0)
+    assert cfg.kudoRules.minDistance["Run"] == 5.0
+    # Defaults-only entry is merged in
+    assert cfg.kudoRules.minDistance["Ride"] == 10.0
+    # activityNames: defaults first, then user additions (dedup)
+    assert cfg.kudoRules.activityNames[0] == "^Race"
+    assert "^Morning" in cfg.kudoRules.activityNames
+
+
+def test_migration_idempotent_no_defaults_yaml(data_dir: Path) -> None:
+    """bootstrap() is safe when defaults.yaml does not exist (no migration needed)."""
+    bootstrap()
+    # No crash, no defaults.yaml created
+    assert not (data_dir / "defaults.yaml").exists()
 
 
 # ── AppSettings ───────────────────────────────────────────────────────────────

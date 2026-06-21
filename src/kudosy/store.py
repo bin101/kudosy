@@ -18,7 +18,7 @@ from typing import Any
 
 import yaml
 
-from kudosy.models import AppSettings, Defaults, UserConfig
+from kudosy.models import AppSettings, UserConfig
 from kudosy.settings import get_settings
 
 log = logging.getLogger(__name__)
@@ -89,7 +89,7 @@ def _write_json_atomic(path: Path, data: Any) -> None:
 # ── Domain-level read/write ───────────────────────────────────────────────────
 
 _CONFIG_FILE = "config.yaml"
-_DEFAULTS_FILE = "defaults.yaml"
+_DEFAULTS_FILE = "defaults.yaml"  # legacy — migrated away from on first boot
 _SETTINGS_FILE = "settings.json"
 _LABELS_FILE = "athlete-labels.json"
 _AVATARS_FILE = "athlete-avatars.json"
@@ -97,7 +97,6 @@ _KUDOED_FILE = "kudoed-activities.json"
 _LOG_FILE = "last-run.log"
 
 _DEFAULT_SETTINGS = AppSettings()
-_DEFAULT_DEFAULTS = Defaults()
 _DEFAULT_CONFIG = UserConfig()
 
 
@@ -119,25 +118,6 @@ def write_user_config(cfg: UserConfig) -> None:
 def write_user_config_raw(data: dict[str, Any]) -> None:
     """Write user config from a raw dict (used by the API endpoint)."""
     _write_yaml_atomic(_path(_CONFIG_FILE), data)
-
-
-def read_defaults() -> Defaults:
-    raw = _read_yaml(_path(_DEFAULTS_FILE))
-    if raw is None:
-        return _DEFAULT_DEFAULTS
-    try:
-        return Defaults.model_validate(raw)
-    except Exception:
-        log.warning("Invalid defaults.yaml; using defaults", exc_info=True)
-        return _DEFAULT_DEFAULTS
-
-
-def write_defaults(d: Defaults) -> None:
-    _write_yaml_atomic(_path(_DEFAULTS_FILE), d.model_dump())
-
-
-def write_defaults_raw(data: dict[str, Any]) -> None:
-    _write_yaml_atomic(_path(_DEFAULTS_FILE), data)
 
 
 def read_settings() -> AppSettings:
@@ -242,7 +222,65 @@ def read_log() -> str:
         return "Noch keine Logs vorhanden."
 
 
-# ── Bootstrap ─────────────────────────────────────────────────────────────────
+# ── Bootstrap / Migration ──────────────────────────────────────────────────────
+
+
+def _migrate_defaults(defaults_path: Path) -> None:
+    """Merge legacy defaults.yaml into config.yaml, then rename it .migrated.
+
+    Called once during bootstrap when defaults.yaml still exists.  After the
+    migration, defaults.yaml is renamed to defaults.yaml.migrated so this
+    function is never triggered again (idempotent).
+
+    Merge strategy (config wins on conflicts):
+      - catchAll:         taken from defaults (config has no catchAll yet)
+      - kudoRules per sport: defaults first, then config overlays (config wins)
+      - activityNames:    dedup-union (defaults first, then config additions)
+    """
+    log.info("[bootstrap] Migrating legacy defaults.yaml into config.yaml")
+    raw_defaults = _read_yaml(defaults_path) or {}
+    raw_config = _read_yaml(_path(_CONFIG_FILE)) or {}
+
+    # --- catchAll: copy from defaults (UserConfig gains this field) ---
+    if "catchAll" in raw_defaults and "catchAll" not in raw_config:
+        raw_config["catchAll"] = raw_defaults["catchAll"]
+
+    # --- kudoRules: merge (defaults base, config overlay) ---
+    def_rules: dict[str, Any] = raw_defaults.get("kudoRules") or {}
+    cfg_rules: dict[str, Any] = raw_config.get("kudoRules") or {}
+
+    # minDistance
+    merged_dist: dict[str, float] = dict(def_rules.get("minDistance") or {})
+    merged_dist.update(cfg_rules.get("minDistance") or {})
+
+    # minTime
+    merged_time: dict[str, float] = dict(def_rules.get("minTime") or {})
+    merged_time.update(cfg_rules.get("minTime") or {})
+
+    # activityNames: dedup-union (defaults first)
+    def_names: list[str] = def_rules.get("activityNames") or []
+    cfg_names: list[str] = cfg_rules.get("activityNames") or []
+    seen: set[str] = set()
+    merged_names: list[str] = []
+    for n in [*def_names, *cfg_names]:
+        if n not in seen:
+            seen.add(n)
+            merged_names.append(n)
+
+    raw_config["kudoRules"] = {
+        "minDistance": merged_dist,
+        "minTime": merged_time,
+        "activityNames": merged_names,
+    }
+
+    # Validate the merged result before writing (raises on invalid data)
+    UserConfig.model_validate(raw_config)
+    _write_yaml_atomic(_path(_CONFIG_FILE), raw_config)
+
+    # Rename defaults.yaml → defaults.yaml.migrated (non-destructive)
+    migrated_path = defaults_path.with_suffix(".yaml.migrated")
+    defaults_path.rename(migrated_path)
+    log.info("[bootstrap] Migration complete — %s → %s", defaults_path.name, migrated_path.name)
 
 
 def bootstrap() -> None:
@@ -255,17 +293,16 @@ def bootstrap() -> None:
     data_dir = _data_dir()
     data_dir.mkdir(parents=True, exist_ok=True)
 
+    # Migrate legacy defaults.yaml into config.yaml (idempotent: only while defaults.yaml exists)
+    defaults_path = _path(_DEFAULTS_FILE)
+    if defaults_path.exists():
+        _migrate_defaults(defaults_path)
+
     # Seed config.yaml if missing (user fills in cookie via the UI)
     config_path = _path(_CONFIG_FILE)
     if not config_path.exists():
         log.info("[bootstrap] Creating %s", config_path)
         _write_yaml_atomic(config_path, _DEFAULT_CONFIG.model_dump())
-
-    # Seed defaults.yaml if missing
-    defaults_path = _path(_DEFAULTS_FILE)
-    if not defaults_path.exists():
-        log.info("[bootstrap] Creating %s", defaults_path)
-        _write_yaml_atomic(defaults_path, _DEFAULT_DEFAULTS.model_dump())
 
     # Seed settings.json (also merges new fields into existing settings.json)
     settings_path = _path(_SETTINGS_FILE)

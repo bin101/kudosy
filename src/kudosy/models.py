@@ -26,13 +26,6 @@ class CatchAll(BaseModel):
     minTime: float = 0.0
 
 
-class Defaults(BaseModel):
-    """Contents of defaults.yaml."""
-
-    catchAll: CatchAll = CatchAll()
-    kudoRules: KudoRules = KudoRules()
-
-
 class UserConfig(BaseModel):
     """Contents of config.yaml — user-specific Strava config."""
 
@@ -40,6 +33,7 @@ class UserConfig(BaseModel):
     athleteId: str = ""
     ignoreAthletes: list[str] = []
     allowAthletes: list[str] = []
+    catchAll: CatchAll = CatchAll()
     kudoRules: KudoRules = KudoRules()
 
     @field_validator("athleteId", mode="before")

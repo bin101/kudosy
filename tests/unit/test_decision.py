@@ -8,7 +8,7 @@ Test corpus is derived from the real last-run.log to guarantee behavioral parity
 
 from kudosy.decision import decide
 from kudosy.effective_config import build_effective_config
-from kudosy.models import Activity, CatchAll, DecisionReason, Defaults, KudoRules, UserConfig
+from kudosy.models import Activity, CatchAll, DecisionReason, KudoRules, UserConfig
 
 
 def _eff(
@@ -27,17 +27,14 @@ def _eff(
         athleteId="99",
         ignoreAthletes=ignore or [],
         allowAthletes=allow or [],
+        catchAll=CatchAll(minDistance=catch_min_dist, minTime=catch_min_time),
         kudoRules=KudoRules(
             minDistance=per_dist or {},
             minTime=per_time or {},
             activityNames=names or [],
         ),
     )
-    defaults = Defaults(
-        catchAll=CatchAll(minDistance=catch_min_dist, minTime=catch_min_time),
-        kudoRules=KudoRules(minDistance={}, minTime={}),
-    )
-    return build_effective_config(user, defaults)
+    return build_effective_config(user)
 
 
 def _act(

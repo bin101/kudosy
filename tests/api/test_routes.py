@@ -14,7 +14,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from kudosy.app import create_app, get_app_state
-from kudosy.models import AppSettings, Defaults, RunResult, UserConfig
+from kudosy.models import AppSettings, RunResult, UserConfig
 from kudosy.sport_types import ALL_SPORT_TYPES
 
 # ── App fixture ────────────────────────────────────────────────────────────────
@@ -35,7 +35,6 @@ def app_client(data_dir: Path) -> TestClient:
         )
     )
     store.write_settings(AppSettings())
-    store.write_defaults(Defaults())
 
     app = create_app()
 
@@ -106,28 +105,39 @@ def test_put_config_empty_cookie_is_400(app_client: TestClient) -> None:
     assert resp.status_code == 400
 
 
-# ── /api/defaults ─────────────────────────────────────────────────────────────
+# ── /api/defaults removed ────────────────────────────────────────────────────
 
 
-def test_get_defaults(app_client: TestClient) -> None:
+def test_get_defaults_endpoint_removed(app_client: TestClient) -> None:
+    """The /api/defaults endpoint no longer exists."""
     resp = app_client.get("/api/defaults")
-    assert resp.status_code == 200
-    data = resp.json()
-    assert "catchAll" in data
-    assert "kudoRules" in data
+    assert resp.status_code == 404
 
 
-def test_put_defaults_ok(app_client: TestClient) -> None:
+def test_put_defaults_endpoint_removed(app_client: TestClient) -> None:
+    resp = app_client.put("/api/defaults", json={})
+    # StaticFiles mount catches GET → FastAPI advertises path as GET-only → PUT gets 405
+    assert resp.status_code in (404, 405)
+
+
+# ── /api/config catchAll ──────────────────────────────────────────────────────
+
+
+def test_put_config_with_catchall(app_client: TestClient) -> None:
+    """catchAll is persisted as part of UserConfig via /api/config."""
     payload = {
-        "catchAll": {"minDistance": 3.0, "minTime": 20.0},
-        "kudoRules": {"minDistance": {"Run": 5.0}, "minTime": {}, "activityNames": []},
+        "stravaSessionCookie": "my-cookie",
+        "athleteId": "20000099",
+        "catchAll": {"minDistance": 5.0, "minTime": 30.0},
+        "kudoRules": {"minDistance": {}, "minTime": {}, "activityNames": []},
     }
-    resp = app_client.put("/api/defaults", json=payload)
+    resp = app_client.put("/api/config", json=payload)
     assert resp.status_code == 200
 
-    resp2 = app_client.get("/api/defaults")
+    resp2 = app_client.get("/api/config")
     data = resp2.json()
-    assert data["catchAll"]["minDistance"] == 3.0
+    assert data["catchAll"]["minDistance"] == 5.0
+    assert data["catchAll"]["minTime"] == 30.0
 
 
 # ── /api/settings ─────────────────────────────────────────────────────────────

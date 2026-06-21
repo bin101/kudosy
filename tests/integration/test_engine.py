@@ -13,7 +13,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from kudosy.engine import run_kudos
-from kudosy.models import Activity, AppSettings, Defaults, KudoRules, RunResult, UserConfig
+from kudosy.models import Activity, AppSettings, KudoRules, RunResult, UserConfig
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -75,7 +75,6 @@ async def test_dry_run_returns_result() -> None:
 
     result = await run_kudos(
         user_cfg=None,
-        defaults=Defaults(),
         settings=AppSettings(),
         client=client,
         feed_parser=parser,
@@ -99,7 +98,6 @@ async def test_live_run_sends_kudos() -> None:
 
     result = await run_kudos(
         user_cfg=None,
-        defaults=Defaults(),
         settings=AppSettings(
             minKudosDelaySeconds=0.0,
             maxKudosDelaySeconds=0.0,
@@ -125,7 +123,6 @@ async def test_already_kudoed_not_given() -> None:
 
     result = await run_kudos(
         user_cfg=None,
-        defaults=Defaults(),
         settings=AppSettings(),
         client=client,
         feed_parser=parser,
@@ -149,7 +146,6 @@ async def test_ignored_athlete_skipped() -> None:
 
     result = await run_kudos(
         user_cfg=user_cfg,
-        defaults=Defaults(),
         settings=AppSettings(),
         client=client,
         feed_parser=parser,
@@ -166,7 +162,6 @@ async def test_empty_feed_is_ok() -> None:
 
     result = await run_kudos(
         user_cfg=None,
-        defaults=Defaults(),
         settings=AppSettings(),
         client=client,
         feed_parser=parser,
@@ -197,7 +192,6 @@ async def test_criteria_skips_short_run() -> None:
 
     result = await run_kudos(
         user_cfg=user_cfg,
-        defaults=Defaults(),
         settings=AppSettings(),
         client=client,
         feed_parser=parser,
@@ -230,7 +224,6 @@ async def test_name_match_overrides_criteria() -> None:
 
     result = await run_kudos(
         user_cfg=user_cfg,
-        defaults=Defaults(),
         settings=AppSettings(),
         client=client,
         feed_parser=parser,
@@ -248,7 +241,6 @@ async def test_failed_kudos_not_counted() -> None:
 
     result = await run_kudos(
         user_cfg=None,
-        defaults=Defaults(),
         settings=AppSettings(
             minKudosDelaySeconds=0.0,
             maxKudosDelaySeconds=0.0,
@@ -272,7 +264,6 @@ async def test_error_captured_in_result() -> None:
 
     result = await run_kudos(
         user_cfg=None,
-        defaults=Defaults(),
         settings=AppSettings(),
         client=client,
         feed_parser=parser,
@@ -291,7 +282,6 @@ async def test_result_timestamps_set() -> None:
 
     result = await run_kudos(
         user_cfg=None,
-        defaults=Defaults(),
         settings=AppSettings(),
         client=client,
         feed_parser=parser,
@@ -313,7 +303,6 @@ async def test_multiple_activities_all_given() -> None:
 
     result = await run_kudos(
         user_cfg=None,
-        defaults=Defaults(),
         settings=AppSettings(
             minKudosDelaySeconds=0.0,
             maxKudosDelaySeconds=0.0,

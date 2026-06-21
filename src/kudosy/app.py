@@ -27,7 +27,6 @@ from kudosy.store import (
     log_path,
     mark_kudoed,
     prune_kudoed,
-    read_defaults,
     read_kudoed_ids,
     read_settings,
     read_user_config,
@@ -85,7 +84,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         if dry_run is None:
             dry_run = settings.dryRun
         user_cfg = read_user_config()
-        defaults = read_defaults()
         if not user_cfg or not user_cfg.stravaSessionCookie:
             log.error("Kein Session-Cookie konfiguriert — Job abgebrochen")
             return None
@@ -97,7 +95,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         try:
             result = await run_kudos(
                 user_cfg,
-                defaults,
                 settings,
                 client=client,
                 feed_parser=feed_parser,
