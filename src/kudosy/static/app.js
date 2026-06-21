@@ -589,14 +589,16 @@ function renderScheduleMatrix(matrix) {
   container.innerHTML = '';
 
   const days = t('settings.schedule.days') || ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+  // Display order: 1, 2, …, 23, 0  (midnight at the end of the day, not the beginning)
+  const hours = Array.from({ length: 24 }, (_, i) => (i + 1) % 24);
 
-  // Header row: corner + hours 0–23
+  // Header row: corner + hours in display order
   const headerRow = document.createElement('div');
   headerRow.className = 'schedule-row schedule-header';
   const corner = document.createElement('div');
   corner.className = 'schedule-cell schedule-corner';
   headerRow.appendChild(corner);
-  for (let h = 0; h < 24; h++) {
+  for (const h of hours) {
     const cell = document.createElement('div');
     cell.className = 'schedule-cell schedule-hour-label';
     cell.textContent = h;
@@ -620,7 +622,7 @@ function renderScheduleMatrix(matrix) {
     dayLabel.addEventListener('click', () => toggleScheduleRow(d));
     row.appendChild(dayLabel);
 
-    for (let h = 0; h < 24; h++) {
+    for (const h of hours) {
       const cell = document.createElement('div');
       const allowed = matrix[d]?.[h] !== false; // undefined → allowed
       cell.className = 'schedule-cell schedule-slot' + (allowed ? ' allowed' : '');
