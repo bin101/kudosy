@@ -96,6 +96,7 @@ let athleteLabels = {};
 let athleteAvatars = {};
 let pollTimer     = null;
 let feedActivities = [];
+let feedLoaded     = false;   // true after the first successful feed fetch
 let feedFilter     = { status: 'all', text: '', sport: '' };
 
 // ── Language selector ─────────────────────────────────────────────────────────
@@ -141,7 +142,12 @@ function initTabs() {
       const pane = $(`tab-${btn.dataset.tab}`);
       if (pane) pane.classList.add('active');
       if (btn.dataset.tab === 'log') startPolling();
-      else if (btn.dataset.tab === 'feed') { stopPolling(); pollStatus(); loadFeed(); }
+      else if (btn.dataset.tab === 'feed') {
+        stopPolling(); pollStatus();
+        // Only fetch from Strava on first visit; use cached data on tab switches.
+        // The Refresh button is the explicit way to reload.
+        if (feedLoaded) renderFeed(); else loadFeed();
+      }
       else { stopPolling(); pollStatus(); }
     });
   });
@@ -561,7 +567,7 @@ function initConfigTab() {
 
 // ── Schedule matrix helpers ───────────────────────────────────────────────────
 
-/** Render the 7×24 schedule matrix into #schedule-matrix. */
+/** Render the 7×24 schedule matrix into #schedule-matrix with drag-to-paint support. */
 function renderScheduleMatrix(matrix) {
   const container = $('schedule-matrix');
   if (!container) return;
@@ -586,7 +592,7 @@ function renderScheduleMatrix(matrix) {
   }
   container.appendChild(headerRow);
 
-  // Day rows
+  // Day rows (cells have no per-element click handlers — painting is delegated)
   for (let d = 0; d < 7; d++) {
     const row = document.createElement('div');
     row.className = 'schedule-row';
@@ -605,13 +611,70 @@ function renderScheduleMatrix(matrix) {
       cell.className = 'schedule-cell schedule-slot' + (allowed ? ' allowed' : '');
       cell.dataset.row = d;
       cell.dataset.col = h;
-      cell.addEventListener('click', () => {
-        cell.classList.toggle('allowed');
-      });
       row.appendChild(cell);
     }
     container.appendChild(row);
   }
+
+  // ── Drag-to-paint (mouse + touch) ──────────────────────────────────────────
+  // Painting state is local to this render; replaced on every re-render.
+  let painting   = false;
+  let paintValue = false; // the value we're painting (true = allow, false = block)
+
+  function slotFromTarget(el) {
+    return el && el.classList.contains('schedule-slot') ? el : null;
+  }
+
+  function startPaint(slot) {
+    painting   = true;
+    // The paint value is the OPPOSITE of the clicked cell, so dragging paints uniformly.
+    paintValue = !slot.classList.contains('allowed');
+    slot.classList.toggle('allowed', paintValue);
+    container.classList.add('painting');
+  }
+
+  function applyPaint(slot) {
+    if (!painting || !slot) return;
+    slot.classList.toggle('allowed', paintValue);
+  }
+
+  function stopPaint() {
+    painting = false;
+    container.classList.remove('painting');
+  }
+
+  // Mouse events
+  container.addEventListener('mousedown', e => {
+    const slot = slotFromTarget(e.target);
+    if (!slot) return;
+    e.preventDefault(); // prevent text selection
+    startPaint(slot);
+  });
+
+  container.addEventListener('mouseover', e => {
+    applyPaint(slotFromTarget(e.target));
+  });
+
+  document.addEventListener('mouseup', stopPaint);
+
+  // Touch events
+  container.addEventListener('touchstart', e => {
+    const slot = slotFromTarget(e.target);
+    if (!slot) return;
+    e.preventDefault(); // prevent scroll while painting
+    startPaint(slot);
+  }, { passive: false });
+
+  container.addEventListener('touchmove', e => {
+    if (!painting) return;
+    e.preventDefault();
+    const touch = e.touches[0];
+    const el = document.elementFromPoint(touch.clientX, touch.clientY);
+    applyPaint(slotFromTarget(el));
+  }, { passive: false });
+
+  container.addEventListener('touchend', stopPaint);
+  container.addEventListener('touchcancel', stopPaint);
 }
 
 function toggleScheduleRow(rowIdx) {
@@ -811,13 +874,25 @@ function matchesFilter(act) {
 }
 
 async function loadFeed() {
-  const container = $('feed-list');
-  const filters   = $('feed-filters');
+  const container   = $('feed-list');
+  const filters     = $('feed-filters');
+  const refreshBtn  = $('btn-refresh-feed');
   if (!container) return;
-  container.innerHTML = `<p class="hint">${t('feed.loading')}</p>`;
+
+  // Show spinner while loading
+  container.innerHTML = `
+    <div class="feed-loading">
+      <span class="spinner spinner-lg"></span>
+      <span>${t('feed.loading')}</span>
+    </div>`;
   if (filters) filters.hidden = true;
+
+  // Disable refresh button during fetch
+  if (refreshBtn) { refreshBtn.disabled = true; refreshBtn.classList.add('is-loading'); }
+
   try {
     feedActivities = await fetchJson('/api/feed');
+    feedLoaded = true;
 
     // Populate sport-type dropdown with types present in this feed
     const sportSel = $('feed-filter-sport');
@@ -836,6 +911,7 @@ async function loadFeed() {
     if (filters) filters.hidden = false;
     renderFeed();
   } catch (err) {
+    feedLoaded = false;
     const is401 = err.message && (
       err.message.includes('AUTH_') ||
       err.message.includes('401') ||
@@ -844,6 +920,8 @@ async function loadFeed() {
     container.innerHTML = is401
       ? `<p class="hint feed-error">${t('feed.auth.error')}</p>`
       : `<p class="hint feed-error">${t('feed.load.error', { msg: err.message })}</p>`;
+  } finally {
+    if (refreshBtn) { refreshBtn.disabled = false; refreshBtn.classList.remove('is-loading'); }
   }
 }
 
@@ -1009,7 +1087,11 @@ function initFeedTab() {
 // ── Run buttons ───────────────────────────────────────────────────────────────
 
 function initRunButtons() {
-  $('btn-run').addEventListener('click', async () => {
+  const btnRun    = $('btn-run');
+  const btnDryRun = $('btn-dry-run');
+
+  btnRun.addEventListener('click', async () => {
+    btnRun.disabled = true; btnRun.classList.add('is-loading');
     try {
       await fetchJson('/api/run', {
         method: 'POST',
@@ -1019,15 +1101,20 @@ function initRunButtons() {
       document.querySelector('.tab[data-tab="log"]').click();
     } catch (err) {
       toast(err.message, 'error');
+    } finally {
+      btnRun.disabled = false; btnRun.classList.remove('is-loading');
     }
   });
 
-  $('btn-dry-run').addEventListener('click', async () => {
+  btnDryRun.addEventListener('click', async () => {
+    btnDryRun.disabled = true; btnDryRun.classList.add('is-loading');
     try {
       await fetch('/api/run?dryRun=1', { method: 'POST' });
       document.querySelector('.tab[data-tab="log"]').click();
     } catch (err) {
       toast(err.message, 'error');
+    } finally {
+      btnDryRun.disabled = false; btnDryRun.classList.remove('is-loading');
     }
   });
 }
