@@ -12,7 +12,7 @@ requires-python = ">=3.13"
 authors = [{ name = "Jens van Almsick" }]
 keywords = ["strava", "kudos", "automation"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 5 - Production/Stable",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3.13",
 ]
@@ -94,6 +94,13 @@ ignore_missing_imports = true
 testpaths = ["tests"]
 asyncio_mode = "auto"
 addopts = "-v --tb=short"
+# Treat warnings as errors so the suite stays warning-free (see CLAUDE.md quality gate).
+# Known external warnings we cannot act on are ignored explicitly below.
+filterwarnings = [
+    "error",
+    # FastAPI's TestClient (via starlette) nudges towards an unreleased httpx2.
+    "ignore:Using `httpx` with `starlette.testclient` is deprecated:Warning",
+]
 
 # ── coverage ──────────────────────────────────────────────────────────────────
 

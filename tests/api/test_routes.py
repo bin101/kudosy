@@ -184,6 +184,28 @@ def test_get_athlete_labels_empty(app_client: TestClient) -> None:
     assert isinstance(resp.json(), dict)
 
 
+# ── /api/athlete-avatars ──────────────────────────────────────────────────────
+
+
+def test_get_athlete_avatars_empty(app_client: TestClient) -> None:
+    resp = app_client.get("/api/athlete-avatars")
+    assert resp.status_code == 200
+    assert isinstance(resp.json(), dict)
+
+
+def test_get_athlete_avatars_with_cached_entries(app_client: TestClient, data_dir: Path) -> None:
+    from kudosy import store
+
+    store.write_athlete_avatars(
+        {"99990001": "https://example.com/1.jpg", "99990002": "https://example.com/2.jpg"}
+    )
+    resp = app_client.get("/api/athlete-avatars")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["99990001"] == "https://example.com/1.jpg"
+    assert data["99990002"] == "https://example.com/2.jpg"
+
+
 # ── /api/status ───────────────────────────────────────────────────────────────
 
 
