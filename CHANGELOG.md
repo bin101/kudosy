@@ -5,6 +5,13 @@ All notable changes to Kudosy will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0](https://github.com/bin101/kudosy/compare/v0.4.0...v1.0.0) (2026-06-21)
+
+
+### Miscellaneous Chores
+
+* release prep for 1.0.0 ([b40657b](https://github.com/bin101/kudosy/commit/b40657bfa85891229c05e818cd34e82d7ce6fb70))
+
 ## [0.4.0](https://github.com/bin101/kudosy/compare/v0.3.2...v0.4.0) (2026-06-21)
 
 
