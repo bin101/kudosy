@@ -44,3 +44,6 @@ dmypy.json
 *.swp
 *.swo
 .DS_Store
+
+# Browser network captures (may contain session cookies / PII)
+*.har

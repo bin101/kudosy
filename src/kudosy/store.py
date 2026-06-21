@@ -92,6 +92,7 @@ _CONFIG_FILE = "config.yaml"
 _DEFAULTS_FILE = "defaults.yaml"
 _SETTINGS_FILE = "settings.json"
 _LABELS_FILE = "athlete-labels.json"
+_AVATARS_FILE = "athlete-avatars.json"
 _KUDOED_FILE = "kudoed-activities.json"
 _LOG_FILE = "last-run.log"
 
@@ -167,6 +168,21 @@ def cache_athlete_label(athlete_id: str, name: str) -> None:
     labels = read_athlete_labels()
     labels[athlete_id] = name
     write_athlete_labels(labels)
+
+
+def read_athlete_avatars() -> dict[str, str]:
+    raw = _read_json(_path(_AVATARS_FILE))
+    return raw if isinstance(raw, dict) else {}
+
+
+def write_athlete_avatars(avatars: dict[str, str]) -> None:
+    _write_json_atomic(_path(_AVATARS_FILE), avatars)
+
+
+def cache_athlete_avatar(athlete_id: str, avatar_url: str) -> None:
+    avatars = read_athlete_avatars()
+    avatars[athlete_id] = avatar_url
+    write_athlete_avatars(avatars)
 
 
 def read_kudoed() -> dict[str, str]:
@@ -267,6 +283,12 @@ def bootstrap() -> None:
     if not labels_path.exists():
         log.info("[bootstrap] Creating %s", labels_path)
         _write_json_atomic(labels_path, {})
+
+    # Seed athlete-avatars.json if missing
+    avatars_path = _path(_AVATARS_FILE)
+    if not avatars_path.exists():
+        log.info("[bootstrap] Creating %s", avatars_path)
+        _write_json_atomic(avatars_path, {})
 
     # Seed kudoed-activities.json if missing
     kudoed_path = _path(_KUDOED_FILE)
