@@ -5,6 +5,28 @@ All notable changes to Kudosy will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0](https://github.com/bin101/kudosy/compare/v1.1.0...v1.2.0) (2026-06-21)
+
+
+### Features
+
+* feed spinner/cache, button loading states, drag-to-paint schedule matrix ([89ca144](https://github.com/bin101/kudosy/commit/89ca144a9384c32de95c3e58f9230160c775cc9c))
+* feed spinner/cache, button loading states, drag-to-paint schedule matrix ([b27d271](https://github.com/bin101/kudosy/commit/b27d2716e3983d49941c0806d3ac9377eacf5645))
+* merge config/defaults/settings tabs and unify kudo rules ([fef283b](https://github.com/bin101/kudosy/commit/fef283bca6272d11b44b34e703f8dd58e45b4028))
+* merge config/defaults/settings tabs and unify kudo rules ([019af96](https://github.com/bin101/kudosy/commit/019af96bcddf061728a63ceb1b607638d05e9608))
+* merge config/defaults/settings tabs and unify kudo rules ([#14](https://github.com/bin101/kudosy/issues/14)) ([fef283b](https://github.com/bin101/kudosy/commit/fef283bca6272d11b44b34e703f8dd58e45b4028))
+* persist activity cache across restarts and background runs ([90a6831](https://github.com/bin101/kudosy/commit/90a6831d5b2b914d0ce7e8f1d4c1849e6aad8a42))
+* persist activity cache across restarts and background runs ([388a514](https://github.com/bin101/kudosy/commit/388a5143c42d4e064f611da55062128349cb6594))
+* remove Dry-Run button, default dryRun=true, hint on manual run ([5b542ee](https://github.com/bin101/kudosy/commit/5b542eef106cc97897657cfa15fc99e642dcd8bf))
+
+
+### Bug Fixes
+
+* button spinner via innerHTML-swap, matrix rectangle selection ([1bd9eb6](https://github.com/bin101/kudosy/commit/1bd9eb6152d3f32f099377ec582de91fdef8e978))
+* display midnight (0) after 23:00 in schedule matrix ([e465062](https://github.com/bin101/kudosy/commit/e4650624e22c6bb35795fb748a81a5e893192006))
+* keep Run/DryRun spinner until background job finishes ([0b037e0](https://github.com/bin101/kudosy/commit/0b037e0b7cfd65206b080034cfb200be007093b4))
+* Run-Now button respects global dryRun setting ([e3521fa](https://github.com/bin101/kudosy/commit/e3521fabe89bb615bf87ac9506dbd5389d226736))
+
 ## [1.1.0](https://github.com/bin101/kudosy/compare/v1.0.0...v1.1.0) (2026-06-21)
 
 
