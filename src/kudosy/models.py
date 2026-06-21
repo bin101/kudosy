@@ -6,7 +6,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 # ── Config models ─────────────────────────────────────────────────────────────
 
@@ -39,6 +39,7 @@ class UserConfig(BaseModel):
     stravaSessionCookie: str = ""
     athleteId: str = ""
     ignoreAthletes: list[str] = []
+    allowAthletes: list[str] = []
     kudoRules: KudoRules = KudoRules()
 
     @field_validator("athleteId", mode="before")
@@ -53,6 +54,18 @@ class UserConfig(BaseModel):
             return []
         return [str(item) for item in v]
 
+    @field_validator("allowAthletes", mode="before")
+    @classmethod
+    def coerce_allow_athletes(cls, v: Any) -> list[str]:
+        if not isinstance(v, list):
+            return []
+        return [str(item) for item in v]
+
+
+def _default_schedule_matrix() -> list[list[bool]]:
+    """7 rows (Mon-Sun) x 24 columns (hours), all True = always allowed."""
+    return [[True] * 24 for _ in range(7)]
+
 
 class AppSettings(BaseModel):
     """Contents of settings.json — scheduler and behavior settings."""
@@ -65,11 +78,45 @@ class AppSettings(BaseModel):
     minKudosDelaySeconds: float = 3.0
     maxKudosDelaySeconds: float = 25.0
     shuffleOrder: bool = True
+    # Quiet-hours matrix — kudos are only given during allowed time slots
+    timezone: str = "Europe/Berlin"
+    kudosScheduleEnabled: bool = False
+    kudosScheduleMatrix: list[list[bool]] = Field(default_factory=_default_schedule_matrix)
 
     @field_validator("intervalMinutes", mode="before")
     @classmethod
     def min_interval(cls, v: Any) -> int:
         return max(5, int(v))
+
+    @field_validator("timezone", mode="before")
+    @classmethod
+    def validate_timezone(cls, v: Any) -> str:
+        from kudosy.quiet_hours import is_valid_timezone
+
+        name = str(v) if v else "Europe/Berlin"
+        if not is_valid_timezone(name):
+            raise ValueError(f"Unknown timezone: {name!r}")
+        return name
+
+    @field_validator("kudosScheduleMatrix", mode="before")
+    @classmethod
+    def normalise_matrix(cls, v: Any) -> list[list[bool]]:
+        """Ensure the matrix is always 7 rows x 24 columns.
+
+        Missing rows or columns are filled with True (allowed) so that a
+        partial config from an older settings.json never blocks the scheduler.
+        """
+        default = _default_schedule_matrix()
+        if not isinstance(v, list):
+            return default
+        result: list[list[bool]] = []
+        for i in range(7):
+            if i < len(v) and isinstance(v[i], list):
+                row = [bool(v[i][j]) if j < len(v[i]) else True for j in range(24)]
+            else:
+                row = [True] * 24
+            result.append(row)
+        return result
 
     @model_validator(mode="after")
     def validate_delay_range(self) -> AppSettings:
@@ -90,6 +137,7 @@ class EffectiveConfig(BaseModel):
     stravaSessionCookie: str
     athleteId: str
     ignoreAthletes: list[str]
+    allowAthletes: list[str]
     kudoRules: KudoRules
 
 
@@ -113,6 +161,7 @@ class DecisionReason(StrEnum):
 
     IGNORE = "ignore"  # athlete in ignore list
     ALREADY = "already"  # already kudoed
+    ALLOW = "allow"  # athlete in allow list → always give kudos (overrides criteria)
     CRITERIA = "criteria"  # below minDistance/minTime threshold
     NAME_MATCH = "name_match"  # activity name matched a regex → always give
     DEFAULT = "default"  # no rule matched → give kudos

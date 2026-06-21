@@ -72,15 +72,15 @@
 
         <div class="card">
           <div class="card-header-row">
-            <h2 data-i18n="config.ignoreAthletes.title">Ignorierte Athleten</h2>
+            <h2 data-i18n="config.athletes.title">Athleten-Verwaltung</h2>
             <button type="button" class="btn btn-outline btn-sm" id="btn-load-all-names"
                     data-i18n-title="config.ignoreAthletes.loadAll.title"
                     title="Namen aller Athleten von Strava abrufen"
                     data-i18n="config.ignoreAthletes.loadAll">🔍 Alle Namen laden</button>
           </div>
-          <p class="hint" data-i18n="config.ignoreAthletes.hint">Aktivitäten dieser Athleten werden übersprungen. Der Name wird von Strava geladen und lokal gecacht.</p>
-          <ul class="dynamic-list" id="ignore-list"></ul>
-          <button type="button" class="btn btn-outline btn-sm" id="btn-add-athlete" data-i18n="config.ignoreAthletes.addBtn">+ Athlet hinzufügen</button>
+          <p class="hint" data-i18n="config.athletes.hint">Pro Athlet entscheidest du: <strong>Deny</strong> überspringt alle Aktivitäten, <strong>Allow</strong> gibt immer Kudos (übersteuert Distanz-/Zeit-Regeln).</p>
+          <ul class="dynamic-list athlete-manage-list" id="athlete-manage-list"></ul>
+          <button type="button" class="btn btn-outline btn-sm" id="btn-add-athlete" data-i18n="config.athletes.addBtn">+ Athlet hinzufügen</button>
         </div>
 
         <div class="card">
@@ -264,6 +264,26 @@
           </div>
         </div>
 
+        <div class="card" id="schedule-card">
+          <h2 data-i18n="settings.schedule.title">Ruhezeiten</h2>
+          <p class="hint" data-i18n="settings.schedule.hint">Definiere wann Kudos gegeben werden dürfen. Grüne Zellen = erlaubt. Klicke auf eine Zelle um sie umzuschalten, oder auf eine Zeilen-/Spaltenüberschrift um die gesamte Zeile/Spalte zu toggeln.</p>
+          <div class="form-group">
+            <label class="toggle-row">
+              <input type="checkbox" id="kudosScheduleEnabled">
+              <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              <span data-i18n="settings.schedule.enabled.label">Ruhezeiten aktivieren</span>
+            </label>
+          </div>
+          <div class="form-group" id="timezone-group">
+            <label for="timezone" data-i18n="settings.schedule.timezone.label">Zeitzone</label>
+            <input type="text" id="timezone" placeholder="Europe/Berlin" autocomplete="off">
+            <small data-i18n="settings.schedule.timezone.hint">IANA-Zeitzone, z. B. Europe/Berlin, America/New_York</small>
+          </div>
+          <div class="schedule-matrix-wrap" id="schedule-matrix-wrap">
+            <div id="schedule-matrix" class="schedule-matrix"></div>
+          </div>
+        </div>
+
         <div class="form-footer">
           <button type="submit" class="btn btn-primary btn-lg" data-i18n="settings.saveBtn">💾 Einstellungen speichern</button>
         </div>
@@ -326,6 +346,24 @@
   </footer>
 
   <div id="toast-container"></div>
+
+  <!-- ── Athlete search modal ─────────────────────────────────────────── -->
+  <div id="athlete-search-modal" class="modal-overlay" hidden>
+    <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="athlete-modal-title">
+      <div class="modal-header">
+        <h3 id="athlete-modal-title" data-i18n="config.athletes.search.title">Athlet hinzufügen</h3>
+        <button type="button" class="modal-close" id="btn-close-athlete-modal" aria-label="Schließen">✕</button>
+      </div>
+      <div class="modal-body">
+        <input type="search" id="athlete-search-input" class="athlete-search-input"
+               data-i18n-placeholder="config.athletes.search.placeholder"
+               placeholder="Name eingeben…" autocomplete="off" autofocus>
+        <div id="athlete-search-results" class="athlete-search-results">
+          <p class="hint" data-i18n="config.athletes.search.hint">Mindestens 2 Zeichen eingeben.</p>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <script src="app.js" type="module"></script>
 </body>

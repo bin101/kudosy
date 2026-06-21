@@ -25,6 +25,7 @@ _DASHBOARD_URL = f"{_BASE}/dashboard"
 _FEED_URL = f"{_BASE}/dashboard/feed"
 _KUDO_URL = f"{_BASE}/feed/activity/{{activity_id}}/kudo"
 _ATHLETE_URL = f"{_BASE}/athletes/{{athlete_id}}"
+_ATHLETE_SEARCH_URL = f"{_BASE}/athletes/search"
 
 _CSRF_RE = re.compile(r'<meta\s+name="csrf-token"\s+content="([^"]+)"', re.IGNORECASE)
 
@@ -126,6 +127,40 @@ class StravaClient:
             log.error("Network error sending kudos to %s: %s", activity_id, exc)
             return False
 
+    async def search_athletes(self, query: str) -> list[dict[str, str]]:
+        """Search for athletes by name on Strava.
+
+        Uses the Strava search endpoint — the exact API shape is derived from
+        browser network traffic (see strava_client.py brittleness-firewall note).
+        Returns a list of dicts with at least ``id`` and ``name`` keys.
+        On any error or unexpected response shape, returns an empty list.
+
+        NOTE: The actual Strava search endpoint/response shape must be verified
+        via browser DevTools when deploying for the first time, as Strava may
+        change their undocumented API without notice.
+        """
+        client = self._get_client()
+        try:
+            resp = await client.get(
+                _ATHLETE_SEARCH_URL,
+                params={"text": query},
+                headers={
+                    **_BROWSER_HEADERS,
+                    "Accept": "application/json, text/javascript, */*; q=0.01",
+                    "X-Requested-With": "XMLHttpRequest",
+                },
+                timeout=8.0,
+            )
+            self._check_auth(resp)
+            if not resp.is_success:
+                log.warning("Athlete search returned %d for query %r", resp.status_code, query)
+                return []
+            data = resp.json()
+            return _parse_athlete_search_results(data)
+        except httpx.RequestError as exc:
+            log.warning("Athlete search network error: %s", exc)
+            return []
+
     async def lookup_athlete(self, athlete_id: str) -> str | None:
         """Scrape an athlete's display name from their profile page."""
         client = self._get_client()
@@ -152,3 +187,57 @@ class StravaClient:
             err = AuthError("Authentifizierung fehlgeschlagen (HTTP 401).")
             err.code = "AUTH_FAILED"
             raise err
+
+
+def _parse_athlete_search_results(data: object) -> list[dict[str, str]]:
+    """Parse the JSON response from Strava's athlete search endpoint.
+
+    Strava's search API (undocumented) typically returns either:
+      - A list of athlete objects, or
+      - An object with an ``athletes`` key holding the list.
+
+    Each athlete object may have:
+      - ``id`` / ``athlete_id`` — the numeric athlete ID (we normalise to string)
+      - ``name`` / ``display_name`` / ``firstname`` + ``lastname`` — display name
+      - ``profile_medium`` / ``avatar_url`` — avatar image URL (optional)
+
+    Returns normalised dicts: ``{"id": str, "name": str, "avatarUrl": str}``.
+    Unknown shapes yield an empty list — never raises.
+    """
+    try:
+        if isinstance(data, dict):
+            # Might be wrapped: {"athletes": [...]} or {"results": [...]}
+            athletes_raw = data.get("athletes") or data.get("results") or data.get("data") or []
+        elif isinstance(data, list):
+            athletes_raw = data
+        else:
+            return []
+
+        results: list[dict[str, str]] = []
+        for item in athletes_raw:
+            if not isinstance(item, dict):
+                continue
+            athlete_id = str(
+                item.get("id") or item.get("athlete_id") or item.get("athleteId") or ""
+            )
+            if not athlete_id:
+                continue
+            name = str(
+                item.get("name")
+                or item.get("display_name")
+                or item.get("displayName")
+                or (f"{item.get('firstname', '')} {item.get('lastname', '')}".strip())
+                or "Unknown"
+            )
+            avatar = str(
+                item.get("profile_medium")
+                or item.get("avatar_url")
+                or item.get("avatarUrl")
+                or item.get("profile")
+                or ""
+            )
+            results.append({"id": athlete_id, "name": name, "avatarUrl": avatar})
+        return results
+    except Exception:
+        log.warning("Unexpected athlete search response shape", exc_info=True)
+        return []

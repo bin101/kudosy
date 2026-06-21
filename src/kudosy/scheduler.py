@@ -12,6 +12,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from kudosy.humanizer import compute_jitter
 from kudosy.models import AppSettings
+from kudosy.quiet_hours import next_allowed_run
 
 log = logging.getLogger(__name__)
 
@@ -62,7 +63,22 @@ class KudosyScheduler:
             return
 
         interval_min = compute_jitter(settings.intervalMinutes, settings.jitterMinutes, self._rng)
-        run_at = datetime.now(UTC) + timedelta(minutes=interval_min)
+        candidate = datetime.now(UTC) + timedelta(minutes=interval_min)
+
+        # Shift to the next allowed slot if the quiet-hours matrix is active.
+        run_at = next_allowed_run(
+            candidate,
+            settings.kudosScheduleMatrix,
+            settings.timezone,
+            enabled=settings.kudosScheduleEnabled,
+            rng=self._rng,
+        )
+        if run_at is None:
+            log.warning(
+                "[scheduler] All time slots blocked — scheduler paused until settings change"
+            )
+            return
+
         self._next_run_at = run_at
 
         async def _guarded_job() -> None:

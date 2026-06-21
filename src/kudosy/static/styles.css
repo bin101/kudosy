@@ -631,6 +631,288 @@ select:focus {
 .btn-lookup:hover:not(:disabled) { background: var(--brand-light); border-color: var(--brand); }
 .btn-lookup:disabled { opacity: .5; cursor: not-allowed; }
 
+/* ── Athlete management list ─────────────────────────────────────────────── */
+
+.athlete-manage-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  list-style: none;
+  padding: 0;
+  margin-bottom: 8px;
+}
+
+.athlete-manage-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--white);
+}
+
+.athlete-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--brand-light);
+  color: var(--brand);
+  font-weight: 700;
+  font-size: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.athlete-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.athlete-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.athlete-info-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.athlete-info-id {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.athlete-switch {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.athlete-switch-btn {
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+  color: var(--text-muted);
+}
+
+.athlete-switch-allow.active {
+  background: var(--success-bg);
+  color: var(--success);
+}
+
+.athlete-switch-deny.active {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+
+/* ── Athlete search modal ────────────────────────────────────────────────── */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 16px;
+}
+
+.modal-overlay[hidden] {
+  display: none;
+}
+
+.modal-box {
+  background: var(--white);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  width: 100%;
+  max-width: 480px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.modal-header h3 {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.modal-close {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 18px;
+  color: var(--text-muted);
+  padding: 2px 6px;
+  border-radius: var(--radius);
+  line-height: 1;
+}
+
+.modal-close:hover { background: var(--bg); }
+
+.modal-body {
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.athlete-search-input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 14px;
+}
+
+.athlete-search-input:focus {
+  outline: none;
+  border-color: var(--brand);
+  box-shadow: 0 0 0 2px rgba(99,102,241,.2);
+}
+
+.athlete-search-results {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.athlete-search-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.athlete-search-item:hover { background: var(--brand-light); }
+
+.athlete-search-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.athlete-search-item-info strong {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.athlete-search-item-info small {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* ── Schedule matrix ─────────────────────────────────────────────────────── */
+
+.schedule-matrix-wrap {
+  overflow-x: auto;
+  margin-top: 8px;
+}
+
+.schedule-matrix {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: max-content;
+}
+
+.schedule-row {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+}
+
+.schedule-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.schedule-corner {
+  width: 36px;
+  height: 24px;
+}
+
+.schedule-hour-label {
+  width: 24px;
+  height: 24px;
+  font-size: 10px;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 4px;
+  user-select: none;
+}
+
+.schedule-hour-label:hover { background: var(--brand-light); color: var(--brand); }
+
+.schedule-day-label {
+  width: 36px;
+  height: 24px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 4px;
+  user-select: none;
+}
+
+.schedule-day-label:hover { background: var(--brand-light); color: var(--brand); }
+
+.schedule-slot {
+  width: 24px;
+  height: 24px;
+  border-radius: 3px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.1s, border-color 0.1s;
+}
+
+.schedule-slot.allowed {
+  background: var(--success-bg);
+  border-color: var(--success);
+}
+
+.schedule-slot:hover {
+  border-color: var(--brand);
+  opacity: 0.85;
+}
+
 /* ── Feed tab ─────────────────────────────────────────────────────────────── */
 
 .feed-list {
@@ -654,6 +936,13 @@ select:focus {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.feed-card:hover {
+  border-color: var(--brand);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
 .feed-card-header {
@@ -720,6 +1009,33 @@ select:focus {
 
 .feed-card-footer {
   margin-top: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.feed-kudo-btn {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 3px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--brand);
+  background: transparent;
+  color: var(--brand);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+  white-space: nowrap;
+}
+
+.feed-kudo-btn:hover:not(:disabled) {
+  background: var(--brand);
+  color: #fff;
+}
+
+.feed-kudo-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .feed-decision {
