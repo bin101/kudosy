@@ -13,12 +13,15 @@ import pytest
 from kudosy.models import AppSettings, Defaults, KudoRules, UserConfig
 from kudosy.store import (
     bootstrap,
+    cache_athlete_avatar,
     cache_athlete_label,
+    read_athlete_avatars,
     read_athlete_labels,
     read_defaults,
     read_log,
     read_settings,
     read_user_config,
+    write_athlete_avatars,
     write_athlete_labels,
     write_defaults,
     write_settings,
@@ -188,6 +191,30 @@ def test_cache_athlete_label_merges(data_dir: Path) -> None:
     assert loaded["99900002"] == "Sam Cyclist"
 
 
+# ── Athlete avatars ────────────────────────────────────────────────────────────
+
+
+def test_read_athlete_avatars_empty(data_dir: Path) -> None:
+    assert read_athlete_avatars() == {}
+
+
+def test_write_read_athlete_avatars(data_dir: Path) -> None:
+    avatars = {
+        "99900001": "https://example.com/a/1.jpg",
+        "99900002": "https://example.com/a/2.jpg",
+    }
+    write_athlete_avatars(avatars)
+    assert read_athlete_avatars() == avatars
+
+
+def test_cache_athlete_avatar_merges(data_dir: Path) -> None:
+    write_athlete_avatars({"99900001": "https://example.com/a/1.jpg"})
+    cache_athlete_avatar("99900002", "https://example.com/a/2.jpg")
+    loaded = read_athlete_avatars()
+    assert loaded["99900001"] == "https://example.com/a/1.jpg"
+    assert loaded["99900002"] == "https://example.com/a/2.jpg"
+
+
 # ── Log ───────────────────────────────────────────────────────────────────────
 
 
@@ -237,3 +264,35 @@ def test_bootstrap_does_not_overwrite_existing_labels(data_dir: Path) -> None:
     bootstrap()
     labels = read_athlete_labels()
     assert labels == {"123": "Existing Athlete"}
+
+
+def test_bootstrap_seeds_athlete_avatars(data_dir: Path) -> None:
+    """bootstrap() creates athlete-avatars.json as empty dict if missing."""
+    bootstrap()
+    assert (data_dir / "athlete-avatars.json").exists()
+    assert read_athlete_avatars() == {}
+
+
+def test_bootstrap_does_not_overwrite_existing_avatars(data_dir: Path) -> None:
+    """bootstrap() does not overwrite existing athlete-avatars.json."""
+    write_athlete_avatars({"123": "https://example.com/a/keep.jpg"})
+    bootstrap()
+    assert read_athlete_avatars() == {"123": "https://example.com/a/keep.jpg"}
+
+
+# ── Error path coverage ────────────────────────────────────────────────────────
+
+
+def test_read_athlete_labels_corrupt_json(data_dir: Path) -> None:
+    """Corrupt JSON in athlete-labels.json is handled gracefully (returns {})."""
+    (data_dir / "athlete-labels.json").write_text("{not valid json!!!", encoding="utf-8")
+    # _read_json catches the exception; read_athlete_labels must return {}
+    result = read_athlete_labels()
+    assert result == {}
+
+
+def test_read_athlete_avatars_corrupt_json(data_dir: Path) -> None:
+    """Corrupt JSON in athlete-avatars.json is handled gracefully (returns {})."""
+    (data_dir / "athlete-avatars.json").write_text("{not valid json!!!", encoding="utf-8")
+    result = read_athlete_avatars()
+    assert result == {}
