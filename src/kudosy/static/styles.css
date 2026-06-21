@@ -928,8 +928,95 @@ select:focus {
   font-style: italic;
 }
 
+.feed-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.feed-filter-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+}
+
+.feed-filter-btn {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 10px;
+  background: var(--white);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+  white-space: nowrap;
+}
+
+.feed-filter-btn:first-child {
+  border-radius: var(--radius) 0 0 var(--radius);
+}
+
+.feed-filter-btn:last-child {
+  border-radius: 0 var(--radius) var(--radius) 0;
+}
+
+.feed-filter-btn:not(:first-child) {
+  margin-left: -1px;
+}
+
+.feed-filter-btn.active,
+.feed-filter-btn:hover {
+  background: var(--brand-light);
+  color: var(--brand);
+  border-color: var(--brand);
+  z-index: 1;
+}
+
+.feed-filter-text {
+  appearance: none;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 13px;
+  padding: 4px 10px;
+  min-width: 180px;
+  flex: 1 1 180px;
+  max-width: 260px;
+}
+
+.feed-filter-text:focus {
+  outline: none;
+  border-color: var(--brand);
+}
+
+.feed-filter-sport {
+  appearance: none;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 4px 10px;
+}
+
+.feed-filter-sport:hover {
+  border-color: var(--brand);
+}
+
+.feed-filter-count {
+  font-size: 12px;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
 .feed-card {
   border: 1px solid var(--border);
+  border-left-width: 4px;
+  border-left-color: var(--border);
   border-radius: var(--radius);
   background: var(--white);
   padding: 12px 14px;
@@ -939,6 +1026,10 @@ select:focus {
   cursor: pointer;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
+
+.feed-state-eligible { border-left-color: var(--success); }
+.feed-state-kudoed   { border-left-color: var(--text-muted); }
+.feed-state-skipped  { border-left-color: var(--warn); }
 
 .feed-card:hover {
   border-color: var(--brand);
