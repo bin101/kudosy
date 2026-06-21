@@ -95,6 +95,8 @@ let sportTypes    = [];
 let athleteLabels = {};
 let athleteAvatars = {};
 let pollTimer     = null;
+let feedActivities = [];
+let feedFilter     = { status: 'all', text: '', sport: '' };
 
 // ── Language selector ─────────────────────────────────────────────────────────
 
@@ -113,7 +115,15 @@ function initLangSelect() {
       // Re-render dynamic areas after language change
       pollStatus();
       const activeFeedPane = document.querySelector('#tab-feed.active');
-      if (activeFeedPane) loadFeed();
+      if (activeFeedPane) {
+        // Update sport dropdown "all sports" label if already populated
+        const sportSel = $('feed-filter-sport');
+        if (sportSel && sportSel.options.length > 0) {
+          sportSel.options[0].textContent = t('feed.filter.allSports');
+        }
+        if (feedActivities.length) renderFeed();
+        else loadFeed();
+      }
     });
     // Keep select in sync (applyStaticTranslations won't touch it)
     sel.value = sel.value;
@@ -808,98 +818,52 @@ function stopPolling() {
 
 // ── Feed tab ──────────────────────────────────────────────────────────────────
 
+/** Derive a single canonical state from a feed activity. */
+function activityState(act) {
+  if (act.has_kudoed) return 'kudoed';
+  if (act.give_kudos) return 'eligible';
+  return 'skipped';
+}
+
+/** Return true if act passes the current feedFilter. */
+function matchesFilter(act) {
+  const { status, text, sport } = feedFilter;
+  if (status !== 'all' && activityState(act) !== status) return false;
+  if (sport && act.sport_type !== sport) return false;
+  if (text) {
+    const q       = text.toLowerCase();
+    const name    = (act.activity_name || '').toLowerCase();
+    const athlete = (act.athlete_name  || '').toLowerCase();
+    if (!name.includes(q) && !athlete.includes(q)) return false;
+  }
+  return true;
+}
+
 async function loadFeed() {
   const container = $('feed-list');
+  const filters   = $('feed-filters');
   if (!container) return;
   container.innerHTML = `<p class="hint">${t('feed.loading')}</p>`;
+  if (filters) filters.hidden = true;
   try {
-    const activities = await fetchJson('/api/feed');
-    if (!activities.length) {
-      container.innerHTML = `<p class="hint feed-empty">${t('feed.empty')}</p>`;
-      return;
-    }
-    container.innerHTML = '';
-    activities.forEach(act => {
-      const card = document.createElement('div');
-      card.className = 'feed-card';
-      card.title = t('feed.kudo.openActivity');
+    feedActivities = await fetchJson('/api/feed');
 
-      const reasonKey = `reason.${act.reason}`;
-      const reasonLabel = t(reasonKey) !== reasonKey ? t(reasonKey) : act.reason;
-      const decisionClass = act.give_kudos ? 'feed-decision-give' : 'feed-decision-skip';
-      const decisionText  = act.give_kudos
-        ? t('feed.decision.give')
-        : t('feed.decision.skip', { reason: reasonLabel });
-
-      const kudosBadge = act.has_kudoed
-        ? `<span class="feed-kudo-badge feed-kudo-done">${t('feed.kudo.done')}</span>`
-        : `<span class="feed-kudo-badge feed-kudo-pending">${t('feed.kudo.pending')}</span>`;
-
-      const statsParts = Object.entries(act.stats)
-        .map(([k, v]) => `<span class="feed-stat"><strong>${k}:</strong> ${v}</span>`)
-        .join('');
-      const statsHtml = statsParts ? `<div class="feed-stats">${statsParts}</div>` : '';
-      const sportLabel = act.sport_type ? formatSportLabel(act.sport_type) : '—';
-
-      // Kudos button — only shown when kudos haven't been given yet
-      const kudosBtnHtml = !act.has_kudoed
-        ? `<button class="feed-kudo-btn" data-activity-id="${act.activity_id}">${t('feed.kudo.give')}</button>`
-        : '';
-
-      card.innerHTML = `
-        <div class="feed-card-header">
-          <span class="feed-sport">${sportLabel}</span>
-          ${kudosBadge}
-        </div>
-        <div class="feed-card-body">
-          <div class="feed-activity-name">${act.activity_name || t('feed.noName')}</div>
-          <div class="feed-athlete-name">${act.athlete_name}</div>
-          ${statsHtml}
-        </div>
-        <div class="feed-card-footer">
-          <span class="feed-decision ${decisionClass}">${decisionText}</span>
-          ${kudosBtnHtml}
-        </div>
-      `;
-
-      // Open activity on Strava when clicking anywhere on the card
-      const activityUrl = `https://www.strava.com/activities/${act.activity_id}`;
-      card.addEventListener('click', (e) => {
-        // Don't navigate when the kudos button was clicked
-        if (e.target.closest('.feed-kudo-btn')) return;
-        window.open(activityUrl, '_blank', 'noopener,noreferrer');
+    // Populate sport-type dropdown with types present in this feed
+    const sportSel = $('feed-filter-sport');
+    if (sportSel) {
+      const sports = [...new Set(feedActivities.map(a => a.sport_type).filter(Boolean))].sort();
+      sportSel.innerHTML = `<option value="">${t('feed.filter.allSports')}</option>`;
+      sports.forEach(s => {
+        const opt = document.createElement('option');
+        opt.value = s;
+        opt.textContent = formatSportLabel(s);
+        if (s === feedFilter.sport) opt.selected = true;
+        sportSel.appendChild(opt);
       });
+    }
 
-      // Kudos button handler
-      const kudosBtn = card.querySelector('.feed-kudo-btn');
-      if (kudosBtn) {
-        kudosBtn.addEventListener('click', async (e) => {
-          e.stopPropagation();
-          kudosBtn.disabled = true;
-          kudosBtn.textContent = t('feed.kudo.giving');
-          try {
-            const res = await fetchJson(`/api/kudos/${act.activity_id}`, { method: 'POST' });
-            if (res.ok) {
-              // Update badge to "done" and remove button
-              const badge = card.querySelector('.feed-kudo-badge');
-              if (badge) {
-                badge.className = 'feed-kudo-badge feed-kudo-done';
-                badge.textContent = t('feed.kudo.done');
-              }
-              kudosBtn.remove();
-            } else {
-              kudosBtn.disabled = false;
-              kudosBtn.textContent = t('feed.kudo.give');
-            }
-          } catch {
-            kudosBtn.disabled = false;
-            kudosBtn.textContent = t('feed.kudo.give');
-          }
-        });
-      }
-
-      container.appendChild(card);
-    });
+    if (filters) filters.hidden = false;
+    renderFeed();
   } catch (err) {
     const is401 = err.message && (
       err.message.includes('AUTH_') ||
@@ -912,9 +876,163 @@ async function loadFeed() {
   }
 }
 
+function renderFeed() {
+  const container = $('feed-list');
+  if (!container) return;
+
+  const total    = feedActivities.length;
+  const filtered = feedActivities.filter(matchesFilter);
+
+  // Update count display
+  const countEl = $('feed-filter-count');
+  if (countEl) {
+    countEl.textContent = t('feed.filter.count', { n: filtered.length, total });
+  }
+
+  if (total === 0) {
+    container.innerHTML = `<p class="hint feed-empty">${t('feed.empty')}</p>`;
+    return;
+  }
+  if (filtered.length === 0) {
+    container.innerHTML = `<p class="hint feed-empty">${t('feed.filter.none')}</p>`;
+    return;
+  }
+
+  container.innerHTML = '';
+  filtered.forEach(act => {
+    const state = activityState(act);
+    const card  = document.createElement('div');
+    card.className = `feed-card feed-state-${state}`;
+    card.title = t('feed.kudo.openActivity');
+
+    const reasonKey   = `reason.${act.reason}`;
+    const reasonLabel = t(reasonKey) !== reasonKey ? t(reasonKey) : act.reason;
+    const decisionClass = act.give_kudos ? 'feed-decision-give' : 'feed-decision-skip';
+    const decisionText  = act.give_kudos
+      ? t('feed.decision.give')
+      : t('feed.decision.skip', { reason: reasonLabel });
+
+    const kudosBadge = act.has_kudoed
+      ? `<span class="feed-kudo-badge feed-kudo-done">${t('feed.kudo.done')}</span>`
+      : `<span class="feed-kudo-badge feed-kudo-pending">${t('feed.kudo.pending')}</span>`;
+
+    const statsParts = Object.entries(act.stats)
+      .map(([k, v]) => `<span class="feed-stat"><strong>${k}:</strong> ${v}</span>`)
+      .join('');
+    const statsHtml  = statsParts ? `<div class="feed-stats">${statsParts}</div>` : '';
+    const sportLabel = act.sport_type ? formatSportLabel(act.sport_type) : '—';
+
+    // Kudos button — only shown when kudos haven't been given yet
+    const kudosBtnHtml = !act.has_kudoed
+      ? `<button class="feed-kudo-btn" data-activity-id="${act.activity_id}">${t('feed.kudo.give')}</button>`
+      : '';
+
+    card.innerHTML = `
+      <div class="feed-card-header">
+        <span class="feed-sport">${sportLabel}</span>
+        ${kudosBadge}
+      </div>
+      <div class="feed-card-body">
+        <div class="feed-activity-name">${act.activity_name || t('feed.noName')}</div>
+        <div class="feed-athlete-name">${act.athlete_name}</div>
+        ${statsHtml}
+      </div>
+      <div class="feed-card-footer">
+        <span class="feed-decision ${decisionClass}">${decisionText}</span>
+        ${kudosBtnHtml}
+      </div>
+    `;
+
+    // Open activity on Strava when clicking anywhere on the card
+    const activityUrl = `https://www.strava.com/activities/${act.activity_id}`;
+    card.addEventListener('click', (e) => {
+      // Don't navigate when the kudos button was clicked
+      if (e.target.closest('.feed-kudo-btn')) return;
+      window.open(activityUrl, '_blank', 'noopener,noreferrer');
+    });
+
+    // Kudos button handler
+    const kudosBtn = card.querySelector('.feed-kudo-btn');
+    if (kudosBtn) {
+      kudosBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        kudosBtn.disabled = true;
+        kudosBtn.textContent = t('feed.kudo.giving');
+        try {
+          const res = await fetchJson(`/api/kudos/${act.activity_id}`, { method: 'POST' });
+          if (res.ok) {
+            // Keep in-memory activity in sync for future re-renders
+            act.has_kudoed = true;
+            act.give_kudos = false;
+            act.reason = 'already';
+
+            // Update card state class immediately
+            card.className = 'feed-card feed-state-kudoed';
+
+            // Update badge to "done" and remove button
+            const badge = card.querySelector('.feed-kudo-badge');
+            if (badge) {
+              badge.className = 'feed-kudo-badge feed-kudo-done';
+              badge.textContent = t('feed.kudo.done');
+            }
+
+            // Update decision label
+            const decisionEl = card.querySelector('.feed-decision');
+            if (decisionEl) {
+              decisionEl.className = 'feed-decision feed-decision-skip';
+              decisionEl.textContent = t('feed.decision.skip', { reason: t('reason.already') });
+            }
+
+            kudosBtn.remove();
+          } else {
+            kudosBtn.disabled = false;
+            kudosBtn.textContent = t('feed.kudo.give');
+          }
+        } catch {
+          kudosBtn.disabled = false;
+          kudosBtn.textContent = t('feed.kudo.give');
+        }
+      });
+    }
+
+    container.appendChild(card);
+  });
+}
+
 function initFeedTab() {
   const btn = $('btn-refresh-feed');
   if (btn) btn.addEventListener('click', loadFeed);
+
+  // Status filter buttons
+  const statusGroup = document.getElementById('feed-filter-status');
+  if (statusGroup) {
+    statusGroup.addEventListener('click', (e) => {
+      const target = e.target.closest('.feed-filter-btn');
+      if (!target) return;
+      statusGroup.querySelectorAll('.feed-filter-btn').forEach(b => b.classList.remove('active'));
+      target.classList.add('active');
+      feedFilter.status = target.dataset.status;
+      renderFeed();
+    });
+  }
+
+  // Live text search
+  const textInput = $('feed-filter-text');
+  if (textInput) {
+    textInput.addEventListener('input', () => {
+      feedFilter.text = textInput.value;
+      renderFeed();
+    });
+  }
+
+  // Sport type filter
+  const sportSel = $('feed-filter-sport');
+  if (sportSel) {
+    sportSel.addEventListener('change', () => {
+      feedFilter.sport = sportSel.value;
+      renderFeed();
+    });
+  }
 }
 
 // ── Run buttons ───────────────────────────────────────────────────────────────

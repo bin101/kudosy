@@ -300,6 +300,17 @@
           <button type="button" class="btn btn-outline btn-sm" id="btn-refresh-feed" data-i18n="feed.refresh">🔄 Aktualisieren</button>
         </div>
         <p class="hint" data-i18n="feed.hint">Aktivitäten aus deinem Strava-Feed — mit Kudo-Status und Regelentscheidung der Engine.</p>
+        <div id="feed-filters" class="feed-filters" hidden>
+          <div class="feed-filter-status" id="feed-filter-status" role="group">
+            <button type="button" class="feed-filter-btn active" data-status="all"      data-i18n="feed.filter.all">Alle</button>
+            <button type="button" class="feed-filter-btn"        data-status="eligible" data-i18n="feed.filter.eligible">👍 Würde geben</button>
+            <button type="button" class="feed-filter-btn"        data-status="kudoed"   data-i18n="feed.filter.kudoed">✅ Gelikt</button>
+            <button type="button" class="feed-filter-btn"        data-status="skipped"  data-i18n="feed.filter.skipped">– Übersprungen</button>
+          </div>
+          <input type="search" id="feed-filter-text" class="feed-filter-text" data-i18n-placeholder="feed.filter.search" placeholder="Suche Aktivität/Athlet…">
+          <select id="feed-filter-sport" class="feed-filter-sport"></select>
+          <span id="feed-filter-count" class="feed-filter-count hint"></span>
+        </div>
         <div id="feed-list" class="feed-list">
           <p class="hint feed-empty" data-i18n="feed.initial">Klicke auf „Aktualisieren" oder öffne diesen Tab, um den Feed zu laden.</p>
         </div>
