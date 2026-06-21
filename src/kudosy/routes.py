@@ -208,8 +208,8 @@ async def post_run(
     except Exception:
         pass
 
-    job_fn = state.get("job_fn")
-    if job_fn is None:
+    run_job_fn = state.get("run_job_fn")
+    if run_job_fn is None:
         raise HTTPException(
             status_code=503,
             detail={"code": "ENGINE_NOT_READY", "message": "Engine nicht bereit"},
@@ -219,11 +219,26 @@ async def post_run(
         from kudosy.app import get_app_state
 
         st = get_app_state()
-        # Store current dry_run override for this fire-and-forget call
+        sched = st.get("scheduler")
         run_job = st.get("run_job_fn")
-        if run_job:
-            result = await run_job(dry_run)
-            st["last_run"] = result
+        if run_job is None:
+            return
+
+        async def _job() -> None:
+            st["last_run"] = await run_job(dry_run)
+
+        try:
+            if sched is not None:
+                # Route the manual run through the scheduler so is_running is set
+                # for the full duration — this keeps /api/status accurate and lets
+                # the frontend spinner persist until the run actually finishes.
+                await sched.trigger_now(_job)
+            else:
+                await _job()
+        except RuntimeError:
+            # Race between the 409 pre-check and trigger_now's own guard —
+            # ignore silently; the caller already received {"started": true}.
+            log.warning("Manual run skipped — job already running")
 
     background_tasks.add_task(_run)
     return {"started": True, "dryRun": dry_run}

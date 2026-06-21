@@ -543,6 +543,49 @@ small, .hint {
 }
 .toast.fade-out { animation: fadeOut .25s ease forwards; }
 
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Spinner ─────────────────────────────────────────────────────────────────── */
+
+.spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid transparent;
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: spin .6s linear infinite;
+  flex-shrink: 0;
+}
+
+.spinner-lg {
+  width: 28px;
+  height: 28px;
+  border-width: 3px;
+  border-top-color: var(--brand);
+}
+
+/* Centered spinner placeholder (e.g. feed loading) */
+.feed-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 40px 0;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+/* Button loading state — content is swapped to a .spinner in JS */
+.btn.is-loading {
+  opacity: .7;
+  cursor: not-allowed;
+  pointer-events: none;
+  min-width: 36px;  /* prevent layout jump when text is replaced by spinner */
+}
+
 /* ── code ────────────────────────────────────────────────────────────────────── */
 code {
   background: #f3f4f6;
@@ -850,6 +893,11 @@ select:focus {
   min-width: max-content;
 }
 
+/* Prevent scroll-capture during drag-to-paint on touch */
+.schedule-matrix.painting {
+  touch-action: none;
+}
+
 .schedule-row {
   display: flex;
   gap: 2px;
@@ -901,6 +949,8 @@ select:focus {
   border: 1px solid var(--border);
   cursor: pointer;
   transition: background 0.1s, border-color 0.1s;
+  user-select: none;
+  touch-action: none;
 }
 
 .schedule-slot.allowed {

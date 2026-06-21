@@ -41,9 +41,16 @@ def app_client(data_dir: Path) -> TestClient:
     # Pre-seed app.state so routes that access it work (lifespan won't run)
     app.state.active_sport_types = ALL_SPORT_TYPES
 
+    async def _fake_trigger_now(job: object) -> None:
+        # Always called with a coroutine function — just await it.
+        await job()  # type: ignore[operator]
+
     fake_scheduler = MagicMock()
     fake_scheduler.is_running = False
     fake_scheduler.next_run_at = None
+    # trigger_now(job_fn) must actually await the job so that last_run is set
+    # and the route behaves like the real scheduler.
+    fake_scheduler.trigger_now = AsyncMock(side_effect=_fake_trigger_now)
 
     state = get_app_state()
     state.clear()
@@ -302,6 +309,23 @@ def test_post_run_409_when_already_running(app_client: TestClient) -> None:
 
     # Restore
     get_app_state()["scheduler"].is_running = False
+
+
+def test_post_run_routes_through_scheduler(app_client: TestClient) -> None:
+    """Manual run must go through scheduler.trigger_now() so is_running is set."""
+    from kudosy.app import get_app_state
+
+    state = get_app_state()
+    resp = app_client.post("/api/run", json={})
+    assert resp.status_code == 200
+    # The background task runs synchronously inside TestClient.
+    state["scheduler"].trigger_now.assert_awaited_once()
+
+
+def test_post_run_dry_run_from_body(app_client: TestClient) -> None:
+    resp = app_client.post("/api/run", json={"dryRun": True})
+    assert resp.status_code == 200
+    assert resp.json()["dryRun"] is True
 
 
 # ── /api/feed ─────────────────────────────────────────────────────────────────

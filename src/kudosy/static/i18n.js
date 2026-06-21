@@ -8,9 +8,7 @@ export const LANG_LABELS = { de: 'Deutsch', en: 'English', fr: 'Français', es: 
 const MESSAGES = {
   de: {
     'badge.loading': 'Lade…',
-    'btn.dryRun': 'Dry-Run',
     'btn.runNow': 'Jetzt ausführen',
-    'btn.dryRun.title': 'Dry-Run: zeigt welche Kudos gesendet würden, ohne sie wirklich zu senden',
     'tab.config': 'Konfiguration',
     'tab.settings': 'Automatik',
     'tab.feed': 'Feed',
@@ -149,6 +147,7 @@ const MESSAGES = {
     'toast.settings.saved': 'Einstellungen gespeichert ✓',
     'toast.config.loadError': 'Config nicht geladen: {msg}',
     'toast.settings.loadError': 'Einstellungen nicht geladen: {msg}',
+    'toast.dryRunHint': 'Dry-Run aktiv — es werden keine echten Kudos gesendet.',
     'error.EMPTY_COOKIE': 'Session-Cookie darf nicht leer sein.',
     'error.NO_COOKIE': 'Kein Session-Cookie konfiguriert.',
     'error.JOB_RUNNING': 'Ein Lauf läuft bereits — bitte warten.',
@@ -159,9 +158,7 @@ const MESSAGES = {
 
   en: {
     'badge.loading': 'Loading…',
-    'btn.dryRun': 'Dry Run',
     'btn.runNow': 'Run Now',
-    'btn.dryRun.title': 'Dry Run: shows which kudos would be sent without actually sending them',
     'tab.config': 'Configuration',
     'tab.settings': 'Automation',
     'tab.feed': 'Feed',
@@ -300,6 +297,7 @@ const MESSAGES = {
     'toast.settings.saved': 'Settings saved ✓',
     'toast.config.loadError': 'Config not loaded: {msg}',
     'toast.settings.loadError': 'Settings not loaded: {msg}',
+    'toast.dryRunHint': 'Dry Run active — no real kudos will be sent.',
     'error.EMPTY_COOKIE': 'Session cookie must not be empty.',
     'error.NO_COOKIE': 'No session cookie configured.',
     'error.JOB_RUNNING': 'A run is already in progress — please wait.',
@@ -310,9 +308,7 @@ const MESSAGES = {
 
   fr: {
     'badge.loading': 'Chargement…',
-    'btn.dryRun': 'Test à blanc',
     'btn.runNow': 'Exécuter',
-    'btn.dryRun.title': 'Test à blanc : affiche quels kudos seraient envoyés, sans les envoyer réellement',
     'tab.config': 'Configuration',
     'tab.settings': 'Automatisation',
     'tab.feed': 'Fil d\'actualité',
@@ -451,6 +447,7 @@ const MESSAGES = {
     'toast.settings.saved': 'Réglages enregistrés ✓',
     'toast.config.loadError': 'Config non chargée : {msg}',
     'toast.settings.loadError': 'Réglages non chargés : {msg}',
+    'toast.dryRunHint': 'Mode test actif — aucun vrai kudo ne sera envoyé.',
     'error.EMPTY_COOKIE': 'Le cookie de session ne doit pas être vide.',
     'error.NO_COOKIE': 'Aucun cookie de session configuré.',
     'error.JOB_RUNNING': 'Une exécution est déjà en cours — veuillez patienter.',
@@ -461,9 +458,7 @@ const MESSAGES = {
 
   es: {
     'badge.loading': 'Cargando…',
-    'btn.dryRun': 'Prueba',
     'btn.runNow': 'Ejecutar ahora',
-    'btn.dryRun.title': 'Prueba: muestra qué kudos se enviarían, sin enviarlos realmente',
     'tab.config': 'Configuración',
     'tab.settings': 'Automatización',
     'tab.feed': 'Feed',
@@ -602,6 +597,7 @@ const MESSAGES = {
     'toast.settings.saved': 'Ajustes guardados ✓',
     'toast.config.loadError': 'Config no cargada: {msg}',
     'toast.settings.loadError': 'Ajustes no cargados: {msg}',
+    'toast.dryRunHint': 'Prueba activa — no se enviarán kudos reales.',
     'error.EMPTY_COOKIE': 'El cookie de sesión no puede estar vacío.',
     'error.NO_COOKIE': 'No hay cookie de sesión configurada.',
     'error.JOB_RUNNING': 'Ya hay una ejecución en curso — por favor, espera.',
@@ -612,9 +608,7 @@ const MESSAGES = {
 
   it: {
     'badge.loading': 'Caricamento…',
-    'btn.dryRun': 'Prova',
     'btn.runNow': 'Esegui ora',
-    'btn.dryRun.title': 'Prova: mostra quali kudos verrebbero inviati, senza inviarli davvero',
     'tab.config': 'Configurazione',
     'tab.settings': 'Automazione',
     'tab.feed': 'Feed',
@@ -753,6 +747,7 @@ const MESSAGES = {
     'toast.settings.saved': 'Impostazioni salvate ✓',
     'toast.config.loadError': 'Config non caricata: {msg}',
     'toast.settings.loadError': 'Impostazioni non caricate: {msg}',
+    'toast.dryRunHint': 'Prova attiva — non verrà inviato alcun kudo reale.',
     'error.EMPTY_COOKIE': 'Il cookie di sessione non può essere vuoto.',
     'error.NO_COOKIE': 'Nessun cookie di sessione configurato.',
     'error.JOB_RUNNING': 'Un\'esecuzione è già in corso — attendi.',

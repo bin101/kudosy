@@ -56,6 +56,21 @@ async function putJson(url, data) {
   });
 }
 
+function setButtonLoading(btn, loading) {
+  if (!btn) return;
+  if (loading) {
+    btn._savedHTML = btn.innerHTML;
+    btn.innerHTML = '<span class="spinner" aria-hidden="true"></span>';
+    btn.disabled = true;
+    btn.classList.add('is-loading');
+  } else {
+    if (btn._savedHTML !== undefined) btn.innerHTML = btn._savedHTML;
+    btn.disabled = false;
+    btn.classList.remove('is-loading');
+    delete btn._savedHTML;
+  }
+}
+
 function formatRelative(isoString) {
   if (!isoString) return '—';
   const d = new Date(isoString);
@@ -96,7 +111,17 @@ let athleteLabels = {};
 let athleteAvatars = {};
 let pollTimer     = null;
 let feedActivities = [];
+let feedLoaded     = false;   // true after the first successful feed fetch
 let feedFilter     = { status: 'all', text: '', sport: '' };
+
+// ── Run-button spinner state ───────────────────────────────────────────────────
+// The button whose spinner is currently active (null when idle).
+let runningButton      = null;
+// The lastRun.finished_at that was current when the user clicked Run/DryRun.
+// pollStatus() clears the spinner once a *newer* finished_at appears.
+let runStartStamp      = null;
+// Updated by pollStatus() every tick so startRun() can snapshot it.
+let currentLastRunStamp = null;
 
 // ── Language selector ─────────────────────────────────────────────────────────
 
@@ -141,7 +166,12 @@ function initTabs() {
       const pane = $(`tab-${btn.dataset.tab}`);
       if (pane) pane.classList.add('active');
       if (btn.dataset.tab === 'log') startPolling();
-      else if (btn.dataset.tab === 'feed') { stopPolling(); pollStatus(); loadFeed(); }
+      else if (btn.dataset.tab === 'feed') {
+        stopPolling(); pollStatus();
+        // Only fetch from Strava on first visit; use cached data on tab switches.
+        // The Refresh button is the explicit way to reload.
+        if (feedLoaded) renderFeed(); else loadFeed();
+      }
       else { stopPolling(); pollStatus(); }
     });
   });
@@ -561,21 +591,23 @@ function initConfigTab() {
 
 // ── Schedule matrix helpers ───────────────────────────────────────────────────
 
-/** Render the 7×24 schedule matrix into #schedule-matrix. */
+/** Render the 7×24 schedule matrix into #schedule-matrix with drag-to-paint support. */
 function renderScheduleMatrix(matrix) {
   const container = $('schedule-matrix');
   if (!container) return;
   container.innerHTML = '';
 
   const days = t('settings.schedule.days') || ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+  // Display order: 1, 2, …, 23, 0  (midnight at the end of the day, not the beginning)
+  const hours = Array.from({ length: 24 }, (_, i) => (i + 1) % 24);
 
-  // Header row: corner + hours 0–23
+  // Header row: corner + hours in display order
   const headerRow = document.createElement('div');
   headerRow.className = 'schedule-row schedule-header';
   const corner = document.createElement('div');
   corner.className = 'schedule-cell schedule-corner';
   headerRow.appendChild(corner);
-  for (let h = 0; h < 24; h++) {
+  for (const h of hours) {
     const cell = document.createElement('div');
     cell.className = 'schedule-cell schedule-hour-label';
     cell.textContent = h;
@@ -586,7 +618,7 @@ function renderScheduleMatrix(matrix) {
   }
   container.appendChild(headerRow);
 
-  // Day rows
+  // Day rows (cells have no per-element click handlers — painting is delegated)
   for (let d = 0; d < 7; d++) {
     const row = document.createElement('div');
     row.className = 'schedule-row';
@@ -599,19 +631,108 @@ function renderScheduleMatrix(matrix) {
     dayLabel.addEventListener('click', () => toggleScheduleRow(d));
     row.appendChild(dayLabel);
 
-    for (let h = 0; h < 24; h++) {
+    for (const h of hours) {
       const cell = document.createElement('div');
       const allowed = matrix[d]?.[h] !== false; // undefined → allowed
       cell.className = 'schedule-cell schedule-slot' + (allowed ? ' allowed' : '');
       cell.dataset.row = d;
       cell.dataset.col = h;
-      cell.addEventListener('click', () => {
-        cell.classList.toggle('allowed');
-      });
       row.appendChild(cell);
     }
     container.appendChild(row);
   }
+
+  // ── Rectangle-select drag (mouse + touch) ────────────────────────────────
+  // State is local to this render call; replaced on every re-render.
+  let painting       = false;
+  let paintValue     = false;   // the value we're painting (true = allow, false = block)
+  let paintStart     = null;    // { row, col } of the cell where the drag started
+  let dragSnapshot   = null;    // bool[7][24] — matrix state at the moment drag began
+
+  // O(1) cell lookup built during the render above
+  const cellMap = {};
+  container.querySelectorAll('.schedule-slot').forEach(c => {
+    cellMap[`${c.dataset.row},${c.dataset.col}`] = c;
+  });
+
+  function slotFromTarget(el) {
+    return el && el.classList && el.classList.contains('schedule-slot') ? el : null;
+  }
+
+  function snapshotNow() {
+    const snap = [];
+    for (let d = 0; d < 7; d++) {
+      const row = [];
+      for (let h = 0; h < 24; h++) {
+        row.push(cellMap[`${d},${h}`].classList.contains('allowed'));
+      }
+      snap.push(row);
+    }
+    return snap;
+  }
+
+  // Restore from snapshot, then paint all cells in the rectangle start→(endRow,endCol).
+  function applyRect(endRow, endCol) {
+    const r0 = Math.min(paintStart.row, endRow);
+    const r1 = Math.max(paintStart.row, endRow);
+    const c0 = Math.min(paintStart.col, endCol);
+    const c1 = Math.max(paintStart.col, endCol);
+    for (let d = 0; d < 7; d++) {
+      for (let h = 0; h < 24; h++) {
+        const inRect = d >= r0 && d <= r1 && h >= c0 && h <= c1;
+        cellMap[`${d},${h}`].classList.toggle('allowed', inRect ? paintValue : dragSnapshot[d][h]);
+      }
+    }
+  }
+
+  function startDrag(slot) {
+    const row = parseInt(slot.dataset.row, 10);
+    const col = parseInt(slot.dataset.col, 10);
+    dragSnapshot = snapshotNow();
+    paintValue   = !slot.classList.contains('allowed');
+    paintStart   = { row, col };
+    painting     = true;
+    container.classList.add('painting');
+    applyRect(row, col);
+  }
+
+  function moveDrag(slot) {
+    if (!painting || !slot) return;
+    applyRect(parseInt(slot.dataset.row, 10), parseInt(slot.dataset.col, 10));
+  }
+
+  function stopDrag() {
+    painting     = false;
+    paintStart   = null;
+    dragSnapshot = null;
+    container.classList.remove('painting');
+  }
+
+  // Mouse
+  container.addEventListener('mousedown', e => {
+    const slot = slotFromTarget(e.target);
+    if (!slot) return;
+    e.preventDefault();
+    startDrag(slot);
+  });
+  container.addEventListener('mouseover', e => moveDrag(slotFromTarget(e.target)));
+  document.addEventListener('mouseup', stopDrag);
+
+  // Touch
+  container.addEventListener('touchstart', e => {
+    const slot = slotFromTarget(e.target);
+    if (!slot) return;
+    e.preventDefault();
+    startDrag(slot);
+  }, { passive: false });
+  container.addEventListener('touchmove', e => {
+    if (!painting) return;
+    e.preventDefault();
+    const t = e.touches[0];
+    moveDrag(slotFromTarget(document.elementFromPoint(t.clientX, t.clientY)));
+  }, { passive: false });
+  container.addEventListener('touchend', stopDrag);
+  container.addEventListener('touchcancel', stopDrag);
 }
 
 function toggleScheduleRow(rowIdx) {
@@ -727,8 +848,27 @@ async function pollStatus() {
       badge.textContent = t('status.ready');
     }
 
-    $('btn-run').disabled     = s.running;
-    $('btn-dry-run').disabled = s.running;
+    // Keep the spinner visible until the run we triggered actually finishes.
+    // We compare finished_at rather than relying on s.running alone so that
+    // even very short runs (where the poller may miss the running:true window)
+    // are handled correctly.
+    const finishedStamp = s.lastRun?.finished_at ?? null;
+    if (runningButton) {
+      const completed = !s.running && finishedStamp && finishedStamp !== runStartStamp;
+      if (completed) {
+        setButtonLoading(runningButton, false);
+        runningButton = null;
+        runStartStamp = null;
+        $('btn-run').disabled = false;
+      } else {
+        // Run still in progress — keep spinner, keep button disabled.
+        $('btn-run').disabled = true;
+      }
+    } else {
+      // No locally-started run — mirror server state (e.g. a scheduled run).
+      $('btn-run').disabled = s.running;
+    }
+    currentLastRunStamp = finishedStamp;
 
     if (s.lastRun) {
       const lr = s.lastRun;
@@ -811,13 +951,24 @@ function matchesFilter(act) {
 }
 
 async function loadFeed() {
-  const container = $('feed-list');
-  const filters   = $('feed-filters');
+  const container   = $('feed-list');
+  const filters     = $('feed-filters');
+  const refreshBtn  = $('btn-refresh-feed');
   if (!container) return;
-  container.innerHTML = `<p class="hint">${t('feed.loading')}</p>`;
+
+  // Show spinner while loading
+  container.innerHTML = `
+    <div class="feed-loading">
+      <span class="spinner spinner-lg"></span>
+      <span>${t('feed.loading')}</span>
+    </div>`;
   if (filters) filters.hidden = true;
+
+  setButtonLoading(refreshBtn, true);
+
   try {
     feedActivities = await fetchJson('/api/feed');
+    feedLoaded = true;
 
     // Populate sport-type dropdown with types present in this feed
     const sportSel = $('feed-filter-sport');
@@ -836,6 +987,7 @@ async function loadFeed() {
     if (filters) filters.hidden = false;
     renderFeed();
   } catch (err) {
+    feedLoaded = false;
     const is401 = err.message && (
       err.message.includes('AUTH_') ||
       err.message.includes('401') ||
@@ -844,6 +996,8 @@ async function loadFeed() {
     container.innerHTML = is401
       ? `<p class="hint feed-error">${t('feed.auth.error')}</p>`
       : `<p class="hint feed-error">${t('feed.load.error', { msg: err.message })}</p>`;
+  } finally {
+    setButtonLoading(refreshBtn, false);
   }
 }
 
@@ -1008,27 +1162,44 @@ function initFeedTab() {
 
 // ── Run buttons ───────────────────────────────────────────────────────────────
 
-function initRunButtons() {
-  $('btn-run').addEventListener('click', async () => {
-    try {
-      await fetchJson('/api/run', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: '{}',
-      });
-      document.querySelector('.tab[data-tab="log"]').click();
-    } catch (err) {
-      toast(err.message, 'error');
-    }
-  });
+/**
+ * Fire a run request and hand off spinner ownership to pollStatus().
+ *
+ * The spinner is shown immediately and is NOT cleared in the finally-block —
+ * pollStatus() clears it once a new lastRun.finished_at appears (i.e. when
+ * the background run actually completes).  On error (e.g. 409 already running)
+ * the spinner is cleared right away since there is nothing to wait for.
+ */
+async function startRun(btn, url) {
+  if (runningButton) return;          // double-click guard
+  if ($('globalDryRun')?.checked) toast(t('toast.dryRunHint'), 'info');
+  runningButton  = btn;
+  runStartStamp  = currentLastRunStamp;
+  setButtonLoading(btn, true);
+  $('btn-run').disabled = true;
+  try {
+    await fetchJson(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    // Switch to the Log tab — this starts the 3-second poller which will
+    // eventually detect the new finished_at and clear the spinner.
+    document.querySelector('.tab[data-tab="log"]').click();
+  } catch (err) {
+    toast(err.message, 'error');
+    // No run was started — restore the button immediately.
+    setButtonLoading(btn, false);
+    runningButton = null;
+    $('btn-run').disabled = false;
+  }
+}
 
-  $('btn-dry-run').addEventListener('click', async () => {
-    try {
-      await fetch('/api/run?dryRun=1', { method: 'POST' });
-      document.querySelector('.tab[data-tab="log"]').click();
-    } catch (err) {
-      toast(err.message, 'error');
-    }
+function initRunButtons() {
+  const btnRun = $('btn-run');
+  btnRun.addEventListener('click', () => {
+    const url = $('globalDryRun')?.checked ? '/api/run?dryRun=1' : '/api/run';
+    startRun(btnRun, url);
   });
 }
 
