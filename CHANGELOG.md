@@ -5,6 +5,21 @@ All notable changes to Kudosy will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0](https://github.com/bin101/kudosy/compare/v0.3.2...v0.4.0) (2026-06-21)
+
+
+### Features
+
+* feed stats fix, clickable cards, quiet-hours matrix, kudos button & athlete list ([3fd1da1](https://github.com/bin101/kudosy/commit/3fd1da1b8321803cd0e33e315b8f44c634ecef77))
+* feed stats fix, clickable cards, quiet-hours matrix, kudos button & athlete list ([c3f3a5c](https://github.com/bin101/kudosy/commit/c3f3a5c3b6348823c7a0563eda41c26cc8ab9573))
+* persist and display athlete profile pictures in athlete management ([8f0f24b](https://github.com/bin101/kudosy/commit/8f0f24b507e03dd6094e2369623decb1ebcc9f8b))
+
+
+### Bug Fixes
+
+* reverse-engineer Strava athlete search from HAR capture ([12a03d0](https://github.com/bin101/kudosy/commit/12a03d0f96d71097b743d22f925d99a2875b8eb6))
+* reverse-engineer Strava athlete search from HAR capture ([c16b9bb](https://github.com/bin101/kudosy/commit/c16b9bb884b5bd8617ef702f2a63b8b473cc1027))
+
 ## [0.3.2](https://github.com/bin101/kudosy/compare/v0.3.1...v0.3.2) (2026-06-20)
 
 
