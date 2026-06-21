@@ -93,6 +93,7 @@ function formatSportLabel(type) {
 
 let sportTypes    = [];
 let athleteLabels = {};
+let athleteAvatars = {};
 let pollTimer     = null;
 
 // ── Language selector ─────────────────────────────────────────────────────────
@@ -239,17 +240,29 @@ function populateRulesTable(tbody, rules) {
  * @param {string} name       - display name (from cache or search)
  * @param {string} mode       - 'allow' | 'deny' (default 'deny')
  */
-function addAthleteManagedRow(listEl, id = '', name = '', mode = 'deny') {
+function addAthleteManagedRow(listEl, id = '', name = '', mode = 'deny', avatarUrl = '') {
   const li = document.createElement('li');
   li.className = 'athlete-manage-row';
   li.dataset.athleteId = id;
 
   const displayName = name || (id ? (athleteLabels[id] || id) : '');
+  const resolvedAvatar = avatarUrl || (id ? (athleteAvatars[id] || '') : '');
 
-  // Avatar placeholder (shown as initials circle when no avatarUrl)
   const avatar = document.createElement('span');
   avatar.className = 'athlete-avatar';
-  avatar.textContent = displayName ? displayName[0].toUpperCase() : '?';
+  if (resolvedAvatar) {
+    const img = document.createElement('img');
+    img.src = resolvedAvatar;
+    img.alt = displayName;
+    img.loading = 'lazy';
+    img.onerror = () => {
+      img.remove();
+      avatar.textContent = displayName ? displayName[0].toUpperCase() : '?';
+    };
+    avatar.appendChild(img);
+  } else {
+    avatar.textContent = displayName ? displayName[0].toUpperCase() : '?';
+  }
 
   const info = document.createElement('span');
   info.className = 'athlete-info';
@@ -387,7 +400,8 @@ async function performAthleteSearch(query) {
       item.appendChild(info);
       item.addEventListener('click', () => {
         athleteLabels[athlete.id] = athlete.name;
-        addAthleteManagedRow($('athlete-manage-list'), athlete.id, athlete.name, 'deny');
+        if (athlete.avatarUrl) athleteAvatars[athlete.id] = athlete.avatarUrl;
+        addAthleteManagedRow($('athlete-manage-list'), athlete.id, athlete.name, 'deny', athlete.avatarUrl || '');
         closeAthleteSearchModal();
       });
       results.appendChild(item);
@@ -445,11 +459,13 @@ function getListValues(listEl) {
 // ── Config tab ────────────────────────────────────────────────────────────────
 
 async function loadConfig() {
-  const [cfg, labels] = await Promise.all([
+  const [cfg, labels, avatars] = await Promise.all([
     fetchJson('/api/config'),
     fetchJson('/api/athlete-labels').catch(() => ({})),
+    fetchJson('/api/athlete-avatars').catch(() => ({})),
   ]);
   athleteLabels = labels;
+  athleteAvatars = avatars;
 
   $('cookieInput').value    = cfg.stravaSessionCookie || '';
   $('athleteIdInput').value = cfg.athleteId || '';
@@ -458,10 +474,10 @@ async function loadConfig() {
   const manageList = $('athlete-manage-list');
   manageList.innerHTML = '';
   for (const id of (cfg.ignoreAthletes || [])) {
-    addAthleteManagedRow(manageList, id, athleteLabels[id] || '', 'deny');
+    addAthleteManagedRow(manageList, id, athleteLabels[id] || '', 'deny', athleteAvatars[id] || '');
   }
   for (const id of (cfg.allowAthletes || [])) {
-    addAthleteManagedRow(manageList, id, athleteLabels[id] || '', 'allow');
+    addAthleteManagedRow(manageList, id, athleteLabels[id] || '', 'allow', athleteAvatars[id] || '');
   }
 
   populateRulesTable($('tbody-distance'), cfg.kudoRules?.minDistance);

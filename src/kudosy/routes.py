@@ -18,8 +18,10 @@ from kudosy.effective_config import build_effective_config
 from kudosy.feed import AuthError, StravaHtmlFeedParser
 from kudosy.models import RunResult, RunStatus
 from kudosy.store import (
+    cache_athlete_avatar,
     cache_athlete_label,
     mark_kudoed,
+    read_athlete_avatars,
     read_athlete_labels,
     read_defaults,
     read_log,
@@ -140,11 +142,15 @@ async def search_athletes_route(q: str = "") -> list[dict[str, Any]]:
     client = StravaClient(cfg.stravaSessionCookie)
     try:
         results = await client.search_athletes(q.strip())
-        # Cache any names we found so they appear in athlete-labels
+        # Cache names and avatars so they survive across page reloads
         labels = read_athlete_labels()
+        avatars = read_athlete_avatars()
         for item in results:
-            if item["id"] and item["name"] and item["id"] not in labels:
-                cache_athlete_label(item["id"], item["name"])
+            aid = item.get("id", "")
+            if aid and item.get("name") and aid not in labels:
+                cache_athlete_label(aid, item["name"])
+            if aid and item.get("avatarUrl") and aid not in avatars:
+                cache_athlete_avatar(aid, item["avatarUrl"])
         return results
     except AuthError as exc:
         code = getattr(exc, "code", "AUTH_FAILED")
@@ -184,6 +190,11 @@ async def get_athlete(athlete_id: str) -> dict[str, Any]:
 @router.get("/api/athlete-labels")
 async def get_athlete_labels() -> dict[str, str]:
     return read_athlete_labels()
+
+
+@router.get("/api/athlete-avatars")
+async def get_athlete_avatars() -> dict[str, str]:
+    return read_athlete_avatars()
 
 
 # ── Run ───────────────────────────────────────────────────────────────────────
