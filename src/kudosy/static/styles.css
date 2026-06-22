@@ -974,6 +974,48 @@ select:focus {
   opacity: 0.85;
 }
 
+/* ── Schedule matrix — portrait / transposed layout (≤768px, set by JS) ──── */
+
+/* Container: override min-width:max-content, fill card width */
+.schedule-matrix.transposed {
+  min-width: 0;
+  width: 100%;
+}
+
+/* Each row spans the full available width */
+.schedule-matrix.transposed .schedule-row {
+  width: 100%;
+}
+
+/* Corner (top-left) and hour labels (left column):
+   fixed 40px width, right-aligned text to hug the grid */
+.schedule-matrix.transposed .schedule-corner,
+.schedule-matrix.transposed .schedule-hour-label {
+  width: 40px;
+  height: 30px;
+  font-size: 10px;
+  flex-shrink: 0;
+  justify-content: flex-end;
+  padding-right: 4px;
+}
+
+/* Day labels (column headers): flex-expand equally; override fixed 36px width */
+.schedule-matrix.transposed .schedule-day-label {
+  flex: 1 1 0;
+  min-width: 0;
+  width: auto;
+  height: 30px;
+  font-size: 11px;
+}
+
+/* Slots: flex-expand equally, taller for better touch targets */
+.schedule-matrix.transposed .schedule-slot {
+  flex: 1 1 0;
+  min-width: 0;
+  width: auto;
+  height: 30px;
+}
+
 /* ── Feed tab ─────────────────────────────────────────────────────────────── */
 
 .feed-list {

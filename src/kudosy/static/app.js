@@ -591,7 +591,11 @@ function initConfigTab() {
 
 // ── Schedule matrix helpers ───────────────────────────────────────────────────
 
-/** Render the 7×24 schedule matrix into #schedule-matrix with drag-to-paint support. */
+/** Render the 7×24 schedule matrix into #schedule-matrix with drag-to-paint support.
+ *  On narrow screens (≤768px) the matrix is transposed: 7 days as columns, 24 hours
+ *  as rows — no horizontal scrolling, natural vertical scroll. All data-row/data-col
+ *  attributes remain unchanged (day=row, hour=col), so the paint engine and serialiser
+ *  work identically in both orientations. */
 function renderScheduleMatrix(matrix) {
   const container = $('schedule-matrix');
   if (!container) return;
@@ -601,45 +605,78 @@ function renderScheduleMatrix(matrix) {
   // Display order: 1, 2, …, 23, 0  (midnight at the end of the day, not the beginning)
   const hours = Array.from({ length: 24 }, (_, i) => (i + 1) % 24);
 
-  // Header row: corner + hours in display order
-  const headerRow = document.createElement('div');
-  headerRow.className = 'schedule-row schedule-header';
-  const corner = document.createElement('div');
-  corner.className = 'schedule-cell schedule-corner';
-  headerRow.appendChild(corner);
-  for (const h of hours) {
-    const cell = document.createElement('div');
-    cell.className = 'schedule-cell schedule-hour-label';
-    cell.textContent = h;
-    cell.dataset.col = h;
-    cell.title = `Toggle hour ${h} (all days)`;
-    cell.addEventListener('click', () => toggleScheduleColumn(h));
-    headerRow.appendChild(cell);
+  // Detect orientation; set class so CSS can style the two layouts independently.
+  const portrait = window.matchMedia('(max-width: 768px)').matches;
+  container.classList.toggle('transposed', portrait);
+
+  // ── Shared cell factories (data attributes are orientation-independent) ────
+  function makeCorner() {
+    const el = document.createElement('div');
+    el.className = 'schedule-cell schedule-corner';
+    return el;
   }
-  container.appendChild(headerRow);
 
-  // Day rows (cells have no per-element click handlers — painting is delegated)
-  for (let d = 0; d < 7; d++) {
-    const row = document.createElement('div');
-    row.className = 'schedule-row';
+  function makeHourLabel(h) {
+    const el = document.createElement('div');
+    el.className = 'schedule-cell schedule-hour-label';
+    // Portrait: zero-padded "01"…"23"/"00"; landscape: plain number
+    el.textContent = portrait ? String(h).padStart(2, '0') : h;
+    el.dataset.col = h;
+    el.title = `Toggle hour ${h} (all days)`;
+    el.addEventListener('click', () => toggleScheduleColumn(h));
+    return el;
+  }
 
-    const dayLabel = document.createElement('div');
-    dayLabel.className = 'schedule-cell schedule-day-label';
-    dayLabel.textContent = days[d] || d;
-    dayLabel.dataset.row = d;
-    dayLabel.title = `Toggle ${days[d] || d} (all hours)`;
-    dayLabel.addEventListener('click', () => toggleScheduleRow(d));
-    row.appendChild(dayLabel);
+  function makeDayLabel(d) {
+    const el = document.createElement('div');
+    el.className = 'schedule-cell schedule-day-label';
+    el.textContent = days[d] ?? d;
+    el.dataset.row = d;
+    el.title = `Toggle ${days[d] ?? d} (all hours)`;
+    el.addEventListener('click', () => toggleScheduleRow(d));
+    return el;
+  }
+
+  function makeSlot(d, h) {
+    const el = document.createElement('div');
+    const allowed = matrix[d]?.[h] !== false; // undefined → allowed
+    el.className = 'schedule-cell schedule-slot' + (allowed ? ' allowed' : '');
+    el.dataset.row = d;
+    el.dataset.col = h;
+    return el;
+  }
+
+  if (!portrait) {
+    // ── Landscape: hours across top, days down the left ──────────────────────
+    const headerRow = document.createElement('div');
+    headerRow.className = 'schedule-row schedule-header';
+    headerRow.appendChild(makeCorner());
+    for (const h of hours) headerRow.appendChild(makeHourLabel(h));
+    container.appendChild(headerRow);
+
+    for (let d = 0; d < 7; d++) {
+      const row = document.createElement('div');
+      row.className = 'schedule-row';
+      row.appendChild(makeDayLabel(d));
+      for (const h of hours) row.appendChild(makeSlot(d, h));
+      container.appendChild(row);
+    }
+  } else {
+    // ── Portrait: days across top, hours down the left ────────────────────────
+    // The paint engine reads data-row (day) and data-col (hour) — unchanged.
+    const headerRow = document.createElement('div');
+    headerRow.className = 'schedule-row schedule-header';
+    headerRow.appendChild(makeCorner());
+    for (let d = 0; d < 7; d++) headerRow.appendChild(makeDayLabel(d));
+    container.appendChild(headerRow);
 
     for (const h of hours) {
-      const cell = document.createElement('div');
-      const allowed = matrix[d]?.[h] !== false; // undefined → allowed
-      cell.className = 'schedule-cell schedule-slot' + (allowed ? ' allowed' : '');
-      cell.dataset.row = d;
-      cell.dataset.col = h;
-      row.appendChild(cell);
+      const row = document.createElement('div');
+      row.className = 'schedule-row';
+      row.appendChild(makeHourLabel(h));
+      for (let d = 0; d < 7; d++) row.appendChild(makeSlot(d, h));
+      container.appendChild(row);
     }
-    container.appendChild(row);
   }
 
   // ── Rectangle-select drag (mouse + touch) ────────────────────────────────
@@ -826,6 +863,13 @@ function initSettingsTab() {
     toggleIntervalVisibility(e.target.checked));
   $('kudosScheduleEnabled').addEventListener('change', e =>
     toggleScheduleMatrixEnabled(e.target.checked));
+
+  // Re-render matrix when crossing the portrait/landscape breakpoint.
+  // getScheduleMatrix() captures current DOM state so unsaved edits are preserved.
+  window.matchMedia('(max-width: 768px)').addEventListener('change', () => {
+    const mx = $('schedule-matrix');
+    if (mx && mx.children.length) renderScheduleMatrix(getScheduleMatrix());
+  });
 }
 
 // ── Status & log polling ──────────────────────────────────────────────────────
