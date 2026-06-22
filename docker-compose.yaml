@@ -1,8 +1,9 @@
 services:
   kudosy:
-    image: ghcr.io/bin101/kudosy:latest
-    # Or build locally: comment out `image` and uncomment `build`:
-    # build: .
+    # Use GHCR image:
+    #image: ghcr.io/bin101/kudosy:latest
+    # Or build locally:
+    build: .
     container_name: kudosy
     restart: unless-stopped
     ports:
