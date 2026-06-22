@@ -39,15 +39,21 @@ body {
   flex-direction: column;
 }
 
+/* ── Sticky wrapper (header + tabs) ─────────────────────────────────────────── */
+
+.sticky-top {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: var(--white);  /* covers gutters beside the 900px-wide tab bar */
+  box-shadow: var(--shadow);
+}
+
 /* ── Header ──────────────────────────────────────────────────────────────────── */
 
 header {
   background: var(--white);
   border-bottom: 1px solid var(--border);
-  position: sticky;
-  top: 0;
-  z-index: 100;
-  box-shadow: var(--shadow);
 }
 
 .header-inner {
@@ -974,7 +980,7 @@ select:focus {
   opacity: 0.85;
 }
 
-/* ── Schedule matrix — portrait / transposed layout (≤768px, set by JS) ──── */
+/* ── Schedule matrix — portrait / transposed layout (< 660px available, set by JS) ── */
 
 /* Container: override min-width:max-content, fill card width */
 .schedule-matrix.transposed {

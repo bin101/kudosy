@@ -605,8 +605,15 @@ function renderScheduleMatrix(matrix) {
   // Display order: 1, 2, …, 23, 0  (midnight at the end of the day, not the beginning)
   const hours = Array.from({ length: 24 }, (_, i) => (i + 1) % 24);
 
-  // Detect orientation; set class so CSS can style the two layouts independently.
-  const portrait = window.matchMedia('(max-width: 768px)').matches;
+  // Switch to portrait/transposed only when there isn't enough room for the horizontal
+  // layout. Measure the actual container width instead of using a fixed breakpoint so
+  // wider devices (e.g. iPad Mini at 768 px) stay in landscape.
+  // Minimum width: corner 36px + 24 slots×24px + 24 gaps×2px = 660px.
+  const LANDSCAPE_MIN_WIDTH = 36 + 24 * 24 + 24 * 2; // 660px
+  const wrap = $('schedule-matrix-wrap');
+  // offsetWidth is 0 when the tab is hidden — fall back to viewport minus card padding.
+  const availableWidth = (wrap && wrap.offsetWidth > 0) ? wrap.offsetWidth : window.innerWidth - 88;
+  const portrait = availableWidth < LANDSCAPE_MIN_WIDTH;
   container.classList.toggle('transposed', portrait);
 
   // ── Shared cell factories (data attributes are orientation-independent) ────
@@ -864,12 +871,15 @@ function initSettingsTab() {
   $('kudosScheduleEnabled').addEventListener('change', e =>
     toggleScheduleMatrixEnabled(e.target.checked));
 
-  // Re-render matrix when crossing the portrait/landscape breakpoint.
+  // Re-render matrix whenever the wrap changes size (viewport resize or tab becoming visible).
   // getScheduleMatrix() captures current DOM state so unsaved edits are preserved.
-  window.matchMedia('(max-width: 768px)').addEventListener('change', () => {
-    const mx = $('schedule-matrix');
-    if (mx && mx.children.length) renderScheduleMatrix(getScheduleMatrix());
-  });
+  const wrap = $('schedule-matrix-wrap');
+  if (wrap) {
+    new ResizeObserver(() => {
+      const mx = $('schedule-matrix');
+      if (mx && mx.children.length) renderScheduleMatrix(getScheduleMatrix());
+    }).observe(wrap);
+  }
 }
 
 // ── Status & log polling ──────────────────────────────────────────────────────
