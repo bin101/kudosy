@@ -135,7 +135,11 @@ header {
   max-width: 900px;
   margin: 0 auto;
   padding: 0 20px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
 }
+.tabs::-webkit-scrollbar { display: none; }
 
 .tab {
   padding: 12px 16px;
@@ -148,6 +152,8 @@ header {
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
   transition: color .15s, border-color .15s;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .tab:hover  { color: var(--text); }
 .tab.active { color: var(--brand); border-bottom-color: var(--brand); }
@@ -1200,7 +1206,7 @@ select:focus {
 
 .lang-select {
   appearance: none;
-  background: var(--surface);
+  background: var(--white);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   color: var(--text);
@@ -1210,5 +1216,43 @@ select:focus {
 }
 
 .lang-select:hover {
-  border-color: var(--primary);
+  border-color: var(--brand);
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────────────── */
+
+@media (max-width: 560px) {
+  /* Header — leicht verkleinern, damit die einzeilige Variante länger hält */
+  .header-inner { padding: 10px 14px; gap: 8px; }
+  .header-brand { gap: 8px; min-width: 0; }
+  .header-title { font-size: 16px; }
+  .header-actions { gap: 6px; min-width: 0; }
+
+  /* Tabs — enger, damit alle vier Labels auf ~375px meist ohne Scroll passen */
+  .tab { padding: 12px 10px; font-size: 13px; }
+}
+
+@media (max-width: 400px) {
+  /* Header — zweizeiliger Umbruch (Marke oben, Aktionen darunter) */
+  .header-inner { flex-wrap: wrap; justify-content: center; }
+  .header-brand { justify-content: center; }
+  .header-actions { justify-content: center; flex: 1 1 100%; }
+
+  /* Toast — fluid innerhalb 12px-Rand, kein Viewport-Überlauf */
+  #toast-container { right: 12px; left: 12px; }
+  .toast { max-width: none; }
+
+  /* Athleten-Verwaltungs-Zeile — Wrap + größere Touch-Targets für Switch-Buttons */
+  .athlete-manage-row { flex-wrap: wrap; }
+  .athlete-avatar { order: -2; }
+  .athlete-info { flex: 1 1 100%; order: -1; }
+  .athlete-switch-btn { padding: 6px 12px; }
+
+  /* Feed-Filter — Textfeld nimmt volle Breite, kein Mindest-Overflow */
+  .feed-filter-text { min-width: 0; flex-basis: 100%; max-width: none; }
+  .feed-filter-sport { flex: 1 1 auto; }
+  .feed-filter-count { margin-left: 0; }
+
+  /* Athleten-ID-Feld leicht schmaler */
+  .athlete-id { width: 90px; }
 }
