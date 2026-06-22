@@ -5,6 +5,23 @@ All notable changes to Kudosy will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0](https://github.com/bin101/kudosy/compare/v1.2.0...v1.3.0) (2026-06-22)
+
+
+### Features
+
+* transpose schedule matrix to portrait layout on narrow screens ([2df7a1b](https://github.com/bin101/kudosy/commit/2df7a1b2c153d4820caef55767e73cdd5c20640c))
+* transpose schedule matrix to portrait layout on narrow screens ([5e8748a](https://github.com/bin101/kudosy/commit/5e8748afcb56377f8f675d6cb1a56dd309137052))
+
+
+### Bug Fixes
+
+* prevent horizontal body scroll from schedule matrix and tabs ([1ca173b](https://github.com/bin101/kudosy/commit/1ca173b3706f4833b4f41ffe1136132e75a3104a))
+* responsive design for all UI elements ([9514134](https://github.com/bin101/kudosy/commit/951413481b0ae4d06a98220fcc54428fee85071b))
+* responsive design for all UI elements across phone breakpoints ([ec8d3b3](https://github.com/bin101/kudosy/commit/ec8d3b39a9e937f419b03698a1ceb8f235fea071))
+* use container width measurement for portrait matrix layout ([36310b0](https://github.com/bin101/kudosy/commit/36310b080992d19965752c674974aa6925cdc6bc))
+* use container width measurement for portrait schedule matrix ([cc00384](https://github.com/bin101/kudosy/commit/cc003844c9d69cdbe63839eccb517cbeffd1f058))
+
 ## [1.2.0](https://github.com/bin101/kudosy/compare/v1.1.0...v1.2.0) (2026-06-21)
 
 
