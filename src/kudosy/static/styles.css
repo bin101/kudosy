@@ -132,6 +132,7 @@ header {
   background: var(--white);
   border-bottom: 1px solid var(--border);
   display: flex;
+  width: 100%;
   max-width: 900px;
   margin: 0 auto;
   padding: 0 20px;
@@ -161,10 +162,12 @@ header {
 /* ── Main content ────────────────────────────────────────────────────────────── */
 
 .content {
+  width: 100%;
   max-width: 900px;
   margin: 0 auto;
   padding: 24px 20px 40px;
   flex: 1;
+  min-width: 0;
 }
 
 .tab-pane { display: none; }
@@ -889,7 +892,9 @@ select:focus {
 
 .schedule-matrix-wrap {
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
   margin-top: 8px;
+  min-width: 0;
 }
 
 .schedule-matrix {
