@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -11,7 +12,7 @@ if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
 
 import httpx
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from fastapi.staticfiles import StaticFiles
 
 from kudosy import __version__
@@ -160,11 +161,21 @@ def create_app() -> FastAPI:
         version=__version__,
         lifespan=lifespan,
     )
+
+    @app.middleware("http")
+    async def cache_control(
+        request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
+        response = await call_next(request)
+        if "v=" in request.url.query:
+            response.headers["Cache-Control"] = "max-age=31536000, immutable"
+        return response
+
     app.include_router(router)
 
-    # Serve frontend static files
+    # Serve frontend static files; index.html is handled by GET / in routes.py
     static_dir = Path(__file__).parent / "static"
     if static_dir.exists():
-        app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
+        app.mount("/", StaticFiles(directory=static_dir, html=False), name="static")
 
     return app
