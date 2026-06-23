@@ -5,6 +5,13 @@ All notable changes to Kudosy will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0](https://github.com/bin101/kudosy/compare/v1.3.0...v1.4.0) (2026-06-23)
+
+
+### Features
+
+* show last-updated timestamp on feed page ([#22](https://github.com/bin101/kudosy/issues/22)) ([8c027d6](https://github.com/bin101/kudosy/commit/8c027d6b4791cd6d6ee50d4b9b739859ace10584))
+
 ## [1.3.0](https://github.com/bin101/kudosy/compare/v1.2.0...v1.3.0) (2026-06-22)
 
 
