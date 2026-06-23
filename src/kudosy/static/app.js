@@ -75,20 +75,21 @@ function formatRelative(isoString) {
   if (!isoString) return '—';
   const d = new Date(isoString);
   const diff = Date.now() - d.getTime();
+  const timeStr = d.toLocaleTimeString(localeFor(currentLang()), { hour: '2-digit', minute: '2-digit' });
   if (diff < 0) {
     const s = Math.round(-diff / 1000);
-    if (s < 60) return t('time.inSeconds', { n: s });
+    if (s < 60) return `${t('time.inSeconds', { n: s })} (${timeStr})`;
     const m = Math.round(s / 60);
-    if (m < 60) return t('time.inMinutes', { n: m });
-    return t('time.inHours', { n: Math.round(m / 60) });
+    if (m < 60) return `${t('time.inMinutes', { n: m })} (${timeStr})`;
+    return `${t('time.inHours', { n: Math.round(m / 60) })} (${timeStr})`;
   }
   const s = Math.round(diff / 1000);
-  if (s < 60) return t('time.agoSeconds', { n: s });
+  if (s < 60) return `${t('time.agoSeconds', { n: s })} (${timeStr})`;
   const m = Math.round(s / 60);
-  if (m < 60) return t('time.agoMinutes', { n: m });
+  if (m < 60) return `${t('time.agoMinutes', { n: m })} (${timeStr})`;
   const h = Math.round(m / 60);
-  if (h < 24) return t('time.agoHours', { n: h });
-  return d.toLocaleDateString(localeFor(currentLang()));
+  if (h < 24) return `${t('time.agoHours', { n: h })} (${timeStr})`;
+  return d.toLocaleString(localeFor(currentLang()), { dateStyle: 'short', timeStyle: 'short' });
 }
 
 function formatTime(isoString) {
