@@ -374,10 +374,12 @@ def test_get_feed_returns_activities_with_decision(app_client: TestClient, data_
 
     assert resp.status_code == 200
     data = resp.json()
-    assert isinstance(data, list)
-    assert len(data) == 1
+    assert isinstance(data, dict)
+    assert "activities" in data
+    assert "fetched_at" in data
+    assert len(data["activities"]) == 1
 
-    act = data[0]
+    act = data["activities"][0]
     assert act["activity_id"] == "55000000001"
     assert act["activity_name"] == "Test Run"
     assert act["sport_type"] == "Run"
@@ -428,7 +430,9 @@ def test_get_feed_empty_feed_returns_empty_list(app_client: TestClient, data_dir
         resp = app_client.get("/api/feed")
 
     assert resp.status_code == 200
-    assert resp.json() == []
+    body = resp.json()
+    assert body["activities"] == []
+    assert body["fetched_at"] is not None
 
 
 # ── /api/feed — activity cache ─────────────────────────────────────────────────
@@ -465,10 +469,12 @@ def test_get_feed_serves_from_cache_without_strava(app_client: TestClient, data_
     mock_instance.fetch_following_feed.assert_not_called()
 
     data = resp.json()
-    assert len(data) == 1
-    assert data[0]["activity_id"] == "55000000001"
-    assert "give_kudos" in data[0]
-    assert "reason" in data[0]
+    assert data["fetched_at"] == _CACHE_TS
+    acts = data["activities"]
+    assert len(acts) == 1
+    assert acts[0]["activity_id"] == "55000000001"
+    assert "give_kudos" in acts[0]
+    assert "reason" in acts[0]
 
 
 def test_get_feed_refresh_true_fetches_from_strava_and_writes_cache(
@@ -509,8 +515,9 @@ def test_get_feed_refresh_true_fetches_from_strava_and_writes_cache(
     mock_instance.fetch_following_feed.assert_called_once()
 
     data = resp.json()
-    assert len(data) == 1
-    assert data[0]["activity_id"] == "55000000002"
+    assert data["fetched_at"] is not None
+    assert len(data["activities"]) == 1
+    assert data["activities"][0]["activity_id"] == "55000000002"
 
     # Cache must now contain the fresh activity
     cached_acts, fetched_at = store.read_activity_cache()
@@ -580,7 +587,7 @@ def test_get_feed_recomputes_decisions_on_config_change(
     with patch("kudosy.routes.StravaClient", mock_cls):
         resp1 = app_client.get("/api/feed")
     assert resp1.status_code == 200
-    assert resp1.json()[0]["give_kudos"] is True
+    assert resp1.json()["activities"][0]["give_kudos"] is True
 
     # Now ignore that athlete — decision should flip without any Strava call
     store.write_user_config_raw(
@@ -594,7 +601,7 @@ def test_get_feed_recomputes_decisions_on_config_change(
     with patch("kudosy.routes.StravaClient", mock_cls):
         resp2 = app_client.get("/api/feed")
     assert resp2.status_code == 200
-    act = resp2.json()[0]
+    act = resp2.json()["activities"][0]
     assert act["give_kudos"] is False
     assert act["reason"] == "ignore"
 

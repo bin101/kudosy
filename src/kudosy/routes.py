@@ -295,7 +295,7 @@ def _decorate_feed(raw_acts: list[dict[str, Any]], effective: Any) -> list[dict[
 
 
 @router.get("/api/feed")
-async def get_feed(request: Request) -> list[dict[str, Any]]:
+async def get_feed(request: Request) -> dict[str, Any]:
     """Return the Strava following feed annotated with engine decisions.
 
     By default serves from the persistent activity cache (populated by the
@@ -317,7 +317,7 @@ async def get_feed(request: Request) -> list[dict[str, Any]]:
         cached_acts, fetched_at = read_activity_cache()
         if fetched_at is not None:
             log.debug("Serving feed from activity cache (%d entries)", len(cached_acts))
-            return _decorate_feed(cached_acts, effective)
+            return {"fetched_at": fetched_at, "activities": _decorate_feed(cached_acts, effective)}
 
     # Live fetch (explicit refresh or empty cache / first boot).
     import datetime as _dt
@@ -327,8 +327,9 @@ async def get_feed(request: Request) -> list[dict[str, Any]]:
         raw_feed = await client.fetch_following_feed()
         activities = StravaHtmlFeedParser().parse(raw_feed)
         raw_acts = [a.model_dump() for a in activities]
-        write_activity_cache(raw_acts, _dt.datetime.now(_dt.UTC).isoformat())
-        return _decorate_feed(raw_acts, effective)
+        now_ts = _dt.datetime.now(_dt.UTC).isoformat()
+        write_activity_cache(raw_acts, now_ts)
+        return {"fetched_at": now_ts, "activities": _decorate_feed(raw_acts, effective)}
     except AuthError as exc:
         code = getattr(exc, "code", "AUTH_FAILED")
         raise HTTPException(status_code=401, detail={"code": code, "message": str(exc)}) from exc
