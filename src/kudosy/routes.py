@@ -6,11 +6,13 @@ frontend (app.js) works unchanged.
 
 from __future__ import annotations
 
+import json
 import logging
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, Response
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse
 
 from kudosy import __version__
 from kudosy.decision import decide
@@ -37,6 +39,26 @@ from kudosy.strava_client import StravaClient
 log = logging.getLogger(__name__)
 
 router = APIRouter()
+
+_STATIC_DIR = Path(__file__).parent / "static"
+
+
+# ── Frontend ──────────────────────────────────────────────────────────────────
+
+
+@router.get("/", response_class=HTMLResponse, include_in_schema=False)
+async def serve_index() -> HTMLResponse:
+    """Serve index.html with versioned asset URLs for cache busting."""
+    v = __version__
+    importmap = json.dumps({"imports": {"./i18n.js": f"./i18n.js?v={v}"}})
+    content = (_STATIC_DIR / "index.html").read_text()
+    content = content.replace('href="styles.css"', f'href="styles.css?v={v}"')
+    content = content.replace(
+        '<script src="app.js" type="module"></script>',
+        f'<script type="importmap">{importmap}</script>\n  '
+        f'<script src="app.js?v={v}" type="module"></script>',
+    )
+    return HTMLResponse(content=content, headers={"Cache-Control": "no-store"})
 
 
 # ── Config ────────────────────────────────────────────────────────────────────

@@ -80,6 +80,31 @@ def app_client(data_dir: Path) -> TestClient:
         yield client
 
 
+# ── GET / — cache-busted index.html ───────────────────────────────────────────
+
+
+def test_serve_index_injects_version(app_client: TestClient, data_dir: Path) -> None:
+    """GET / injects versioned asset URLs and sets Cache-Control: no-store."""
+    from kudosy import __version__
+
+    resp = app_client.get("/")
+    assert resp.status_code == 200
+    body = resp.text
+    assert f"app.js?v={__version__}" in body
+    assert f"styles.css?v={__version__}" in body
+    assert f'"./i18n.js?v={__version__}"' in body
+    assert resp.headers["cache-control"] == "no-store"
+
+
+def test_versioned_asset_gets_immutable_cache_header(
+    app_client: TestClient, data_dir: Path
+) -> None:
+    """Static assets requested with ?v=... get a long immutable cache header."""
+    resp = app_client.get("/app.js?v=test")
+    assert resp.status_code == 200
+    assert resp.headers["cache-control"] == "max-age=31536000, immutable"
+
+
 # ── /api/config ───────────────────────────────────────────────────────────────
 
 
