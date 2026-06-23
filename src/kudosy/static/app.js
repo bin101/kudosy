@@ -111,6 +111,7 @@ let athleteLabels = {};
 let athleteAvatars = {};
 let pollTimer     = null;
 let feedActivities = [];
+let feedFetchedAt  = null;
 let feedLoaded     = false;   // true after the first successful feed fetch
 let feedFilter     = { status: 'all', text: '', sport: '' };
 
@@ -1022,7 +1023,9 @@ async function loadFeed(refresh = false) {
 
   try {
     const feedUrl = refresh ? '/api/feed?refresh=true' : '/api/feed';
-    feedActivities = await fetchJson(feedUrl);
+    const feedData = await fetchJson(feedUrl);
+    feedActivities = feedData.activities;
+    feedFetchedAt  = feedData.fetched_at ?? null;
     feedLoaded = true;
 
     // Populate sport-type dropdown with types present in this feed
@@ -1056,9 +1059,17 @@ async function loadFeed(refresh = false) {
   }
 }
 
+function updateFeedTimestamp() {
+  const el = $('feed-fetched-at');
+  if (!el) return;
+  el.textContent = feedFetchedAt ? t('feed.fetchedAt', { time: formatRelative(feedFetchedAt) }) : '';
+}
+
 function renderFeed() {
   const container = $('feed-list');
   if (!container) return;
+
+  updateFeedTimestamp();
 
   const total    = feedActivities.length;
   const filtered = feedActivities.filter(matchesFilter);
