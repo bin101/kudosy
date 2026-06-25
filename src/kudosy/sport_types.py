@@ -88,6 +88,8 @@ SPORT_PARENTS: dict[str, list[str]] = {
     ],
     "Run": ["TrailRun", "VirtualRun"],
     "Rowing": ["VirtualRow"],
+    "NordicSki": ["RollerSki"],
+    "AlpineSki": ["BackcountrySki"],
 }
 
 _SWAGGER_URL = "https://developers.strava.com/swagger/sport_type.json"

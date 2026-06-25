@@ -108,6 +108,7 @@ function formatSportLabel(type) {
 // ── State ─────────────────────────────────────────────────────────────────────
 
 let sportTypes    = [];
+let sportParents  = {};
 let athleteLabels = {};
 let athleteAvatars = {};
 let pollTimer     = null;
@@ -192,12 +193,37 @@ function buildSportTypeSelect(selectedType = '') {
   sel.appendChild(blank);
 
   let found = !selectedType;
-  for (const type of sportTypes) {
+
+  function makeOpt(type, label) {
     const opt = document.createElement('option');
     opt.value = type;
-    opt.textContent = formatSportLabel(type);
+    opt.textContent = label;
     if (type === selectedType) { opt.selected = true; found = true; }
-    sel.appendChild(opt);
+    return opt;
+  }
+
+  const childSet = new Set(Object.values(sportParents).flat());
+  const parentOrder = Object.keys(sportParents).filter(p => sportTypes.includes(p));
+
+  for (const parent of parentOrder) {
+    const children = (sportParents[parent] || []).filter(c => sportTypes.includes(c));
+    const grp = document.createElement('optgroup');
+    grp.label = formatSportLabel(parent);
+    grp.appendChild(makeOpt(parent, `${formatSportLabel(parent)} (${t('config.rule.allSubtypes', { n: children.length })})`));
+    for (const child of children) {
+      grp.appendChild(makeOpt(child, `↳ ${formatSportLabel(child)}`));
+    }
+    sel.appendChild(grp);
+  }
+
+  const ungrouped = sportTypes.filter(s => !parentOrder.includes(s) && !childSet.has(s));
+  if (ungrouped.length > 0) {
+    const grp = document.createElement('optgroup');
+    grp.label = t('config.sportType.group.other');
+    for (const type of ungrouped) {
+      grp.appendChild(makeOpt(type, formatSportLabel(type)));
+    }
+    sel.appendChild(grp);
   }
 
   if (!found && selectedType) {
@@ -227,7 +253,27 @@ function addRuleRow(tbody, sportType = '', value = '') {
   const tr = document.createElement('tr');
 
   const tdType = document.createElement('td');
-  tdType.appendChild(buildSportTypeSelect(sportType));
+  const sel = buildSportTypeSelect(sportType);
+  tdType.appendChild(sel);
+
+  const badge = document.createElement('span');
+  badge.className = 'rule-inherit-badge';
+  badge.hidden = true;
+  tdType.appendChild(badge);
+
+  const updateBadge = () => {
+    const children = (sportParents[sel.value] || []).filter(c => sportTypes.includes(c));
+    if (children.length > 0) {
+      badge.textContent = t('config.rule.inherits', { n: children.length });
+      badge.hidden = false;
+      tr.classList.add('rule-row-parent');
+    } else {
+      badge.hidden = true;
+      tr.classList.remove('rule-row-parent');
+    }
+  };
+  sel.addEventListener('change', updateBadge);
+  updateBadge();
 
   const tdVal = document.createElement('td');
   const numInput = document.createElement('input');
@@ -1373,9 +1419,13 @@ function initRevealButtons() {
 
 async function init() {
   try {
-    sportTypes = await fetchJson('/api/sport-types');
+    [sportTypes, sportParents] = await Promise.all([
+      fetchJson('/api/sport-types'),
+      fetchJson('/api/sport-parents'),
+    ]);
   } catch {
     sportTypes = [];
+    sportParents = {};
   }
 
   // Apply static translations for the initial language

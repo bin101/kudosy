@@ -519,6 +519,20 @@ small, .hint {
   min-height: 80px;
 }
 
+/* ── Rule-row parent-type badge ──────────────────────────────────────────────── */
+
+.rule-inherit-badge {
+  display: inline-block;
+  margin-left: 8px;
+  font-size: 11px;
+  color: var(--brand);
+  background: var(--brand-light);
+  padding: 2px 8px;
+  border-radius: 10px;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
 /* Log line color coding */
 .log-line { white-space: pre-wrap; word-break: break-word; }
 .log-line.info    { color: #94a3b8; }

@@ -19,6 +19,7 @@ from kudosy.decision import decide
 from kudosy.effective_config import build_effective_config
 from kudosy.feed import AuthError, StravaHtmlFeedParser
 from kudosy.models import Activity, RunResult, RunStatus
+from kudosy.sport_types import SPORT_PARENTS
 from kudosy.store import (
     cache_athlete_avatar,
     cache_athlete_label,
@@ -121,6 +122,12 @@ async def put_settings(request: Request) -> dict[str, Any]:
 async def get_sport_types(request: Request) -> list[str]:
     state = request.app.state
     return state.active_sport_types  # type: ignore[no-any-return]
+
+
+@router.get("/api/sport-parents")
+async def get_sport_parents() -> dict[str, list[str]]:
+    """Return the sport-type parent → children inheritance map."""
+    return SPORT_PARENTS
 
 
 # ── Athlete lookup ────────────────────────────────────────────────────────────

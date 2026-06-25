@@ -217,6 +217,25 @@ def test_get_sport_types(app_client: TestClient) -> None:
     assert "Ride" in types
 
 
+# ── /api/sport-parents ────────────────────────────────────────────────────────
+
+
+def test_get_sport_parents(app_client: TestClient) -> None:
+    resp = app_client.get("/api/sport-parents")
+    assert resp.status_code == 200
+    parents = resp.json()
+    assert isinstance(parents, dict)
+    # Parent types exist
+    assert "Ride" in parents
+    assert "Run" in parents
+    assert "Rowing" in parents
+    # Children are lists
+    assert isinstance(parents["Ride"], list)
+    assert "VirtualRide" in parents["Ride"]
+    assert "TrailRun" in parents["Run"]
+    assert "VirtualRow" in parents["Rowing"]
+
+
 # ── /api/athlete-labels ───────────────────────────────────────────────────────
 
 

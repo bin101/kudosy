@@ -156,6 +156,9 @@ const MESSAGES = {
     'error.ENGINE_NOT_READY': 'Engine noch nicht bereit.',
     'error.AUTH_INVALID_COOKIE': 'Strava-Session-Cookie ist ungültig oder abgelaufen. Bitte neuen Cookie in der Konfiguration eintragen.',
     'error.AUTH_FAILED': 'Authentifizierung fehlgeschlagen.',
+    'config.sportType.group.other': 'Weitere Sportarten',
+    'config.rule.inherits': '↳ {n} Untertypen',
+    'config.rule.allSubtypes': 'alle {n}',
   },
 
   en: {
@@ -308,6 +311,9 @@ const MESSAGES = {
     'error.ENGINE_NOT_READY': 'Engine not ready yet.',
     'error.AUTH_INVALID_COOKIE': 'Strava session cookie is invalid or expired. Please enter a new cookie in the configuration.',
     'error.AUTH_FAILED': 'Authentication failed.',
+    'config.sportType.group.other': 'Other sports',
+    'config.rule.inherits': '↳ {n} subtypes',
+    'config.rule.allSubtypes': 'all {n}',
   },
 
   fr: {
@@ -460,6 +466,9 @@ const MESSAGES = {
     'error.ENGINE_NOT_READY': 'Le moteur n\'est pas encore prêt.',
     'error.AUTH_INVALID_COOKIE': 'Cookie de session Strava invalide ou expiré. Veuillez saisir un nouveau cookie dans la configuration.',
     'error.AUTH_FAILED': 'Échec de l\'authentification.',
+    'config.sportType.group.other': 'Autres sports',
+    'config.rule.inherits': '↳ {n} sous-types',
+    'config.rule.allSubtypes': 'tous {n}',
   },
 
   es: {
@@ -612,6 +621,9 @@ const MESSAGES = {
     'error.ENGINE_NOT_READY': 'El motor aún no está listo.',
     'error.AUTH_INVALID_COOKIE': 'El cookie de sesión de Strava es inválido o ha expirado. Por favor, introduce uno nuevo en la configuración.',
     'error.AUTH_FAILED': 'Error de autenticación.',
+    'config.sportType.group.other': 'Otros deportes',
+    'config.rule.inherits': '↳ {n} subtipos',
+    'config.rule.allSubtypes': 'todos {n}',
   },
 
   it: {
@@ -764,6 +776,9 @@ const MESSAGES = {
     'error.ENGINE_NOT_READY': 'Il motore non è ancora pronto.',
     'error.AUTH_INVALID_COOKIE': 'Il cookie di sessione Strava non è valido o è scaduto. Inserisci un nuovo cookie nella configurazione.',
     'error.AUTH_FAILED': 'Autenticazione fallita.',
+    'config.sportType.group.other': 'Altri sport',
+    'config.rule.inherits': '↳ {n} sottotipi',
+    'config.rule.allSubtypes': 'tutti {n}',
   },
 };
 
