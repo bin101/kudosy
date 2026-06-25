@@ -232,7 +232,7 @@ function buildSportTypeSelect(selectedType = '') {
     for (const parent of Object.keys(sportParents)) {
       if (!catMembers.includes(parent) || !sportTypes.includes(parent)) continue;
       const children = (sportParents[parent] || []).filter(c => sportTypes.includes(c));
-      grp.appendChild(makeOpt(parent, `${formatSportLabel(parent)} (${t('config.rule.allSubtypes', { n: children.length })})`));
+      grp.appendChild(makeOpt(parent, formatSportLabel(parent)));
       rendered.add(parent);
       for (const child of children) {
         grp.appendChild(makeOpt(child, `↳ ${formatSportLabel(child)}`));
