@@ -68,10 +68,10 @@ class TestIgnoreList:
         assert d.reason == DecisionReason.IGNORE
 
     def test_athlete_not_in_ignore_list(self) -> None:
-        eff = _eff(ignore=["999"])
-        act = _act(athlete_id="111", stats={"Distance": "30.10 km"})
+        eff = _eff(ignore=["999"], per_dist={"Ride": 5})
+        act = _act(athlete_id="111", sport_type="Ride", stats={"Distance": "30.10 km"})
         d = decide(act, eff)  # type: ignore[arg-type]
-        # Not ignored — should give kudos (no criteria set)
+        # Not ignored and has a valid rule → should give kudos
         assert d.give_kudos is True
 
     def test_ignore_takes_precedence_over_kudoed(self) -> None:
@@ -167,20 +167,93 @@ class TestNameMatch:
         assert d.give_kudos is True  # valid "^Race" still matches
 
 
-class TestDefaultGiveKudos:
-    def test_no_criteria_gives_kudos(self) -> None:
+class TestNoRuleGate:
+    """Auto-kudos require at least one rule (distance or time) for the sport type.
+    Manual kudos are always allowed (never go through decide()).
+    """
+
+    def test_no_rule_no_catchall_skips(self) -> None:
+        """No catchAll, no per-sport rule → NO_RULE, auto-kudos skipped."""
+        eff = _eff()  # catchAll=0, no per-sport rules
+        act = _act(sport_type="Ride")
+        d = decide(act, eff)  # type: ignore[arg-type]
+        assert d.give_kudos is False
+        assert d.reason == DecisionReason.NO_RULE
+
+    def test_no_rule_unknown_sport_skips(self) -> None:
+        """Unknown/unlisted sport type with no rule → NO_RULE."""
         eff = _eff()
-        act = _act()
+        act = _act(sport_type="FutureSport")
+        d = decide(act, eff)  # type: ignore[arg-type]
+        assert d.give_kudos is False
+        assert d.reason == DecisionReason.NO_RULE
+
+    def test_per_dist_rule_allows_auto_kudos(self) -> None:
+        """Explicit per-sport distance rule → auto-kudos permitted."""
+        eff = _eff(per_dist={"Ride": 5})
+        act = _act(sport_type="Ride", stats={"Distance": "30 km"})
         d = decide(act, eff)  # type: ignore[arg-type]
         assert d.give_kudos is True
         assert d.reason == DecisionReason.DEFAULT
 
-    def test_sport_with_no_rule_gives_kudos(self) -> None:
-        # Only Run has a rule; Padel has none → give kudos
+    def test_per_time_rule_allows_auto_kudos(self) -> None:
+        """Explicit per-sport time rule → auto-kudos permitted."""
+        eff = _eff(per_time={"Run": 30})
+        act = _act(sport_type="Run", stats={"Time": "1h 5m"})
+        d = decide(act, eff)  # type: ignore[arg-type]
+        assert d.give_kudos is True
+        assert d.reason == DecisionReason.DEFAULT
+
+    def test_catchall_dist_counts_as_rule(self) -> None:
+        """catchAll > 0 expands rules to all sports → all sports pass the gate."""
+        eff = _eff(catch_min_dist=10)
+        act = _act(sport_type="WeightTraining", stats={"Time": "49m"})
+        d = decide(act, eff)  # type: ignore[arg-type]
+        # catchAll gives WeightTraining a rule → gate passes; stats missing dist → no CRITERIA fail
+        assert d.give_kudos is True
+        assert d.reason == DecisionReason.DEFAULT
+
+    def test_catchall_time_counts_as_rule(self) -> None:
+        """catchAll minTime > 0 → sport passes the no-rule gate."""
+        eff = _eff(catch_min_time=45)
+        act = _act(sport_type="Yoga", stats={"Time": "1h 10m"})
+        d = decide(act, eff)  # type: ignore[arg-type]
+        assert d.give_kudos is True
+        assert d.reason == DecisionReason.DEFAULT
+
+    def test_allow_overrides_no_rule_gate(self) -> None:
+        """ALLOW branch fires before the no-rule gate → athlete always gets kudos."""
+        eff = _eff(allow=["111"])  # no rules at all
+        act = _act(athlete_id="111", sport_type="Padel")
+        d = decide(act, eff)  # type: ignore[arg-type]
+        assert d.give_kudos is True
+        assert d.reason == DecisionReason.ALLOW
+
+    def test_name_match_overrides_no_rule_gate(self) -> None:
+        """NAME_MATCH fires before no-rule gate → matching activity gets kudos."""
+        eff = _eff(names=["^Race"])  # no dist/time rules
+        act = _act(activity_name="Race Day", sport_type="Run")
+        d = decide(act, eff)  # type: ignore[arg-type]
+        assert d.give_kudos is True
+        assert d.reason == DecisionReason.NAME_MATCH
+
+    def test_other_sport_with_rule_does_not_affect_unlisted_sport(self) -> None:
+        """Only Run has a rule; Padel has none → NO_RULE for Padel."""
         eff = _eff(per_dist={"Run": 5})
         act = _act(sport_type="Padel")
         d = decide(act, eff)  # type: ignore[arg-type]
+        assert d.give_kudos is False
+        assert d.reason == DecisionReason.NO_RULE
+
+
+class TestDefaultGiveKudos:
+    def test_sport_with_rule_gives_kudos(self) -> None:
+        # Run has a rule → passes gate → DEFAULT give kudos
+        eff = _eff(per_dist={"Ride": 5})
+        act = _act(sport_type="Ride", stats={"Distance": "30 km"})
+        d = decide(act, eff)  # type: ignore[arg-type]
         assert d.give_kudos is True
+        assert d.reason == DecisionReason.DEFAULT
 
 
 class TestRealLogOracle:

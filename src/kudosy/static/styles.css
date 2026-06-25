@@ -519,6 +519,15 @@ small, .hint {
   min-height: 80px;
 }
 
+/* Log line color coding */
+.log-line { white-space: pre-wrap; word-break: break-word; }
+.log-line.info    { color: #94a3b8; }
+.log-line.header  { color: #e2e8f0; font-weight: 600; }
+.log-line.success { color: #4ade80; }
+.log-line.warn    { color: #fbbf24; }
+.log-line.error   { color: #f87171; }
+.log-line.muted   { color: #64748b; }
+
 /* ── Toast notifications ─────────────────────────────────────────────────────── */
 
 #toast-container {
@@ -1204,6 +1213,16 @@ select:focus {
 
 .feed-stat {
   font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* Two-time display: moving time bold/primary, total time muted in parens */
+.feed-time strong {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.feed-time-total {
   color: var(--text-muted);
 }
 

@@ -90,7 +90,7 @@ class StravaClient:
         log.debug("CSRF Token: %s…", token[:8])
         return token
 
-    async def fetch_following_feed(self, *, num_entries: int = 60) -> str:
+    async def fetch_following_feed(self, *, num_entries: int = 150) -> str:
         """Fetch the following activity feed as HTML.
 
         Fetches the Strava dashboard page which embeds activity feed data as

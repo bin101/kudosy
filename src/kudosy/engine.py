@@ -34,6 +34,7 @@ _SKIP_REASONS = {
     DecisionReason.IGNORE: "--- Athlete is in ignore list",
     DecisionReason.ALREADY: "--- Already kudoed this activity",
     DecisionReason.CRITERIA: "--- Activity stats do not meet criteria",
+    DecisionReason.NO_RULE: "--- Kein Regel für diesen Sporttyp (kein Auto-Kudos)",
 }
 
 

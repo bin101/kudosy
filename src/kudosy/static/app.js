@@ -373,10 +373,6 @@ function getAthleteLists(listEl) {
   return { allowAthletes, ignoreAthletes };
 }
 
-async function autoLookupMissingNames(listEl) {
-  // No-op for the new managed list (names come from search); kept for compatibility
-  // with btn-load-all-names which re-fetches all labels from Strava.
-}
 
 // ── Athlete search modal ──────────────────────────────────────────────────────
 
@@ -570,23 +566,6 @@ function initConfigTab() {
   $('btn-add-time').addEventListener('click', () => addRuleRow($('tbody-time')));
   $('btn-add-name').addEventListener('click', () =>
     addListItem($('activity-names-list'), '', t('config.activityNames.placeholder')));
-  // "Load all names" now just caches labels from the API; for managed list just refresh labels
-  $('btn-load-all-names')?.addEventListener('click', async () => {
-    try {
-      const labels = await fetchJson('/api/athlete-labels');
-      athleteLabels = { ...athleteLabels, ...labels };
-      // Refresh displayed names in the managed list
-      $('athlete-manage-list').querySelectorAll('.athlete-manage-row').forEach(li => {
-        const id = li.dataset.athleteId;
-        if (id && labels[id]) {
-          const nameEl = li.querySelector('.athlete-info-name');
-          if (nameEl) nameEl.textContent = labels[id];
-        }
-      });
-    } catch {
-      toast(t('toast.config.loadError', { msg: '' }), 'error');
-    }
-  });
 }
 
 // ── Settings tab ──────────────────────────────────────────────────────────────
@@ -959,12 +938,34 @@ async function pollStatus() {
   } catch { /* ignore polling errors */ }
 }
 
+/** Classify a log line into a CSS kind for color coding. */
+function logLineKind(line) {
+  if (line.includes('==='))     return 'header';
+  if (line.includes('✓'))       return 'success';
+  if (line.includes('+++'))     return 'success';
+  if (line.includes('✗'))       return 'error';
+  if (/ ERROR\s+/.test(line))   return 'error';
+  if (/ WARNING\s+/.test(line)) return 'warn';
+  if (/ DEBUG\s+/.test(line))   return 'muted';
+  if (/^---/.test(line.trimStart())) return 'muted';
+  if (line.includes('--- '))    return 'muted';
+  return 'info';
+}
+
 async function pollLog() {
   try {
     const text = await fetch('/api/log').then(r => r.text());
     const el   = $('log-output');
     const atBottom = el.scrollHeight - el.clientHeight <= el.scrollTop + 10;
-    el.textContent = text;
+    // Render each line as a safely-escaped div with a color class
+    const lines = text.split('\n');
+    el.innerHTML = '';
+    for (const line of lines) {
+      const div = document.createElement('div');
+      div.className = `log-line log-${logLineKind(line)}`;
+      div.textContent = line;
+      el.appendChild(div);
+    }
     if (atBottom) el.scrollTop = el.scrollHeight;
   } catch { /* ignore */ }
   await pollStatus();
@@ -1004,6 +1005,81 @@ function matchesFilter(act) {
     if (!name.includes(q) && !athlete.includes(q)) return false;
   }
   return true;
+}
+
+/**
+ * Parse a human-readable duration string into total seconds.
+ * Accepts formats like "1h 2m", "45m 10s", "1h", "30m", "5m 0s".
+ * Returns null if the string does not look like a duration (e.g. "30.10 km").
+ */
+function parseDurationSecs(str) {
+  if (!str) return null;
+  const s = str.trim();
+  // Match patterns: 1h 2m, 45m 10s, 1h, 30m, 5s
+  const re = /^(?:(\d+)h\s*)?(?:(\d+)m\s*)?(?:(\d+)s)?$/;
+  const m = re.exec(s);
+  if (!m || (!m[1] && !m[2] && !m[3])) return null;
+  const h = parseInt(m[1] || '0', 10);
+  const min = parseInt(m[2] || '0', 10);
+  const sec = parseInt(m[3] || '0', 10);
+  if (h === 0 && min === 0 && sec === 0) return null;
+  return h * 3600 + min * 60 + sec;
+}
+
+/**
+ * Build the stats HTML for a feed activity card.
+ * When exactly two time-like values are found, renders them as
+ * "<strong>shorter</strong> (longer)" with tooltips.
+ * All other stats (distance etc.) render generically.
+ */
+function buildStatsHtml(stats) {
+  const entries = Object.entries(stats);
+  // Classify each entry as a duration or not
+  const times = [];
+  const others = [];
+  for (const [k, v] of entries) {
+    const secs = parseDurationSecs(v);
+    if (secs !== null) {
+      times.push({ k, v, secs });
+    } else {
+      others.push({ k, v });
+    }
+  }
+
+  const parts = [];
+
+  // Render non-time stats generically
+  for (const { k, v } of others) {
+    const kSafe = k.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const vSafe = v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    parts.push(`<span class="feed-stat"><strong>${kSafe}:</strong> ${vSafe}</span>`);
+  }
+
+  if (times.length === 2) {
+    // Sort: shorter first (= moving time), longer second (= total time)
+    times.sort((a, b) => a.secs - b.secs);
+    const moving = times[0].v;
+    const total  = times[1].v;
+    const movingTitle = t('feed.stat.movingTime');
+    const totalTitle  = t('feed.stat.totalTime');
+    const movingSafe  = moving.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const totalSafe   = total.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    parts.push(
+      `<span class="feed-stat feed-time">` +
+      `<strong title="${movingTitle}">${movingSafe}</strong>` +
+      ` <span class="feed-time-total" title="${totalTitle}">(${totalSafe})</span>` +
+      `</span>`
+    );
+  } else {
+    // 0 or 1 time values — render generically
+    for (const { k, v } of times) {
+      const kSafe = k.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const vSafe = v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      parts.push(`<span class="feed-stat"><strong>${kSafe}:</strong> ${vSafe}</span>`);
+    }
+  }
+
+  return parts.length ? `<div class="feed-stats">${parts.join('')}</div>` : '';
 }
 
 async function loadFeed(refresh = false) {
@@ -1108,10 +1184,7 @@ function renderFeed() {
       ? `<span class="feed-kudo-badge feed-kudo-done">${t('feed.kudo.done')}</span>`
       : `<span class="feed-kudo-badge feed-kudo-pending">${t('feed.kudo.pending')}</span>`;
 
-    const statsParts = Object.entries(act.stats)
-      .map(([k, v]) => `<span class="feed-stat"><strong>${k}:</strong> ${v}</span>`)
-      .join('');
-    const statsHtml  = statsParts ? `<div class="feed-stats">${statsParts}</div>` : '';
+    const statsHtml = buildStatsHtml(act.stats);
     const sportLabel = act.sport_type ? formatSportLabel(act.sport_type) : '—';
 
     // Kudos button — only shown when kudos haven't been given yet

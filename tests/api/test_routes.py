@@ -602,7 +602,14 @@ def test_get_feed_recomputes_decisions_on_config_change(
 
     from kudosy import store
 
-    store.write_user_config_raw({"stravaSessionCookie": "valid-cookie", "athleteId": "20000001"})
+    store.write_user_config_raw(
+        {
+            "stravaSessionCookie": "valid-cookie",
+            "athleteId": "20000001",
+            # Need at least one rule so the NO_RULE gate allows auto-kudos
+            "catchAll": {"minDistance": 5, "minTime": 0},
+        }
+    )
     store.write_activity_cache([dict(_CACHED_ACTIVITY)], _CACHE_TS)
 
     mock_cls = MagicMock()
@@ -619,6 +626,7 @@ def test_get_feed_recomputes_decisions_on_config_change(
         {
             "stravaSessionCookie": "valid-cookie",
             "athleteId": "20000001",
+            "catchAll": {"minDistance": 5, "minTime": 0},
             "ignoreAthletes": ["300000001"],
         }
     )

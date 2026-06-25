@@ -6,7 +6,8 @@ Precedence (highest → lowest):
   3. Athlete in allowAthletes  → GIVE (ALLOW) — overrides distance/time criteria
   4. activity name matches a regex → GIVE (NAME_MATCH) — overrides thresholds
   5. Stats below minDistance or minTime for sport type → SKIP (CRITERIA)
-  6. Default → GIVE (DEFAULT)
+  6. No distance/time rule for sport type → SKIP (NO_RULE)
+  7. Default → GIVE (DEFAULT)
 
 Note on missing stats: If a rule (e.g. minDistance) exists for a sport type
 but the activity has no Distance stat, the rule is treated as not violated
@@ -97,5 +98,13 @@ def decide(activity: Activity, eff: EffectiveConfig) -> Decision:
     if _check_criteria(activity, eff):
         return Decision(give_kudos=_SKIP, reason=DecisionReason.CRITERIA)
 
-    # 6. Default → give kudos
+    # 6. No rule for this sport type → skip auto-kudos
+    #    (catchAll > 0 expands rules to all sports, so gate only fires when catchAll = 0
+    #     and no explicit or inherited rule exists for the sport)
+    sport = activity.sport_type
+    has_rule = sport in eff.kudoRules.minDistance or sport in eff.kudoRules.minTime
+    if not has_rule:
+        return Decision(give_kudos=_SKIP, reason=DecisionReason.NO_RULE)
+
+    # 7. Default → give kudos
     return Decision(give_kudos=_GIVE, reason=DecisionReason.DEFAULT)

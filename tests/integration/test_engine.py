@@ -13,9 +13,19 @@ from unittest.mock import AsyncMock
 import pytest
 
 from kudosy.engine import run_kudos
-from kudosy.models import Activity, AppSettings, KudoRules, RunResult, UserConfig
+from kudosy.models import Activity, AppSettings, CatchAll, KudoRules, RunResult, UserConfig
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+
+def _default_cfg(**kwargs: object) -> UserConfig:
+    """Return a UserConfig with a catchAll rule so the NO_RULE gate passes by default."""
+    return UserConfig(
+        stravaSessionCookie="dummy",
+        athleteId="11111",
+        catchAll=CatchAll(minDistance=1.0, minTime=0),
+        **kwargs,  # type: ignore[arg-type]
+    )
 
 
 def make_activity(
@@ -74,7 +84,7 @@ async def test_dry_run_returns_result() -> None:
     parser = FakeFeedParser(activities)
 
     result = await run_kudos(
-        user_cfg=None,
+        user_cfg=_default_cfg(),
         settings=AppSettings(),
         client=client,
         feed_parser=parser,
@@ -97,7 +107,7 @@ async def test_live_run_sends_kudos() -> None:
     parser = FakeFeedParser(activities)
 
     result = await run_kudos(
-        user_cfg=None,
+        user_cfg=_default_cfg(),
         settings=AppSettings(
             minKudosDelaySeconds=0.0,
             maxKudosDelaySeconds=0.0,
@@ -240,7 +250,7 @@ async def test_failed_kudos_not_counted() -> None:
     parser = FakeFeedParser(activities)
 
     result = await run_kudos(
-        user_cfg=None,
+        user_cfg=_default_cfg(),
         settings=AppSettings(
             minKudosDelaySeconds=0.0,
             maxKudosDelaySeconds=0.0,
@@ -302,7 +312,7 @@ async def test_multiple_activities_all_given() -> None:
     parser = FakeFeedParser(activities)
 
     result = await run_kudos(
-        user_cfg=None,
+        user_cfg=_default_cfg(),
         settings=AppSettings(
             minKudosDelaySeconds=0.0,
             maxKudosDelaySeconds=0.0,
