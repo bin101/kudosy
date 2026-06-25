@@ -17,9 +17,9 @@ from fastapi.responses import HTMLResponse, PlainTextResponse
 from kudosy import __version__
 from kudosy.decision import decide
 from kudosy.effective_config import build_effective_config
-from kudosy.feed import AuthError, StravaHtmlFeedParser
+from kudosy.feed import AuthError, StravaHtmlFeedParser, sanitize_stats
 from kudosy.models import Activity, RunResult, RunStatus
-from kudosy.sport_types import SPORT_PARENTS
+from kudosy.sport_types import SPORT_CATEGORIES, SPORT_PARENTS
 from kudosy.store import (
     cache_athlete_avatar,
     cache_athlete_label,
@@ -128,6 +128,12 @@ async def get_sport_types(request: Request) -> list[str]:
 async def get_sport_parents() -> dict[str, list[str]]:
     """Return the sport-type parent → children inheritance map."""
     return SPORT_PARENTS
+
+
+@router.get("/api/sport-categories")
+async def get_sport_categories() -> dict[str, list[str]]:
+    """Return Strava's five official sport categories with their member types."""
+    return SPORT_CATEGORIES
 
 
 # ── Athlete lookup ────────────────────────────────────────────────────────────
@@ -317,6 +323,7 @@ def _decorate_feed(raw_acts: list[dict[str, Any]], effective: Any) -> list[dict[
             continue
         decision = decide(act, effective)
         entry = act.model_dump()
+        entry["stats"] = sanitize_stats(entry["stats"])  # heal any cached HTML markup
         entry["give_kudos"] = decision.give_kudos
         entry["reason"] = str(decision.reason)
         out.append(entry)

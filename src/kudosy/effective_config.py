@@ -13,7 +13,7 @@ directly from the user config (no union needed — there is only one layer).
 from __future__ import annotations
 
 from kudosy.models import EffectiveConfig, KudoRules, UserConfig
-from kudosy.sport_types import ALL_SPORT_TYPES, SPORT_PARENTS
+from kudosy.sport_types import ALL_SPORT_TYPES, SPORT_CATEGORIES, SPORT_PARENTS, category_members
 
 
 def build_effective_config(
@@ -34,6 +34,21 @@ def build_effective_config(
         for sport in ALL_SPORT_TYPES:
             min_time[sport] = catch_all.minTime
 
+    # Step 1.2: inherit category rules to all members without their own explicit rule.
+    #   Priority: catchAll → category → parent-inheritance → per-sport (lowest→highest).
+    #   Only explicit user_rules entries trigger inheritance (not catchAll-expanded values).
+    for cat_key in SPORT_CATEGORIES:
+        c_dist = user_rules.minDistance.get(cat_key)
+        if c_dist and c_dist > 0:
+            for member in category_members(cat_key, ALL_SPORT_TYPES):
+                if member not in user_rules.minDistance:
+                    min_distance[member] = c_dist
+        c_time = user_rules.minTime.get(cat_key)
+        if c_time and c_time > 0:
+            for member in category_members(cat_key, ALL_SPORT_TYPES):
+                if member not in user_rules.minTime:
+                    min_time[member] = c_time
+
     # Step 1.5: inherit parent sport-type rules to children without their own explicit rule
     #   e.g. a "Ride" minDistance propagates to VirtualRide, GravelRide, etc.
     #   Only explicit user_rules entries trigger inheritance (not catchAll-expanded values).
@@ -49,13 +64,19 @@ def build_effective_config(
                 if child not in user_rules.minTime:
                     min_time[child] = p_time
 
-    # Step 2: overlay user per-sport rules (highest priority; > 0 sets, 0 removes)
+    # Step 2: overlay user per-sport rules (highest priority; > 0 sets, 0 removes).
+    #   Category keys (e.g. "CycleSports") are skipped — they are pseudo-entries
+    #   that drive inheritance only and must not appear in the final effective rules.
     for sport, val in user_rules.minDistance.items():
+        if sport in SPORT_CATEGORIES:
+            continue
         if val > 0:
             min_distance[sport] = val
         else:
             min_distance.pop(sport, None)
     for sport, val in user_rules.minTime.items():
+        if sport in SPORT_CATEGORIES:
+            continue
         if val > 0:
             min_time[sport] = val
         else:

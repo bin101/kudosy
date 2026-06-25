@@ -31,6 +31,17 @@ def _strip_html(s: str) -> str:
     return _HTML_TAG_RE.sub("", s).strip()
 
 
+def sanitize_stats(stats: dict[str, str]) -> dict[str, str]:
+    """Strip HTML tags from both keys and values of a stats dict.
+
+    Idempotent — already-clean strings pass through unchanged.  Applied
+    centrally in the feed route so that legacy cached entries containing
+    raw ``<abbr>`` markup are healed on every read without needing a
+    live Strava refresh.
+    """
+    return {_strip_html(k): _strip_html(v) for k, v in stats.items()}
+
+
 # ── Protocol ──────────────────────────────────────────────────────────────────
 
 
@@ -232,7 +243,7 @@ class StravaHtmlFeedParser:
                     ordered.append((key, value, str(item.get("subtitle") or "")))
             for key, value, inline_sub in ordered:
                 label = inline_sub or subtitle_map.get(key) or key
-                stats[label] = _strip_html(value)
+                stats[_strip_html(label)] = _strip_html(value)
 
         # Numeric fallback (covers both camelCase movingTime and snake_case moving_time)
         if "Distance" not in stats:

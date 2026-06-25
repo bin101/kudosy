@@ -136,6 +136,69 @@ class TestSportInheritance:
         assert cfg.kudoRules.minDistance["Ride"] == 5
 
 
+class TestCategoryInheritance:
+    """Category rules (e.g. CycleSports) propagate to all member sport types."""
+
+    def test_category_dist_propagates_to_members(self) -> None:
+        cfg = build_effective_config(_user(per_dist={"CycleSports": 20}))
+        assert cfg.kudoRules.minDistance.get("Ride") == 20
+        assert cfg.kudoRules.minDistance.get("GravelRide") == 20
+        assert cfg.kudoRules.minDistance.get("Handcycle") == 20
+
+    def test_category_time_propagates_to_members(self) -> None:
+        cfg = build_effective_config(_user(per_time={"FootSports": 30}))
+        assert cfg.kudoRules.minTime.get("Run") == 30
+        assert cfg.kudoRules.minTime.get("Hike") == 30
+        assert cfg.kudoRules.minTime.get("Walk") == 30
+
+    def test_category_key_absent_from_effective_rules(self) -> None:
+        """Category pseudo-keys must never appear in the final effective rules."""
+        cfg = build_effective_config(_user(per_dist={"CycleSports": 20}))
+        assert "CycleSports" not in cfg.kudoRules.minDistance
+
+    def test_explicit_per_sport_overrides_category(self) -> None:
+        """A per-sport rule wins over the category rule (highest priority).
+
+        GravelRide is a *child* of Ride (SPORT_PARENTS), so it inherits Ride's value
+        (5) via parent-inheritance — which supersedes the category value (20).
+        Handcycle is in CycleSports but NOT a Ride child, so it keeps the category value.
+        """
+        cfg = build_effective_config(_user(per_dist={"CycleSports": 20, "Ride": 5}))
+        assert cfg.kudoRules.minDistance["Ride"] == 5
+        assert cfg.kudoRules.minDistance["GravelRide"] == 5  # parent-inheritance wins over category
+        assert cfg.kudoRules.minDistance["Handcycle"] == 20  # category (not a Ride child)
+
+    def test_parent_inheritance_overrides_category(self) -> None:
+        """Parent-type inheritance (Step 1.5) wins over category rule (Step 1.2)."""
+        # CycleSports=20 → all cycle members get 20
+        # Ride=30 → Ride's children get 30 via parent inheritance
+        cfg = build_effective_config(_user(per_dist={"CycleSports": 20, "Ride": 30}))
+        assert cfg.kudoRules.minDistance.get("VirtualRide") == 30  # parent wins
+        assert cfg.kudoRules.minDistance.get("Handcycle") == 20  # category only (not a Ride child)
+
+    def test_explicit_member_in_user_rules_not_overridden_by_category(self) -> None:
+        """If a member has an explicit user rule, category does not touch it."""
+        cfg = build_effective_config(_user(per_dist={"CycleSports": 20, "GravelRide": 50}))
+        assert cfg.kudoRules.minDistance["GravelRide"] == 50
+
+    def test_category_with_zero_has_no_effect(self) -> None:
+        cfg = build_effective_config(_user(per_dist={"CycleSports": 0}))
+        assert "Ride" not in cfg.kudoRules.minDistance
+        assert "GravelRide" not in cfg.kudoRules.minDistance
+
+    def test_water_sports_category(self) -> None:
+        cfg = build_effective_config(_user(per_time={"WaterSports": 15}))
+        assert cfg.kudoRules.minTime.get("Swim") == 15
+        assert cfg.kudoRules.minTime.get("Rowing") == 15
+        assert cfg.kudoRules.minTime.get("VirtualRow") == 15
+
+    def test_category_overrides_catchall(self) -> None:
+        """Category (Step 1.2) overrides catchAll (Step 1) for its members."""
+        cfg = build_effective_config(_user(catch_min_dist=5, per_dist={"CycleSports": 20}))
+        assert cfg.kudoRules.minDistance["GravelRide"] == 20  # category overrides catchAll
+        assert cfg.kudoRules.minDistance["Run"] == 5  # catchAll still applies to non-cycle
+
+
 class TestActivityNames:
     def test_activity_names_from_user(self) -> None:
         cfg = build_effective_config(_user(names=["Morning.*", "^Lunch"]))

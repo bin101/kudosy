@@ -236,6 +236,63 @@ def test_get_sport_parents(app_client: TestClient) -> None:
     assert "VirtualRow" in parents["Rowing"]
 
 
+# ── /api/sport-categories ─────────────────────────────────────────────────────
+
+
+def test_get_sport_categories(app_client: TestClient) -> None:
+    resp = app_client.get("/api/sport-categories")
+    assert resp.status_code == 200
+    cats = resp.json()
+    assert isinstance(cats, dict)
+    # All five categories present
+    assert "FootSports" in cats
+    assert "CycleSports" in cats
+    assert "WaterSports" in cats
+    assert "WinterSports" in cats
+    assert "OtherSports" in cats
+    # Sample members
+    assert "Run" in cats["FootSports"]
+    assert "Ride" in cats["CycleSports"]
+    assert "Swim" in cats["WaterSports"]
+    assert "AlpineSki" in cats["WinterSports"]
+    assert "Yoga" in cats["OtherSports"]
+
+
+def test_feed_cache_heals_html_stats(app_client: TestClient, data_dir: Path) -> None:
+    """Stats with raw HTML in the activity cache are sanitized on read (no refresh needed)."""
+    import datetime as dt
+    from datetime import UTC
+
+    from kudosy import store
+
+    raw_acts = [
+        {
+            "athlete_name": "Test Athlete",
+            "athlete_id": "99990001",
+            "activity_id": "88880001",
+            "activity_name": "Morning Ride",
+            "sport_type": "Ride",
+            "has_kudoed": False,
+            "stats": {
+                "Distance": "78,32<abbr class='unit' title='Kilometer'> km</abbr>",
+                "Time": "2<abbr class='unit' title='Stunde'>h</abbr> 41<abbr class='unit' title='Minute'>min</abbr>",
+            },
+        }
+    ]
+    ts = dt.datetime.now(UTC).isoformat()
+    store.write_activity_cache(raw_acts, ts)
+
+    resp = app_client.get("/api/feed")
+    assert resp.status_code == 200
+    data = resp.json()
+    acts = data["activities"]
+    assert len(acts) == 1
+    stats = acts[0]["stats"]
+    assert stats["Distance"] == "78,32 km"
+    assert stats["Time"] == "2h 41min"
+    assert "<abbr" not in str(stats)
+
+
 # ── /api/athlete-labels ───────────────────────────────────────────────────────
 
 

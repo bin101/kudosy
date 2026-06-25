@@ -6,7 +6,7 @@ import html
 import json
 from pathlib import Path
 
-from kudosy.feed import StravaHtmlFeedParser
+from kudosy.feed import StravaHtmlFeedParser, sanitize_stats
 
 _FIXTURES = Path(__file__).parent.parent / "fixtures"
 
@@ -528,6 +528,65 @@ def test_react_props_stats_inline_subtitle() -> None:
     result = _parser().parse(_make_react_html(entries))
     assert len(result) == 1
     assert result[0].stats == {"Distance": "5.00 km", "Time": "28m 30s"}
+
+
+def test_sanitize_stats_strips_abbr_markup() -> None:
+    """sanitize_stats removes <abbr> tags from both keys and values."""
+    dirty = {
+        "Distance": "78,32<abbr class='unit' title='Kilometer'> km</abbr>",
+        "Time": "2<abbr class='unit' title='Stunde'>h</abbr> 41<abbr class='unit' title='Minute'>min</abbr>",
+        "<abbr>Label</abbr>": "plain value",
+    }
+    clean = sanitize_stats(dirty)
+    assert clean["Distance"] == "78,32 km"
+    assert clean["Time"] == "2h 41min"
+    assert "Label" in clean
+    assert "<abbr>" not in str(clean)
+
+
+def test_sanitize_stats_idempotent_on_clean_input() -> None:
+    """sanitize_stats does not alter already-clean stats."""
+    clean = {"Distance": "10.50 km", "Time": "1h 02m", "Avg HR": "164 bpm"}
+    assert sanitize_stats(clean) == clean
+
+
+def test_react_props_stats_abbr_markup_stripped() -> None:
+    """Real Strava feed: stat values with <abbr> markup are stripped during parsing.
+
+    Note: use double-quoted HTML attributes (class="unit") so that the test helper's
+    html.escape(quote=False) doesn't leave stray single quotes that would break the
+    data-react-props='...' regex.
+    """
+    entries = [
+        {
+            "entity": "Activity",
+            "activity": {
+                "id": 11000000099,
+                "activityName": "Abbr Ride",
+                "type": "Ride",
+                "athlete": {"athleteId": 300000099, "athleteName": "Abbr Rider"},
+                "kudosAndComments": {"hasKudoed": False},
+                "stats": [
+                    {
+                        "key": "stat_one",
+                        "value": '78,32<abbr class="unit" title="Kilometer"> km</abbr>',
+                    },
+                    {"key": "stat_one_subtitle", "value": "Distanz"},
+                    {
+                        "key": "stat_two",
+                        "value": '2<abbr class="unit" title="Stunde">h</abbr> 41<abbr class="unit" title="Minute">min</abbr>',
+                    },
+                    {"key": "stat_two_subtitle", "value": "Zeit"},
+                ],
+            },
+        }
+    ]
+    result = _parser().parse(_make_react_html(entries))
+    assert len(result) == 1
+    stats = result[0].stats
+    assert stats["Distanz"] == "78,32 km"
+    assert stats["Zeit"] == "2h 41min"
+    assert "<abbr" not in str(stats)
 
 
 def test_react_props_camel_case_moving_time() -> None:

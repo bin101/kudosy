@@ -107,8 +107,9 @@ function formatSportLabel(type) {
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
-let sportTypes    = [];
-let sportParents  = {};
+let sportTypes      = [];
+let sportParents    = {};
+let sportCategories = {};
 let athleteLabels = {};
 let athleteAvatars = {};
 let pollTimer     = null;
@@ -194,38 +195,62 @@ function buildSportTypeSelect(selectedType = '') {
 
   let found = !selectedType;
 
-  function makeOpt(type, label) {
+  function makeOpt(value, label) {
     const opt = document.createElement('option');
-    opt.value = type;
+    opt.value = value;
     opt.textContent = label;
-    if (type === selectedType) { opt.selected = true; found = true; }
+    if (value === selectedType) { opt.selected = true; found = true; }
     return opt;
   }
 
-  const childSet = new Set(Object.values(sportParents).flat());
-  const parentOrder = Object.keys(sportParents).filter(p => sportTypes.includes(p));
+  // Set of all sport types that belong to any category definition.
+  const categorizedSet = new Set(Object.values(sportCategories).flat());
 
-  for (const parent of parentOrder) {
-    const children = (sportParents[parent] || []).filter(c => sportTypes.includes(c));
+  for (const catKey of Object.keys(sportCategories)) {
+    // i18n key: "FootSports" → "config.sportType.category.footSports"
+    const i18nKey = 'config.sportType.category.' + catKey[0].toLowerCase() + catKey.slice(1);
+    const catLabel = t(i18nKey);
+
+    // Members of this category that are available in the current sport-type list.
+    const catMembers = (sportCategories[catKey] || []).filter(s => sportTypes.includes(s));
+    // Uncategorised sport types go into OtherSports as a catch-all.
+    const uncategorized = catKey === 'OtherSports'
+      ? sportTypes.filter(s => !categorizedSet.has(s))
+      : [];
+    const allMembers = [...catMembers, ...uncategorized];
+    if (allMembers.length === 0) continue;
+
     const grp = document.createElement('optgroup');
-    grp.label = formatSportLabel(parent);
-    grp.appendChild(makeOpt(parent, `${formatSportLabel(parent)} (${t('config.rule.allSubtypes', { n: children.length })})`));
-    for (const child of children) {
-      grp.appendChild(makeOpt(child, `↳ ${formatSportLabel(child)}`));
+    grp.label = catLabel;
+
+    // The category itself is selectable as a rule (inherits to all members).
+    grp.appendChild(makeOpt(catKey, `▸ ${catLabel} (${t('config.rule.allSubtypes', { n: allMembers.length })})`));
+
+    const rendered = new Set();
+
+    // Parents (and their children) that belong to this category — rendered first.
+    for (const parent of Object.keys(sportParents)) {
+      if (!catMembers.includes(parent) || !sportTypes.includes(parent)) continue;
+      const children = (sportParents[parent] || []).filter(c => sportTypes.includes(c));
+      grp.appendChild(makeOpt(parent, `${formatSportLabel(parent)} (${t('config.rule.allSubtypes', { n: children.length })})`));
+      rendered.add(parent);
+      for (const child of children) {
+        grp.appendChild(makeOpt(child, `↳ ${formatSportLabel(child)}`));
+        rendered.add(child);
+      }
     }
+
+    // Remaining category members (not a parent, not already rendered as a child).
+    for (const type of allMembers) {
+      if (!rendered.has(type)) {
+        grp.appendChild(makeOpt(type, formatSportLabel(type)));
+      }
+    }
+
     sel.appendChild(grp);
   }
 
-  const ungrouped = sportTypes.filter(s => !parentOrder.includes(s) && !childSet.has(s));
-  if (ungrouped.length > 0) {
-    const grp = document.createElement('optgroup');
-    grp.label = t('config.sportType.group.other');
-    for (const type of ungrouped) {
-      grp.appendChild(makeOpt(type, formatSportLabel(type)));
-    }
-    sel.appendChild(grp);
-  }
-
+  // Fallback for a selected value that wasn't found in any group (e.g. future type).
   if (!found && selectedType) {
     const opt = document.createElement('option');
     opt.value = selectedType;
@@ -262,14 +287,29 @@ function addRuleRow(tbody, sportType = '', value = '') {
   tdType.appendChild(badge);
 
   const updateBadge = () => {
-    const children = (sportParents[sel.value] || []).filter(c => sportTypes.includes(c));
-    if (children.length > 0) {
-      badge.textContent = t('config.rule.inherits', { n: children.length });
+    const val = sel.value;
+    if (sportCategories[val]) {
+      // Category rule: count all members in this category (incl. uncategorized extras)
+      const catMembers = (sportCategories[val] || []).filter(c => sportTypes.includes(c));
+      const allCategorized = new Set(Object.values(sportCategories).flat());
+      const uncategorized = val === 'OtherSports'
+        ? sportTypes.filter(s => !allCategorized.has(s))
+        : [];
+      const n = catMembers.length + uncategorized.length;
+      badge.textContent = t('config.rule.inherits', { n });
       badge.hidden = false;
       tr.classList.add('rule-row-parent');
     } else {
-      badge.hidden = true;
-      tr.classList.remove('rule-row-parent');
+      // Parent sport-type rule: count children
+      const children = (sportParents[val] || []).filter(c => sportTypes.includes(c));
+      if (children.length > 0) {
+        badge.textContent = t('config.rule.inherits', { n: children.length });
+        badge.hidden = false;
+        tr.classList.add('rule-row-parent');
+      } else {
+        badge.hidden = true;
+        tr.classList.remove('rule-row-parent');
+      }
     }
   };
   sel.addEventListener('change', updateBadge);
@@ -1419,13 +1459,15 @@ function initRevealButtons() {
 
 async function init() {
   try {
-    [sportTypes, sportParents] = await Promise.all([
+    [sportTypes, sportParents, sportCategories] = await Promise.all([
       fetchJson('/api/sport-types'),
       fetchJson('/api/sport-parents'),
+      fetchJson('/api/sport-categories'),
     ]);
   } catch {
     sportTypes = [];
     sportParents = {};
+    sportCategories = {};
   }
 
   // Apply static translations for the initial language

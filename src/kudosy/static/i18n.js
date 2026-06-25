@@ -159,6 +159,11 @@ const MESSAGES = {
     'config.sportType.group.other': 'Weitere Sportarten',
     'config.rule.inherits': '↳ {n} Untertypen',
     'config.rule.allSubtypes': 'alle {n}',
+    'config.sportType.category.footSports': 'Laufsport',
+    'config.sportType.category.cycleSports': 'Radsport',
+    'config.sportType.category.waterSports': 'Wassersport',
+    'config.sportType.category.winterSports': 'Wintersport',
+    'config.sportType.category.otherSports': 'Weitere Sportarten',
   },
 
   en: {
@@ -314,6 +319,11 @@ const MESSAGES = {
     'config.sportType.group.other': 'Other sports',
     'config.rule.inherits': '↳ {n} subtypes',
     'config.rule.allSubtypes': 'all {n}',
+    'config.sportType.category.footSports': 'Foot sports',
+    'config.sportType.category.cycleSports': 'Cycle sports',
+    'config.sportType.category.waterSports': 'Water sports',
+    'config.sportType.category.winterSports': 'Winter sports',
+    'config.sportType.category.otherSports': 'Other sports',
   },
 
   fr: {
@@ -469,6 +479,11 @@ const MESSAGES = {
     'config.sportType.group.other': 'Autres sports',
     'config.rule.inherits': '↳ {n} sous-types',
     'config.rule.allSubtypes': 'tous {n}',
+    'config.sportType.category.footSports': 'Sports de pied',
+    'config.sportType.category.cycleSports': 'Sports cyclistes',
+    'config.sportType.category.waterSports': 'Sports aquatiques',
+    'config.sportType.category.winterSports': "Sports d'hiver",
+    'config.sportType.category.otherSports': 'Autres sports',
   },
 
   es: {
@@ -624,6 +639,11 @@ const MESSAGES = {
     'config.sportType.group.other': 'Otros deportes',
     'config.rule.inherits': '↳ {n} subtipos',
     'config.rule.allSubtypes': 'todos {n}',
+    'config.sportType.category.footSports': 'Deportes de pie',
+    'config.sportType.category.cycleSports': 'Deportes de ciclismo',
+    'config.sportType.category.waterSports': 'Deportes acuáticos',
+    'config.sportType.category.winterSports': 'Deportes de invierno',
+    'config.sportType.category.otherSports': 'Otros deportes',
   },
 
   it: {
@@ -779,6 +799,11 @@ const MESSAGES = {
     'config.sportType.group.other': 'Altri sport',
     'config.rule.inherits': '↳ {n} sottotipi',
     'config.rule.allSubtypes': 'tutti {n}',
+    'config.sportType.category.footSports': 'Sport podistici',
+    'config.sportType.category.cycleSports': 'Sport ciclistici',
+    'config.sportType.category.waterSports': 'Sport acquatici',
+    'config.sportType.category.winterSports': 'Sport invernali',
+    'config.sportType.category.otherSports': 'Altri sport',
   },
 };
 
