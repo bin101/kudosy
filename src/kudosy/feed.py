@@ -18,6 +18,19 @@ from kudosy.models import Activity
 
 log = logging.getLogger(__name__)
 
+_HTML_TAG_RE = re.compile(r"<[^>]+>")
+
+
+def _strip_html(s: str) -> str:
+    """Strip HTML tags and collapse surrounding whitespace.
+
+    Strava delivers structured stat values with <abbr> markup for units
+    (e.g. '2<abbr title="Stunde">h</abbr> 41<abbr title="Minute">min</abbr>').
+    We strip the tags so downstream code always sees plain text like '2h 41min'.
+    """
+    return _HTML_TAG_RE.sub("", s).strip()
+
+
 # ── Protocol ──────────────────────────────────────────────────────────────────
 
 
@@ -219,7 +232,7 @@ class StravaHtmlFeedParser:
                     ordered.append((key, value, str(item.get("subtitle") or "")))
             for key, value, inline_sub in ordered:
                 label = inline_sub or subtitle_map.get(key) or key
-                stats[label] = value
+                stats[label] = _strip_html(value)
 
         # Numeric fallback (covers both camelCase movingTime and snake_case moving_time)
         if "Distance" not in stats:

@@ -1009,19 +1009,31 @@ function matchesFilter(act) {
 
 /**
  * Parse a human-readable duration string into total seconds.
- * Accepts formats like "1h 2m", "45m 10s", "1h", "30m", "5m 0s".
- * Returns null if the string does not look like a duration (e.g. "30.10 km").
+ * Handles "1h 2m", "2h 41min", "45m 10s", "1h", "30m 5s".
+ * Returns null for non-durations like "30.10 km" or "356 m" (elevation in meters).
+ *
+ * Ambiguity guard: lone "m" (without "h" before it or "s" after it) is treated
+ * as meters, NOT minutes, to avoid confusing elevation stats ("356 m") with time.
+ * Strava German locale uses "min" for minutes, making them unambiguous.
  */
 function parseDurationSecs(str) {
   if (!str) return null;
   const s = str.trim();
-  // Match patterns: 1h 2m, 45m 10s, 1h, 30m, 5s
-  const re = /^(?:(\d+)h\s*)?(?:(\d+)m\s*)?(?:(\d+)s)?$/;
-  const m = re.exec(s);
-  if (!m || (!m[1] && !m[2] && !m[3])) return null;
-  const h = parseInt(m[1] || '0', 10);
-  const min = parseInt(m[2] || '0', 10);
-  const sec = parseInt(m[3] || '0', 10);
+  // Require at least one unambiguous time marker:
+  //   "h"   — hours (e.g. "3h 7m", "2h 41min")
+  //   "min" — explicit minutes (Strava DE locale)
+  //   "m … s" — minutes+seconds together (unambiguous pair)
+  const hasHour  = /\d+\s*h\b/i.test(s);
+  const hasMin   = /\d+\s*min\b/i.test(s);
+  const hasMandS = /\d+\s*m\s+\d+\s*s\b/i.test(s);
+  if (!hasHour && !hasMin && !hasMandS) return null;
+
+  const hm  = /(\d+)\s*h/i.exec(s);
+  const mm  = /(\d+)\s*min?/i.exec(s);   // handles both "m" and "min"
+  const sm  = /(\d+)\s*s\b/i.exec(s);
+  const h   = hm  ? parseInt(hm[1],  10) : 0;
+  const min = mm  ? parseInt(mm[1],  10) : 0;
+  const sec = sm  ? parseInt(sm[1],  10) : 0;
   if (h === 0 && min === 0 && sec === 0) return null;
   return h * 3600 + min * 60 + sec;
 }
