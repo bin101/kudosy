@@ -132,7 +132,6 @@ PUT  /api/config                    — write user config (empty cookie → 400)
 GET  /api/settings                  — read scheduler/delay settings
 PUT  /api/settings                  — write settings + reschedule
 GET  /api/sport-types               — list of Strava sport types
-GET  /api/sport-parents             — parent→children inheritance map  {parent → [children]}
 GET  /api/sport-categories          — five Strava top-level categories  {catId → [sportTypes]}
 GET  /api/athletes/search?q=<name>  — search athletes by name (requires cookie)
 GET  /api/athletes/{id}             — lookup athlete name by ID (requires cookie)

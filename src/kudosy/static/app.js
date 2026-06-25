@@ -108,7 +108,6 @@ function formatSportLabel(type) {
 // ── State ─────────────────────────────────────────────────────────────────────
 
 let sportTypes      = [];
-let sportParents    = {};
 let sportCategories = {};
 let athleteLabels = {};
 let athleteAvatars = {};
@@ -226,25 +225,8 @@ function buildSportTypeSelect(selectedType = '') {
     // The category itself is selectable as a rule (inherits to all members).
     grp.appendChild(makeOpt(catKey, `▸ ${catLabel} (${t('config.rule.allSubtypes', { n: allMembers.length })})`));
 
-    const rendered = new Set();
-
-    // Parents (and their children) that belong to this category — rendered first.
-    for (const parent of Object.keys(sportParents)) {
-      if (!catMembers.includes(parent) || !sportTypes.includes(parent)) continue;
-      const children = (sportParents[parent] || []).filter(c => sportTypes.includes(c));
-      grp.appendChild(makeOpt(parent, formatSportLabel(parent)));
-      rendered.add(parent);
-      for (const child of children) {
-        grp.appendChild(makeOpt(child, `↳ ${formatSportLabel(child)}`));
-        rendered.add(child);
-      }
-    }
-
-    // Remaining category members (not a parent, not already rendered as a child).
     for (const type of allMembers) {
-      if (!rendered.has(type)) {
-        grp.appendChild(makeOpt(type, formatSportLabel(type)));
-      }
+      grp.appendChild(makeOpt(type, formatSportLabel(type)));
     }
 
     sel.appendChild(grp);
@@ -289,7 +271,6 @@ function addRuleRow(tbody, sportType = '', value = '') {
   const updateBadge = () => {
     const val = sel.value;
     if (sportCategories[val]) {
-      // Category rule: count all members in this category (incl. uncategorized extras)
       const catMembers = (sportCategories[val] || []).filter(c => sportTypes.includes(c));
       const allCategorized = new Set(Object.values(sportCategories).flat());
       const uncategorized = val === 'OtherSports'
@@ -300,16 +281,8 @@ function addRuleRow(tbody, sportType = '', value = '') {
       badge.hidden = false;
       tr.classList.add('rule-row-parent');
     } else {
-      // Parent sport-type rule: count children
-      const children = (sportParents[val] || []).filter(c => sportTypes.includes(c));
-      if (children.length > 0) {
-        badge.textContent = t('config.rule.inherits', { n: children.length });
-        badge.hidden = false;
-        tr.classList.add('rule-row-parent');
-      } else {
-        badge.hidden = true;
-        tr.classList.remove('rule-row-parent');
-      }
+      badge.hidden = true;
+      tr.classList.remove('rule-row-parent');
     }
   };
   sel.addEventListener('change', updateBadge);
@@ -1459,14 +1432,12 @@ function initRevealButtons() {
 
 async function init() {
   try {
-    [sportTypes, sportParents, sportCategories] = await Promise.all([
+    [sportTypes, sportCategories] = await Promise.all([
       fetchJson('/api/sport-types'),
-      fetchJson('/api/sport-parents'),
       fetchJson('/api/sport-categories'),
     ]);
   } catch {
     sportTypes = [];
-    sportParents = {};
     sportCategories = {};
   }
 

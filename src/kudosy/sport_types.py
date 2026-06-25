@@ -72,26 +72,6 @@ ALL_SPORT_TYPES: list[str] = [
     "Yoga",
 ]
 
-# Parent → child sport-type inheritance map.
-# When a user configures a rule for a parent (e.g. "Ride"), that rule is
-# automatically inherited by all children that don't have their own explicit rule.
-# Children can override with a more specific value, or set 0 to opt out entirely.
-SPORT_PARENTS: dict[str, list[str]] = {
-    "Ride": [
-        "VirtualRide",
-        "GravelRide",
-        "MountainBikeRide",
-        "EBikeRide",
-        "EMountainBikeRide",
-        "Velomobile",
-        "IndoorCycling",
-    ],
-    "Run": ["TrailRun", "VirtualRun"],
-    "Rowing": ["VirtualRow"],
-    "NordicSki": ["RollerSki"],
-    "AlpineSki": ["BackcountrySki"],
-}
-
 # Strava's five official top-level sport categories (source: support.strava.com).
 # Maps category ID → list of sport types in that category.
 #
