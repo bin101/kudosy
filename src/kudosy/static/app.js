@@ -1145,9 +1145,13 @@ function renderFeed() {
       ? `<span class="feed-kudo-badge feed-kudo-done">${t('feed.kudo.done')}</span>`
       : `<span class="feed-kudo-badge feed-kudo-pending">${t('feed.kudo.pending')}</span>`;
 
+    // When both "Time" (moving) and "Total Time" (elapsed) are present, label
+    // the shorter one as "Bewegungszeit". When only one time stat exists it
+    // is Strava's "Zeit" = elapsed/total time → always show as "Gesamtzeit".
+    const hasBothTimes = 'Time' in act.stats && 'Total Time' in act.stats;
     const statsParts = Object.entries(act.stats)
       .map(([k, v]) => {
-        const label = k === 'Time'       ? t('feed.stat.movingTime')
+        const label = k === 'Time'       ? (hasBothTimes ? t('feed.stat.movingTime') : t('feed.stat.totalTime'))
                     : k === 'Total Time' ? t('feed.stat.totalTime')
                     : k === 'Distance'   ? t('feed.stat.distance')
                     : k === 'Elevation'  ? t('feed.stat.elevation')
