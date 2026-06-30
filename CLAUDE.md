@@ -106,14 +106,15 @@ docker compose up --build   # builds image, starts on :8080
 
 | Module | Responsibility |
 |---|---|
-| `parsers.py` | Pure: `parse_distance`, `parse_duration`, `parse_athlete_name`, `decode_html_entities` |
+| `parsers.py` | Pure: `parse_athlete_name`, `decode_html_entities` |
+| `stat_parse.py` | Pure: `strip_unit_markup`, `parse_distance`, `parse_duration`, `parse_pace`, `parse_elevation`, `classify_stat` — all stat string→number conversions |
 | `sport_types.py` | `ALL_SPORT_TYPES` enum list, `fetch_sport_types`, `merge_sport_types` |
 | `humanizer.py` | Pure: `compute_jitter`, `compute_delay` — RNG injected for tests |
-| `models.py` | Pydantic v2: `UserConfig` (incl. `catchAll`), `AppSettings`, `Activity`, `Decision`, `RunResult` |
+| `models.py` | Pydantic v2: `StatValue`, `ActivityStats`, `Activity`, `UserConfig` (incl. `catchAll`), `AppSettings`, `Decision`, `RunResult` |
 | `effective_config.py` | Pure: `build_effective_config(user)` — two-layer merge (catchAll → user per-sport) |
-| `decision.py` | Pure: `decide(activity, effective_config) -> Decision` |
-| `feed.py` | `FeedParser` protocol + `StravaHtmlFeedParser` — all format assumptions here |
-| `strava_client.py` | httpx async: CSRF, feed fetch, kudo POST, athlete lookup, name search |
+| `decision.py` | Pure: `decide(activity, effective_config) -> Decision` — reads typed `ActivityStats` fields directly |
+| `feed.py` | `FeedParser` protocol + `StructuredFeedParser` — parses JSON XHR feed response into `list[Activity]` |
+| `strava_client.py` | httpx async: CSRF, JSON feed fetch (`/dashboard/feed` XHR), kudo POST, athlete lookup, name search, `fetch_current_athlete_id` |
 | `engine.py` | Orchestrator: run-kudos loop with delays, dry-run, RunResult |
 | `store.py` | `/data` file I/O — atomic YAML/JSON writes, bootstrap, one-time migration of legacy `defaults.yaml`; athlete-labels.json + athlete-avatars.json |
 | `scheduler.py` | APScheduler wrapper with jitter, reschedule, in-flight guard |
@@ -144,9 +145,10 @@ GET  /api/log                       — last-run.log as text/plain
 ```
 
 **Brittleness note:** `GET /api/athletes/search` and `GET /api/feed` depend on Strava's
-undocumented web session endpoints. The HTML parsing is isolated in `feed.py` and
-`strava_client.py` (`_extract_search_results`). If Strava changes their page structure,
-only these modules need updating.
+undocumented web session endpoints. The JSON feed format (`GET /dashboard/feed?feed_type=following&athlete_id=<id>`)
+is isolated in `feed.py` (`StructuredFeedParser`) and `strava_client.py`.
+`GET /api/athletes/search` HTML parsing is isolated in `strava_client.py` (`_extract_search_results`).
+If Strava changes their response format, only these two modules need updating.
 
 ## Security Notes
 

@@ -21,7 +21,6 @@ import logging
 import re
 
 from kudosy.models import Activity, Decision, DecisionReason, EffectiveConfig
-from kudosy.parsers import parse_distance, parse_duration
 
 log = logging.getLogger(__name__)
 
@@ -45,27 +44,30 @@ def _check_criteria(activity: Activity, eff: EffectiveConfig) -> bool:
 
     'Fails' means: a rule exists AND the measured value is below the threshold.
     Missing stat → treat as not failing (return False = does not fail criteria).
+
+    Reads typed numeric values directly from ActivityStats — no string reparsing.
+    For time we prefer moving_time_s; elapsed_time_s is the fallback (always
+    present as a clean int from the feed's activity.elapsedTime field).
     """
     sport = activity.sport_type
     stats = activity.stats
 
     # --- minDistance check ---
     min_dist_km = eff.kudoRules.minDistance.get(sport)
-    if min_dist_km is not None and min_dist_km > 0:
-        dist_str = stats.get("Distance")
-        if dist_str is not None:
-            dist_m = parse_distance(dist_str)
-            if dist_m is not None and dist_m < min_dist_km * 1000:
-                return True  # fails criteria
+    if (
+        min_dist_km is not None
+        and min_dist_km > 0
+        and stats.distance_m is not None
+        and stats.distance_m < min_dist_km * 1000
+    ):
+        return True  # fails criteria
 
     # --- minTime check ---
     min_time_min = eff.kudoRules.minTime.get(sport)
     if min_time_min is not None and min_time_min > 0:
-        time_str = stats.get("Time")
-        if time_str is not None:
-            dur_s = parse_duration(time_str)
-            if dur_s is not None and dur_s < min_time_min * 60:
-                return True  # fails criteria
+        time_s = stats.moving_time_s if stats.moving_time_s is not None else stats.elapsed_time_s
+        if time_s is not None and time_s < min_time_min * 60:
+            return True  # fails criteria
 
     return False
 

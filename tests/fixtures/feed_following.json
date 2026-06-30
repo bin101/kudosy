@@ -1,0 +1,1343 @@
+{
+  "entries": [
+    {
+      "entity": "Activity",
+      "activity": {
+        "stats": [
+          {
+            "key": "stat_one",
+            "value": "5.17<abbr class='unit' title='kilometers'> km</abbr>",
+            "value_object": null
+          },
+          {
+            "key": "stat_one_subtitle",
+            "value": "Distance",
+            "value_object": null
+          },
+          {
+            "key": "stat_two",
+            "value": "8:06<abbr class='unit' title='minutes per kilometer'> /km</abbr>",
+            "value_object": null
+          },
+          {
+            "key": "stat_two_subtitle",
+            "value": "Pace",
+            "value_object": null
+          },
+          {
+            "key": "stat_three",
+            "value": "41<abbr class='unit' title='minute'>m</abbr> 56<abbr class='unit' title='second'>s</abbr>",
+            "value_object": null
+          },
+          {
+            "key": "stat_three_subtitle",
+            "value": "Time",
+            "value_object": null
+          }
+        ],
+        "description": null,
+        "descriptionMentionedAthleteIds": [],
+        "descriptionMentionsClubIds": [],
+        "flagged": null,
+        "activityName": "Abendlauf",
+        "id": "00000000001",
+        "ownedByCurrentAthlete": false,
+        "segAndBestEffortAchievements": [],
+        "powerAndSegmentGoalAchievements": [],
+        "type": "Run",
+        "mapVisPrompt": {},
+        "maharajAchievement": {},
+        "isVirtual": false,
+        "isCommute": false,
+        "workoutType": null,
+        "tags": null,
+        "privacyTagKey": null,
+        "shareable": true,
+        "twitterUrl": null,
+        "isBoosted": false,
+        "visibility": "everyone",
+        "athlete": {
+          "avatarUrl": "https://example.com/athletes/A00000001/avatar.jpg",
+          "athleteName": "Alice Mueller",
+          "athleteId": "A00000001",
+          "title": "<a href=\"/athletes/A00000001\">Alice Mueller</a>",
+          "firstName": "Alice"
+        },
+        "timeAndLocation": {
+          "timestampFormat": "date_at_time",
+          "displayDateAtTime": "Yesterday at 10:00 AM",
+          "displayDate": "Yesterday",
+          "location": "Example City, Example State"
+        },
+        "kudosAndComments": {
+          "canKudo": false,
+          "hasKudoed": true,
+          "highlightedKudosers": [],
+          "kudosCount": 2,
+          "commentsEnabled": true
+        },
+        "hiddenStatIndicatorString": null,
+        "embedDropdownEnabled": true,
+        "activityContextHeader": null,
+        "activitySuggestionType": null,
+        "startDate": "2026-06-29T18:38:41Z",
+        "elapsedTime": 2519,
+        "deviceName": "Example Device",
+        "tagKeys": []
+      }
+    },
+    {
+      "entity": "Activity",
+      "activity": {
+        "stats": [
+          {
+            "key": "stat_one",
+            "value": "0.45<abbr class='unit' title='kilometers'> km</abbr>",
+            "value_object": null
+          },
+          {
+            "key": "stat_one_subtitle",
+            "value": "Distance",
+            "value_object": null
+          },
+          {
+            "key": "stat_two",
+            "value": "9<abbr class='unit' title='meters'> m</abbr>",
+            "value_object": null
+          },
+          {
+            "key": "stat_two_subtitle",
+            "value": "Elev Gain",
+            "value_object": null
+          },
+          {
+            "key": "stat_three",
+            "value": "5<abbr class='unit' title='minute'>m</abbr> 36<abbr class='unit' title='second'>s</abbr>",
+            "value_object": null
+          },
+          {
+            "key": "stat_three_subtitle",
+            "value": "Time",
+            "value_object": null
+          }
+        ],
+        "description": null,
+        "descriptionMentionedAthleteIds": [],
+        "descriptionMentionsClubIds": [],
+        "flagged": null,
+        "activityName": "Evening Walk",
+        "id": "00000000002",
+        "ownedByCurrentAthlete": false,
+        "segAndBestEffortAchievements": [],
+        "powerAndSegmentGoalAchievements": [],
+        "type": "Walk",
+        "mapVisPrompt": {},
+        "maharajAchievement": {},
+        "isVirtual": false,
+        "isCommute": false,
+        "workoutType": null,
+        "tags": null,
+        "privacyTagKey": null,
+        "shareable": true,
+        "twitterUrl": null,
+        "isBoosted": false,
+        "visibility": "everyone",
+        "athlete": {
+          "avatarUrl": "https://example.com/athletes/A00000002/avatar.jpg",
+          "athleteName": "Bob Schmidt",
+          "athleteId": "A00000002",
+          "title": "<a href=\"/athletes/A00000002\">Bob Schmidt</a>",
+          "firstName": "Bob"
+        },
+        "timeAndLocation": {
+          "timestampFormat": "date_at_time",
+          "displayDateAtTime": "Yesterday at 10:00 AM",
+          "displayDate": "Yesterday",
+          "location": "Example City, Example State"
+        },
+        "kudosAndComments": {
+          "canKudo": false,
+          "hasKudoed": true,
+          "highlightedKudosers": [],
+          "kudosCount": 390,
+          "commentsEnabled": true
+        },
+        "hiddenStatIndicatorString": null,
+        "embedDropdownEnabled": true,
+        "activityContextHeader": null,
+        "activitySuggestionType": null,
+        "startDate": "2026-06-29T17:25:56Z",
+        "elapsedTime": 6088,
+        "deviceName": "Example Device",
+        "tagKeys": []
+      }
+    },
+    {
+      "entity": "Activity",
+      "activity": {
+        "stats": [
+          {
+            "key": "stat_one",
+            "value": "30<abbr class='unit' title='minute'>m</abbr> 0<abbr class='unit' title='second'>s</abbr>",
+            "value_object": null
+          },
+          {
+            "key": "stat_one_subtitle",
+            "value": "Time",
+            "value_object": null
+          }
+        ],
+        "description": null,
+        "descriptionMentionedAthleteIds": [],
+        "descriptionMentionsClubIds": [],
+        "flagged": null,
+        "activityName": "S40, B32,5, R32,5",
+        "id": "00000000003",
+        "ownedByCurrentAthlete": false,
+        "segAndBestEffortAchievements": [],
+        "powerAndSegmentGoalAchievements": [],
+        "type": "WeightTraining",
+        "mapVisPrompt": {},
+        "maharajAchievement": {},
+        "isVirtual": false,
+        "isCommute": false,
+        "workoutType": null,
+        "tags": null,
+        "privacyTagKey": null,
+        "shareable": false,
+        "twitterUrl": null,
+        "isBoosted": false,
+        "visibility": "everyone",
+        "athlete": {
+          "avatarUrl": "https://example.com/athletes/A00000003/avatar.jpg",
+          "athleteName": "Charlie Schneider",
+          "athleteId": "A00000003",
+          "title": "<a href=\"/athletes/A00000003\">Charlie Schneider</a>",
+          "firstName": "Charlie"
+        },
+        "timeAndLocation": {
+          "timestampFormat": "date_at_time",
+          "displayDateAtTime": "Yesterday at 10:00 AM",
+          "displayDate": "Yesterday",
+          "location": "Example City, Example State"
+        },
+        "kudosAndComments": {
+          "canKudo": false,
+          "hasKudoed": true,
+          "highlightedKudosers": [],
+          "kudosCount": 2,
+          "commentsEnabled": true
+        },
+        "hiddenStatIndicatorString": null,
+        "embedDropdownEnabled": false,
+        "activityContextHeader": null,
+        "activitySuggestionType": null,
+        "startDate": "2026-06-29T16:00:42Z",
+        "elapsedTime": 1800,
+        "tagKeys": [],
+        "deviceName": "Example Device"
+      }
+    },
+    {
+      "entity": "Activity",
+      "activity": {
+        "stats": [
+          {
+            "key": "stat_one",
+            "value": "53.24<abbr class='unit' title='kilometers'> km</abbr>",
+            "value_object": null
+          },
+          {
+            "key": "stat_one_subtitle",
+            "value": "Distance",
+            "value_object": null
+          },
+          {
+            "key": "stat_two",
+            "value": "116<abbr class='unit' title='meters'> m</abbr>",
+            "value_object": null
+          },
+          {
+            "key": "stat_two_subtitle",
+            "value": "Elev Gain",
+            "value_object": null
+          },
+          {
+            "key": "stat_three",
+            "value": "1<abbr class='unit' title='hour'>h</abbr> 46<abbr class='unit' title='minute'>m</abbr>",
+            "value_object": null
+          },
+          {
+            "key": "stat_three_subtitle",
+            "value": "Time",
+            "value_object": null
+          }
+        ],
+        "description": null,
+        "descriptionMentionedAthleteIds": [],
+        "descriptionMentionsClubIds": [],
+        "flagged": null,
+        "activityName": "🍋🍋🍋 Social Monday",
+        "id": "00000000004",
+        "ownedByCurrentAthlete": false,
+        "segAndBestEffortAchievements": [],
+        "powerAndSegmentGoalAchievements": [],
+        "type": "Ride",
+        "mapVisPrompt": {},
+        "maharajAchievement": {},
+        "isVirtual": false,
+        "isCommute": false,
+        "workoutType": null,
+        "tags": null,
+        "privacyTagKey": null,
+        "shareable": false,
+        "twitterUrl": null,
+        "isBoosted": false,
+        "visibility": "followers_only",
+        "athlete": {
+          "avatarUrl": "https://example.com/athletes/A00000004/avatar.jpg",
+          "athleteName": "Diana Fischer",
+          "athleteId": "A00000004",
+          "title": "<a href=\"/athletes/A00000004\">Diana Fischer</a>",
+          "firstName": "Diana"
+        },
+        "timeAndLocation": {
+          "timestampFormat": "date_at_time",
+          "displayDateAtTime": "Yesterday at 10:00 AM",
+          "displayDate": "Yesterday",
+          "location": "Example City, Example State"
+        },
+        "kudosAndComments": {
+          "canKudo": false,
+          "hasKudoed": true,
+          "highlightedKudosers": [],
+          "kudosCount": 27,
+          "commentsEnabled": true
+        },
+        "hiddenStatIndicatorString": null,
+        "embedDropdownEnabled": false,
+        "activityContextHeader": null,
+        "activitySuggestionType": null,
+        "startDate": "2026-06-29T16:03:54Z",
+        "elapsedTime": 6971,
+        "deviceName": "Example Device",
+        "tagKeys": []
+      }
+    },
+    {
+      "entity": "Activity",
+      "activity": {
+        "stats": [
+          {
+            "key": "stat_one",
+            "value": "5.68<abbr class='unit' title='kilometers'> km</abbr>",
+            "value_object": null
+          },
+          {
+            "key": "stat_one_subtitle",
+            "value": "Distance",
+            "value_object": null
+          },
+          {
+            "key": "stat_two",
+            "value": "7:26<abbr class='unit' title='minutes per kilometer'> /km</abbr>",
+            "value_object": null
+          },
+          {
+            "key": "stat_two_subtitle",
+            "value": "Pace",
+            "value_object": null
+          },
+          {
+            "key": "stat_three",
+            "value": "42<abbr class='unit' title='minute'>m</abbr> 17<abbr class='unit' title='second'>s</abbr>",
+            "value_object": null
+          },
+          {
+            "key": "stat_three_subtitle",
+            "value": "Time",
+            "value_object": null
+          }
+        ],
+        "description": null,
+        "descriptionMentionedAthleteIds": [],
+        "descriptionMentionsClubIds": [],
+        "flagged": null,
+        "activityName": "Run by feel",
+        "id": "00000000005",
+        "ownedByCurrentAthlete": false,
+        "segAndBestEffortAchievements": [],
+        "powerAndSegmentGoalAchievements": [],
+        "type": "Run",
+        "mapVisPrompt": {},
+        "maharajAchievement": {},
+        "isVirtual": false,
+        "isCommute": false,
+        "workoutType": null,
+        "tags": null,
+        "privacyTagKey": null,
+        "shareable": false,
+        "twitterUrl": null,
+        "isBoosted": false,
+        "visibility": "everyone",
+        "athlete": {
+          "avatarUrl": "https://example.com/athletes/A00000003/avatar.jpg",
+          "athleteName": "Charlie Schneider",
+          "athleteId": "A00000003",
+          "title": "<a href=\"/athletes/A00000003\">Charlie Schneider</a>",
+          "firstName": "Charlie"
+        },
+        "timeAndLocation": {
+          "timestampFormat": "date_at_time",
+          "displayDateAtTime": "Yesterday at 10:00 AM",
+          "displayDate": "Yesterday",
+          "location": "Example City, Example State"
+        },
+        "kudosAndComments": {
+          "canKudo": false,
+          "hasKudoed": true,
+          "highlightedKudosers": [],
+          "kudosCount": 3,
+          "commentsEnabled": true
+        },
+        "hiddenStatIndicatorString": null,
+        "embedDropdownEnabled": false,
+        "activityContextHeader": null,
+        "activitySuggestionType": null,
+        "startDate": "2026-06-29T18:11:33Z",
+        "elapsedTime": 2555,
+        "deviceName": "Example Device",
+        "tagKeys": []
+      }
+    },
+    {
+      "entity": "Activity",
+      "activity": {
+        "stats": [
+          {
+            "key": "stat_one",
+            "value": "6.80<abbr class='unit' title='kilometers'> km</abbr>",
+            "value_object": null
+          },
+          {
+            "key": "stat_one_subtitle",
+            "value": "Distance",
+            "value_object": null
+          },
+          {
+            "key": "stat_two",
+            "value": "1<abbr class='unit' title='hour'>h</abbr> 16<abbr class='unit' title='minute'>m</abbr>",
+            "value_object": null
+          },
+          {
+            "key": "stat_two_subtitle",
+            "value": "Time",
+            "value_object": null
+          },
+          {
+            "key": "stat_three",
+            "value": "21<abbr class='unit' title='meters'> m</abbr>",
+            "value_object": null
+          },
+          {
+            "key": "stat_three_subtitle",
+            "value": "Elev Gain",
+            "value_object": null
+          }
+        ],
+        "description": "<p>4,1 Strain amounts to light exertion today.</p>",
+        "descriptionMentionedAthleteIds": [],
+        "descriptionMentionsClubIds": [],
+        "flagged": null,
+        "activityName": "Abendspaziergang",
+        "id": "00000000006",
+        "ownedByCurrentAthlete": false,
+        "segAndBestEffortAchievements": [],
+        "powerAndSegmentGoalAchievements": [],
+        "type": "Walk",
+        "mapVisPrompt": {},
+        "maharajAchievement": {},
+        "isVirtual": false,
+        "isCommute": false,
+        "workoutType": null,
+        "tags": null,
+        "privacyTagKey": null,
+        "shareable": false,
+        "twitterUrl": null,
+        "isBoosted": false,
+        "visibility": "everyone",
+        "athlete": {
+          "avatarUrl": "https://example.com/athletes/A00000005/avatar.jpg",
+          "athleteName": "Eve Weber",
+          "athleteId": "A00000005",
+          "title": "<a href=\"/athletes/A00000005\">Eve Weber</a>",
+          "firstName": "Eve"
+        },
+        "timeAndLocation": {
+          "timestampFormat": "date_at_time",
+          "displayDateAtTime": "Yesterday at 10:00 AM",
+          "displayDate": "Yesterday",
+          "location": "Example City, Example State"
+        },
+        "kudosAndComments": {
+          "canKudo": false,
+          "hasKudoed": true,
+          "highlightedKudosers": [],
+          "kudosCount": 6,
+          "commentsEnabled": true
+        },
+        "hiddenStatIndicatorString": null,
+        "embedDropdownEnabled": false,
+        "activityContextHeader": null,
+        "activitySuggestionType": null,
+        "startDate": "2026-06-29T17:31:37Z",
+        "elapsedTime": 4572,
+        "deviceName": "Example Device",
+        "tagKeys": []
+      }
+    },
+    {
+      "entity": "Activity",
+      "activity": {
+        "stats": [
+          {
+            "key": "stat_one",
+            "value": "1,300<abbr class='unit' title='meters'> m</abbr>",
+            "value_object": null
+          },
+          {
+            "key": "stat_one_subtitle",
+            "value": "Distance",
+            "value_object": null
+          },
+          {
+            "key": "stat_two",
+            "value": "21<abbr class='unit' title='minute'>m</abbr> 10<abbr class='unit' title='second'>s</abbr>",
+            "value_object": null
+          },
+          {
+            "key": "stat_two_subtitle",
+            "value": "Time",
+            "value_object": null
+          },
+          {
+            "key": "stat_three",
+            "value": "1:37<abbr class='unit' title='per 100 Meters'> /100m</abbr>",
+            "value_object": null
+          },
+          {
+            "key": "stat_three_subtitle",
+            "value": "Pace",
+            "value_object": null
+          }
+        ],
+        "description": null,
+        "descriptionMentionedAthleteIds": [],
+        "descriptionMentionsClubIds": [],
+        "flagged": null,
+        "activityName": "Abendschwimmen",
+        "id": "00000000007",
+        "ownedByCurrentAthlete": false,
+        "segAndBestEffortAchievements": [],
+        "powerAndSegmentGoalAchievements": [],
+        "type": "Swim",
+        "mapVisPrompt": {},
+        "maharajAchievement": {},
+        "isVirtual": false,
+        "isCommute": false,
+        "workoutType": null,
+        "tags": null,
+        "privacyTagKey": null,
+        "shareable": true,
+        "twitterUrl": null,
+        "isBoosted": false,
+        "visibility": "everyone",
+        "athlete": {
+          "avatarUrl": "https://example.com/athletes/A00000006/avatar.jpg",
+          "athleteName": "Frank Meyer",
+          "athleteId": "A00000006",
+          "title": "<a href=\"/athletes/A00000006\">Frank Meyer</a>",
+          "firstName": "Frank"
+        },
+        "timeAndLocation": {
+          "timestampFormat": "date_at_time",
+          "displayDateAtTime": "Yesterday at 10:00 AM",
+          "displayDate": "Yesterday",
+          "location": "Example City, Example State"
+        },
+        "kudosAndComments": {
+          "canKudo": false,
+          "hasKudoed": true,
+          "highlightedKudosers": [],
+          "kudosCount": 24,
+          "commentsEnabled": true
+        },
+        "hiddenStatIndicatorString": null,
+        "embedDropdownEnabled": true,
+        "activityContextHeader": null,
+        "activitySuggestionType": null,
+        "startDate": "2026-06-29T18:05:14Z",
+        "elapsedTime": 2165,
+        "deviceName": "Example Device",
+        "tagKeys": []
+      }
+    },
+    {
+      "entity": "Activity",
+      "activity": {
+        "stats": [
+          {
+            "key": "stat_one",
+            "value": "1<abbr class='unit' title='hour'>h</abbr> 0<abbr class='unit' title='minute'>m</abbr>",
+            "value_object": null
+          },
+          {
+            "key": "stat_one_subtitle",
+            "value": "Time",
+            "value_object": null
+          }
+        ],
+        "description": "<p>Körper nervt rum, die Diva!</p>",
+        "descriptionMentionedAthleteIds": [],
+        "descriptionMentionsClubIds": [],
+        "flagged": null,
+        "activityName": "Schmerzen",
+        "id": "00000000008",
+        "ownedByCurrentAthlete": false,
+        "segAndBestEffortAchievements": [],
+        "powerAndSegmentGoalAchievements": [],
+        "type": "PhysicalTherapy",
+        "mapVisPrompt": {},
+        "maharajAchievement": {},
+        "isVirtual": false,
+        "isCommute": false,
+        "workoutType": null,
+        "tags": null,
+        "privacyTagKey": null,
+        "shareable": true,
+        "twitterUrl": null,
+        "isBoosted": false,
+        "visibility": "everyone",
+        "athlete": {
+          "avatarUrl": "https://example.com/athletes/A00000007/avatar.jpg",
+          "athleteName": "Grace Wagner",
+          "athleteId": "A00000007",
+          "title": "<a href=\"/athletes/A00000007\">Grace Wagner</a>",
+          "firstName": "Grace"
+        },
+        "timeAndLocation": {
+          "timestampFormat": "date_at_time",
+          "displayDateAtTime": "Yesterday at 10:00 AM",
+          "displayDate": "Yesterday",
+          "location": "Example City, Example State"
+        },
+        "kudosAndComments": {
+          "canKudo": false,
+          "hasKudoed": true,
+          "highlightedKudosers": [],
+          "kudosCount": 23,
+          "commentsEnabled": true
+        },
+        "hiddenStatIndicatorString": null,
+        "embedDropdownEnabled": true,
+        "activityContextHeader": null,
+        "activitySuggestionType": null,
+        "startDate": "2026-06-29T17:30:00Z",
+        "elapsedTime": 3600,
+        "tagKeys": [],
+        "deviceName": "Example Device"
+      }
+    },
+    {
+      "entity": "Activity",
+      "activity": {
+        "stats": [
+          {
+            "key": "stat_one",
+            "value": "53.65<abbr class='unit' title='kilometers'> km</abbr>",
+            "value_object": null
+          },
+          {
+            "key": "stat_one_subtitle",
+            "value": "Distance",
+            "value_object": null
+          },
+          {
+            "key": "stat_two",
+            "value": "320<abbr class='unit' title='meters'> m</abbr>",
+            "value_object": null
+          },
+          {
+            "key": "stat_two_subtitle",
+            "value": "Elev Gain",
+            "value_object": null
+          },
+          {
+            "key": "stat_three",
+            "value": "2<abbr class='unit' title='hour'>h</abbr> 12<abbr class='unit' title='minute'>m</abbr>",
+            "value_object": null
+          },
+          {
+            "key": "stat_three_subtitle",
+            "value": "Time",
+            "value_object": null
+          }
+        ],
+        "description": null,
+        "descriptionMentionedAthleteIds": [],
+        "descriptionMentionsClubIds": [],
+        "flagged": null,
+        "activityName": "Evening E-Bike Ride",
+        "id": "00000000009",
+        "ownedByCurrentAthlete": false,
+        "segAndBestEffortAchievements": [],
+        "powerAndSegmentGoalAchievements": [],
+        "type": "EBikeRide",
+        "mapVisPrompt": {},
+        "maharajAchievement": {},
+        "isVirtual": false,
+        "isCommute": false,
+        "workoutType": null,
+        "tags": null,
+        "privacyTagKey": null,
+        "shareable": true,
+        "twitterUrl": null,
+        "isBoosted": false,
+        "visibility": "everyone",
+        "athlete": {
+          "avatarUrl": "https://example.com/athletes/A00000008/avatar.jpg",
+          "athleteName": "Hank Becker",
+          "athleteId": "A00000008",
+          "title": "<a href=\"/athletes/A00000008\">Hank Becker</a>",
+          "firstName": "Hank"
+        },
+        "timeAndLocation": {
+          "timestampFormat": "date_at_time",
+          "displayDateAtTime": "Yesterday at 10:00 AM",
+          "displayDate": "Yesterday",
+          "location": "Example City, Example State"
+        },
+        "kudosAndComments": {
+          "canKudo": true,
+          "hasKudoed": false,
+          "highlightedKudosers": [],
+          "kudosCount": 0,
+          "commentsEnabled": true
+        },
+        "hiddenStatIndicatorString": null,
+        "embedDropdownEnabled": true,
+        "activityContextHeader": null,
+        "activitySuggestionType": null,
+        "startDate": "2026-06-29T16:07:48Z",
+        "elapsedTime": 8044,
+        "deviceName": "Example Device",
+        "tagKeys": []
+      }
+    },
+    {
+      "entity": "Activity",
+      "activity": {
+        "stats": [
+          {
+            "key": "stat_one",
+            "value": "63.43<abbr class='unit' title='kilometers'> km</abbr>",
+            "value_object": null
+          },
+          {
+            "key": "stat_one_subtitle",
+            "value": "Distance",
+            "value_object": null
+          },
+          {
+            "key": "stat_two",
+            "value": "163<abbr class='unit' title='meters'> m</abbr>",
+            "value_object": null
+          },
+          {
+            "key": "stat_two_subtitle",
+            "value": "Elev Gain",
+            "value_object": null
+          },
+          {
+            "key": "stat_three",
+            "value": "2<abbr class='unit' title='hour'>h</abbr> 18<abbr class='unit' title='minute'>m</abbr>",
+            "value_object": null
+          },
+          {
+            "key": "stat_three_subtitle",
+            "value": "Time",
+            "value_object": null
+          }
+        ],
+        "description": null,
+        "descriptionMentionedAthleteIds": [],
+        "descriptionMentionsClubIds": [],
+        "flagged": null,
+        "activityName": "Afternoon Ride",
+        "id": "00000000010",
+        "ownedByCurrentAthlete": false,
+        "segAndBestEffortAchievements": [],
+        "powerAndSegmentGoalAchievements": [],
+        "type": "Ride",
+        "mapVisPrompt": {},
+        "maharajAchievement": {},
+        "isVirtual": false,
+        "isCommute": false,
+        "workoutType": null,
+        "tags": null,
+        "privacyTagKey": null,
+        "shareable": true,
+        "twitterUrl": null,
+        "isBoosted": false,
+        "visibility": "everyone",
+        "athlete": {
+          "avatarUrl": "https://example.com/athletes/A00000009/avatar.jpg",
+          "athleteName": "Ivy Schulz",
+          "athleteId": "A00000009",
+          "title": "<a href=\"/athletes/A00000009\">Ivy Schulz</a>",
+          "firstName": "Ivy"
+        },
+        "timeAndLocation": {
+          "timestampFormat": "date_at_time",
+          "displayDateAtTime": "Yesterday at 10:00 AM",
+          "displayDate": "Yesterday",
+          "location": "Example City, Example State"
+        },
+        "kudosAndComments": {
+          "canKudo": false,
+          "hasKudoed": true,
+          "highlightedKudosers": [],
+          "kudosCount": 3,
+          "commentsEnabled": true
+        },
+        "hiddenStatIndicatorString": null,
+        "embedDropdownEnabled": true,
+        "activityContextHeader": null,
+        "activitySuggestionType": null,
+        "startDate": "2026-06-29T15:31:57Z",
+        "elapsedTime": 9185,
+        "deviceName": "Example Device",
+        "tagKeys": []
+      }
+    },
+    {
+      "entity": "Activity",
+      "activity": {
+        "stats": [
+          {
+            "key": "stat_one",
+            "value": "6.17<abbr class='unit' title='kilometers'> km</abbr>",
+            "value_object": null
+          },
+          {
+            "key": "stat_one_subtitle",
+            "value": "Distance",
+            "value_object": null
+          },
+          {
+            "key": "stat_two",
+            "value": "33<abbr class='unit' title='meters'> m</abbr>",
+            "value_object": null
+          },
+          {
+            "key": "stat_two_subtitle",
+            "value": "Elev Gain",
+            "value_object": null
+          },
+          {
+            "key": "stat_three",
+            "value": "14<abbr class='unit' title='minute'>m</abbr> 22<abbr class='unit' title='second'>s</abbr>",
+            "value_object": null
+          },
+          {
+            "key": "stat_three_subtitle",
+            "value": "Time",
+            "value_object": null
+          }
+        ],
+        "description": null,
+        "descriptionMentionedAthleteIds": [],
+        "descriptionMentionsClubIds": [],
+        "flagged": null,
+        "activityName": "Abendradfahrt",
+        "id": "00000000011",
+        "ownedByCurrentAthlete": false,
+        "segAndBestEffortAchievements": [],
+        "powerAndSegmentGoalAchievements": [],
+        "type": "Ride",
+        "mapVisPrompt": {},
+        "maharajAchievement": {},
+        "isVirtual": false,
+        "isCommute": false,
+        "workoutType": null,
+        "tags": null,
+        "privacyTagKey": null,
+        "shareable": false,
+        "twitterUrl": null,
+        "isBoosted": false,
+        "visibility": "followers_only",
+        "athlete": {
+          "avatarUrl": "https://example.com/athletes/A00000010/avatar.jpg",
+          "athleteName": "Jack Koch",
+          "athleteId": "A00000010",
+          "title": "<a href=\"/athletes/A00000010\">Jack Koch</a>",
+          "firstName": "Jack"
+        },
+        "timeAndLocation": {
+          "timestampFormat": "date_at_time",
+          "displayDateAtTime": "Yesterday at 10:00 AM",
+          "displayDate": "Yesterday",
+          "location": "Example City, Example State"
+        },
+        "kudosAndComments": {
+          "canKudo": true,
+          "hasKudoed": false,
+          "highlightedKudosers": [],
+          "kudosCount": 2,
+          "commentsEnabled": true
+        },
+        "hiddenStatIndicatorString": null,
+        "embedDropdownEnabled": false,
+        "activityContextHeader": null,
+        "activitySuggestionType": null,
+        "startDate": "2026-06-29T17:28:33Z",
+        "elapsedTime": 962,
+        "deviceName": "Example Device",
+        "tagKeys": []
+      }
+    },
+    {
+      "entity": "Activity",
+      "activity": {
+        "stats": [
+          {
+            "key": "stat_one",
+            "value": "19.13<abbr class='unit' title='kilometers'> km</abbr>",
+            "value_object": null
+          },
+          {
+            "key": "stat_one_subtitle",
+            "value": "Distance",
+            "value_object": null
+          },
+          {
+            "key": "stat_two",
+            "value": "327<abbr class='unit' title='meters'> m</abbr>",
+            "value_object": null
+          },
+          {
+            "key": "stat_two_subtitle",
+            "value": "Elev Gain",
+            "value_object": null
+          },
+          {
+            "key": "stat_three",
+            "value": "1<abbr class='unit' title='hour'>h</abbr> 0<abbr class='unit' title='minute'>m</abbr>",
+            "value_object": null
+          },
+          {
+            "key": "stat_three_subtitle",
+            "value": "Time",
+            "value_object": null
+          }
+        ],
+        "description": null,
+        "descriptionMentionedAthleteIds": [],
+        "descriptionMentionsClubIds": [],
+        "flagged": null,
+        "activityName": "Abendradfahrt",
+        "id": "00000000012",
+        "ownedByCurrentAthlete": false,
+        "segAndBestEffortAchievements": [],
+        "powerAndSegmentGoalAchievements": [],
+        "type": "Ride",
+        "mapVisPrompt": {},
+        "maharajAchievement": {},
+        "isVirtual": false,
+        "isCommute": false,
+        "workoutType": null,
+        "tags": null,
+        "privacyTagKey": null,
+        "shareable": false,
+        "twitterUrl": null,
+        "isBoosted": false,
+        "visibility": "followers_only",
+        "athlete": {
+          "avatarUrl": "https://example.com/athletes/A00000010/avatar.jpg",
+          "athleteName": "Jack Koch",
+          "athleteId": "A00000010",
+          "title": "<a href=\"/athletes/A00000010\">Jack Koch</a>",
+          "firstName": "Jack"
+        },
+        "timeAndLocation": {
+          "timestampFormat": "date_at_time",
+          "displayDateAtTime": "Yesterday at 10:00 AM",
+          "displayDate": "Yesterday",
+          "location": "Example City, Example State"
+        },
+        "kudosAndComments": {
+          "canKudo": true,
+          "hasKudoed": false,
+          "highlightedKudosers": [],
+          "kudosCount": 2,
+          "commentsEnabled": true
+        },
+        "hiddenStatIndicatorString": null,
+        "embedDropdownEnabled": false,
+        "activityContextHeader": null,
+        "activitySuggestionType": null,
+        "startDate": "2026-06-29T16:14:20Z",
+        "elapsedTime": 4198,
+        "deviceName": "Example Device",
+        "tagKeys": []
+      }
+    },
+    {
+      "entity": "Activity",
+      "activity": {
+        "stats": [
+          {
+            "key": "stat_one",
+            "value": "32.47<abbr class='unit' title='kilometers'> km</abbr>",
+            "value_object": null
+          },
+          {
+            "key": "stat_one_subtitle",
+            "value": "Distance",
+            "value_object": null
+          },
+          {
+            "key": "stat_two",
+            "value": "236<abbr class='unit' title='meters'> m</abbr>",
+            "value_object": null
+          },
+          {
+            "key": "stat_two_subtitle",
+            "value": "Elev Gain",
+            "value_object": null
+          },
+          {
+            "key": "stat_three",
+            "value": "1<abbr class='unit' title='hour'>h</abbr> 33<abbr class='unit' title='minute'>m</abbr>",
+            "value_object": null
+          },
+          {
+            "key": "stat_three_subtitle",
+            "value": "Time",
+            "value_object": null
+          }
+        ],
+        "description": null,
+        "descriptionMentionedAthleteIds": [],
+        "descriptionMentionsClubIds": [],
+        "flagged": null,
+        "activityName": "Gravel-Fahrt am Nachmittag",
+        "id": "00000000013",
+        "ownedByCurrentAthlete": false,
+        "segAndBestEffortAchievements": [],
+        "powerAndSegmentGoalAchievements": [],
+        "type": "GravelRide",
+        "mapVisPrompt": {},
+        "maharajAchievement": {},
+        "isVirtual": false,
+        "isCommute": false,
+        "workoutType": null,
+        "tags": null,
+        "privacyTagKey": null,
+        "shareable": false,
+        "twitterUrl": null,
+        "isBoosted": false,
+        "visibility": "followers_only",
+        "athlete": {
+          "avatarUrl": "https://example.com/athletes/A00000011/avatar.jpg",
+          "athleteName": "Alice Mueller",
+          "athleteId": "A00000011",
+          "title": "<a href=\"/athletes/A00000011\">Alice Mueller</a>",
+          "firstName": "Alice"
+        },
+        "timeAndLocation": {
+          "timestampFormat": "date_at_time",
+          "displayDateAtTime": "Yesterday at 10:00 AM",
+          "displayDate": "Yesterday",
+          "location": "Example City, Example State"
+        },
+        "kudosAndComments": {
+          "canKudo": false,
+          "hasKudoed": true,
+          "highlightedKudosers": [],
+          "kudosCount": 4,
+          "commentsEnabled": true
+        },
+        "hiddenStatIndicatorString": null,
+        "embedDropdownEnabled": false,
+        "activityContextHeader": null,
+        "activitySuggestionType": null,
+        "startDate": "2026-06-29T15:19:32Z",
+        "elapsedTime": 6142,
+        "deviceName": "Example Device",
+        "tagKeys": []
+      }
+    },
+    {
+      "entity": "Activity",
+      "activity": {
+        "stats": [
+          {
+            "key": "stat_one",
+            "value": "17.04<abbr class='unit' title='kilometers'> km</abbr>",
+            "value_object": null
+          },
+          {
+            "key": "stat_one_subtitle",
+            "value": "Distance",
+            "value_object": null
+          },
+          {
+            "key": "stat_two",
+            "value": "161<abbr class='unit' title='meters'> m</abbr>",
+            "value_object": null
+          },
+          {
+            "key": "stat_two_subtitle",
+            "value": "Elev Gain",
+            "value_object": null
+          },
+          {
+            "key": "stat_three",
+            "value": "1<abbr class='unit' title='hour'>h</abbr> 6<abbr class='unit' title='minute'>m</abbr>",
+            "value_object": null
+          },
+          {
+            "key": "stat_three_subtitle",
+            "value": "Time",
+            "value_object": null
+          }
+        ],
+        "description": null,
+        "descriptionMentionedAthleteIds": [],
+        "descriptionMentionsClubIds": [],
+        "flagged": null,
+        "activityName": "Evening Ride",
+        "id": "00000000014",
+        "ownedByCurrentAthlete": false,
+        "segAndBestEffortAchievements": [],
+        "powerAndSegmentGoalAchievements": [],
+        "type": "Ride",
+        "mapVisPrompt": {},
+        "maharajAchievement": {},
+        "isVirtual": false,
+        "isCommute": false,
+        "workoutType": null,
+        "tags": null,
+        "privacyTagKey": null,
+        "shareable": true,
+        "twitterUrl": null,
+        "isBoosted": false,
+        "visibility": "everyone",
+        "athlete": {
+          "avatarUrl": "https://example.com/athletes/A00000012/avatar.jpg",
+          "athleteName": "Bob Schmidt",
+          "athleteId": "A00000012",
+          "title": "<a href=\"/athletes/A00000012\">Bob Schmidt</a>",
+          "firstName": "Bob"
+        },
+        "timeAndLocation": {
+          "timestampFormat": "date_at_time",
+          "displayDateAtTime": "Yesterday at 10:00 AM",
+          "displayDate": "Yesterday",
+          "location": "Example City, Example State"
+        },
+        "kudosAndComments": {
+          "canKudo": false,
+          "hasKudoed": true,
+          "highlightedKudosers": [],
+          "kudosCount": 4,
+          "commentsEnabled": true
+        },
+        "hiddenStatIndicatorString": null,
+        "embedDropdownEnabled": true,
+        "activityContextHeader": null,
+        "activitySuggestionType": null,
+        "startDate": "2026-06-29T16:28:27Z",
+        "elapsedTime": 4004,
+        "deviceName": "Example Device",
+        "tagKeys": []
+      }
+    },
+    {
+      "entity": "Activity",
+      "activity": {
+        "stats": [
+          {
+            "key": "stat_one",
+            "value": "6.59<abbr class='unit' title='kilometers'> km</abbr>",
+            "value_object": null
+          },
+          {
+            "key": "stat_one_subtitle",
+            "value": "Distance",
+            "value_object": null
+          },
+          {
+            "key": "stat_two",
+            "value": "5:56<abbr class='unit' title='minutes per kilometer'> /km</abbr>",
+            "value_object": null
+          },
+          {
+            "key": "stat_two_subtitle",
+            "value": "Pace",
+            "value_object": null
+          },
+          {
+            "key": "stat_three",
+            "value": "39<abbr class='unit' title='minute'>m</abbr> 5<abbr class='unit' title='second'>s</abbr>",
+            "value_object": null
+          },
+          {
+            "key": "stat_three_subtitle",
+            "value": "Time",
+            "value_object": null
+          }
+        ],
+        "description": "<p>Sprunggelenk antesten.. \n<br />Bänder sind gef.., aber Fuß hält. \n<br />VO2Max downgrade auf 55, Garmin sehr toxic</p>",
+        "descriptionMentionedAthleteIds": [],
+        "descriptionMentionsClubIds": [],
+        "flagged": null,
+        "activityName": "Traillauf am Abend",
+        "id": "00000000015",
+        "ownedByCurrentAthlete": false,
+        "segAndBestEffortAchievements": [],
+        "powerAndSegmentGoalAchievements": [],
+        "type": "TrailRun",
+        "mapVisPrompt": {},
+        "maharajAchievement": {},
+        "isVirtual": false,
+        "isCommute": false,
+        "workoutType": null,
+        "tags": null,
+        "privacyTagKey": null,
+        "shareable": false,
+        "twitterUrl": null,
+        "isBoosted": false,
+        "visibility": "everyone",
+        "athlete": {
+          "avatarUrl": "https://example.com/athletes/A00000013/avatar.jpg",
+          "athleteName": "Charlie Schneider",
+          "athleteId": "A00000013",
+          "title": "<a href=\"/athletes/A00000013\">Charlie Schneider</a>",
+          "firstName": "Charlie"
+        },
+        "timeAndLocation": {
+          "timestampFormat": "date_at_time",
+          "displayDateAtTime": "Yesterday at 10:00 AM",
+          "displayDate": "Yesterday",
+          "location": "Example City, Example State"
+        },
+        "kudosAndComments": {
+          "canKudo": false,
+          "hasKudoed": true,
+          "highlightedKudosers": [],
+          "kudosCount": 10,
+          "commentsEnabled": true
+        },
+        "hiddenStatIndicatorString": null,
+        "embedDropdownEnabled": false,
+        "activityContextHeader": null,
+        "activitySuggestionType": null,
+        "startDate": "2026-06-29T16:40:30Z",
+        "elapsedTime": 2548,
+        "deviceName": "Example Device",
+        "tagKeys": []
+      }
+    },
+    {
+      "entity": "Activity",
+      "activity": {
+        "stats": [
+          {
+            "key": "stat_one",
+            "value": "37.83<abbr class='unit' title='kilometers'> km</abbr>",
+            "value_object": null
+          },
+          {
+            "key": "stat_one_subtitle",
+            "value": "Distance",
+            "value_object": null
+          },
+          {
+            "key": "stat_two",
+            "value": "100<abbr class='unit' title='meters'> m</abbr>",
+            "value_object": null
+          },
+          {
+            "key": "stat_two_subtitle",
+            "value": "Elev Gain",
+            "value_object": null
+          },
+          {
+            "key": "stat_three",
+            "value": "1<abbr class='unit' title='hour'>h</abbr> 26<abbr class='unit' title='minute'>m</abbr>",
+            "value_object": null
+          },
+          {
+            "key": "stat_three_subtitle",
+            "value": "Time",
+            "value_object": null
+          }
+        ],
+        "description": null,
+        "descriptionMentionedAthleteIds": [],
+        "descriptionMentionsClubIds": [],
+        "flagged": null,
+        "activityName": "Fahrt am Nachmittag",
+        "id": "00000000016",
+        "ownedByCurrentAthlete": false,
+        "segAndBestEffortAchievements": [],
+        "powerAndSegmentGoalAchievements": [],
+        "type": "Ride",
+        "mapVisPrompt": {},
+        "maharajAchievement": {},
+        "isVirtual": false,
+        "isCommute": false,
+        "workoutType": null,
+        "tags": null,
+        "privacyTagKey": null,
+        "shareable": true,
+        "twitterUrl": null,
+        "isBoosted": false,
+        "visibility": "everyone",
+        "athlete": {
+          "avatarUrl": "https://example.com/athletes/A00000014/avatar.jpg",
+          "athleteName": "Diana Fischer",
+          "athleteId": "A00000014",
+          "title": "<a href=\"/athletes/A00000014\">Diana Fischer</a>",
+          "firstName": "Diana"
+        },
+        "timeAndLocation": {
+          "timestampFormat": "date_at_time",
+          "displayDateAtTime": "Yesterday at 10:00 AM",
+          "displayDate": "Yesterday",
+          "location": "Example City, Example State"
+        },
+        "kudosAndComments": {
+          "canKudo": false,
+          "hasKudoed": true,
+          "highlightedKudosers": [],
+          "kudosCount": 9,
+          "commentsEnabled": true
+        },
+        "hiddenStatIndicatorString": null,
+        "embedDropdownEnabled": true,
+        "activityContextHeader": null,
+        "activitySuggestionType": null,
+        "startDate": "2026-06-29T15:40:19Z",
+        "elapsedTime": 5894,
+        "deviceName": "Example Device",
+        "tagKeys": []
+      }
+    }
+  ],
+  "pagination": {
+    "hasMore": false
+  }
+}

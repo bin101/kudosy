@@ -1108,8 +1108,9 @@ function renderFeed() {
       ? `<span class="feed-kudo-badge feed-kudo-done">${t('feed.kudo.done')}</span>`
       : `<span class="feed-kudo-badge feed-kudo-pending">${t('feed.kudo.pending')}</span>`;
 
-    const statsParts = Object.entries(act.stats)
-      .map(([k, v]) => `<span class="feed-stat"><strong>${k}:</strong> ${v}</span>`)
+    const displayStats = (act.stats && act.stats.display) ? act.stats.display : [];
+    const statsParts = displayStats
+      .map(s => `<span class="feed-stat"><strong>${s.label}:</strong> ${s.raw}</span>`)
       .join('');
     const statsHtml  = statsParts ? `<div class="feed-stats">${statsParts}</div>` : '';
     const sportLabel = act.sport_type ? formatSportLabel(act.sport_type) : '—';

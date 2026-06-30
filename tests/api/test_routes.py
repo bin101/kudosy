@@ -365,33 +365,68 @@ def test_get_feed_no_cookie_returns_400(app_client: TestClient, data_dir: Path) 
     assert resp.status_code == 400
 
 
+def _make_feed_payload(
+    activity_id: str,
+    activity_name: str,
+    sport_type: str = "Run",
+    athlete_id: str = "300000001",
+    athlete_name: str = "Test Runner",
+    has_kudoed: bool = False,
+    elapsed_time: int = 2700,
+    distance_km: float = 10.0,
+) -> dict[str, object]:
+    """Build a minimal Strava JSON feed payload with a single Activity entry."""
+    return {
+        "entries": [
+            {
+                "entity": "Activity",
+                "activity": {
+                    "id": activity_id,
+                    "activityName": activity_name,
+                    "type": sport_type,
+                    "elapsedTime": elapsed_time,
+                    "startDate": "2026-06-30T08:00:00Z",
+                    "athlete": {
+                        "athleteId": athlete_id,
+                        "athleteName": athlete_name,
+                        "avatarUrl": None,
+                    },
+                    "kudosAndComments": {
+                        "hasKudoed": has_kudoed,
+                        "canKudo": not has_kudoed,
+                        "kudosCount": 0,
+                    },
+                    "stats": [
+                        {
+                            "key": "stat_one",
+                            "value": f"{distance_km:.2f}<abbr class='unit' title='kilometers'> km</abbr>",
+                            "value_object": None,
+                        },
+                        {"key": "stat_one_subtitle", "value": "Distance", "value_object": None},
+                    ],
+                    "timeAndLocation": {"location": None, "displayDate": "Today"},
+                    "isCommute": False,
+                    "isVirtual": False,
+                    "deviceName": None,
+                },
+            }
+        ],
+        "pagination": {"hasMore": False},
+    }
+
+
 def test_get_feed_returns_activities_with_decision(app_client: TestClient, data_dir: Path) -> None:
     """GET /api/feed returns activities enriched with give_kudos and reason."""
-    import json
     from unittest.mock import AsyncMock, patch
 
     from kudosy import store
 
     store.write_user_config_raw({"stravaSessionCookie": "valid-cookie", "athleteId": "20000001"})
 
-    # HTML with a single activity via the pageView fallback format (generic shape)
-    feed_entry = {
-        "id": "55000000001",
-        "name": "Test Run",
-        "sport_type": "Run",
-        "has_kudoed": False,
-        "distance": 10000.0,
-        "moving_time": 2700,
-        "athlete": {"id": "300000001", "name": "Test Runner"},
-    }
-    feed_html = (
-        "<html><script>var pageView = "
-        + json.dumps({"entries": [feed_entry]})
-        + ";</script></html>"
-    )
-
     mock_instance = AsyncMock()
-    mock_instance.fetch_following_feed.return_value = feed_html
+    mock_instance.fetch_following_feed.return_value = _make_feed_payload(
+        "55000000001", "Test Run", sport_type="Run", athlete_id="300000001"
+    )
     mock_instance.aclose = AsyncMock()
 
     with patch("kudosy.routes.StravaClient", return_value=mock_instance):
@@ -448,7 +483,10 @@ def test_get_feed_empty_feed_returns_empty_list(app_client: TestClient, data_dir
     store.write_user_config_raw({"stravaSessionCookie": "valid-cookie", "athleteId": "20000001"})
 
     mock_instance = AsyncMock()
-    mock_instance.fetch_following_feed.return_value = "<html><body>no feed data</body></html>"
+    mock_instance.fetch_following_feed.return_value = {
+        "entries": [],
+        "pagination": {"hasMore": False},
+    }
     mock_instance.aclose = AsyncMock()
 
     with patch("kudosy.routes.StravaClient", return_value=mock_instance):
@@ -469,7 +507,20 @@ _CACHED_ACTIVITY = {
     "activity_name": "Morning Run",
     "sport_type": "Run",
     "has_kudoed": False,
-    "stats": {"Distance": "10.00 km"},
+    "stats": {
+        "distance_m": 10000.0,
+        "elapsed_time_s": 2700,
+        "display": [
+            {
+                "key": "distance",
+                "label": "Distance",
+                "raw": "10.00 km",
+                "value": 10000.0,
+                "unit": "m",
+            }
+        ],
+        "extra": {},
+    },
 }
 _CACHE_TS = "2026-06-21T08:00:00+00:00"
 
@@ -506,7 +557,6 @@ def test_get_feed_refresh_true_fetches_from_strava_and_writes_cache(
     app_client: TestClient, data_dir: Path
 ) -> None:
     """?refresh=true forces a live Strava fetch and writes the result to the cache."""
-    import json
     from unittest.mock import AsyncMock, patch
 
     from kudosy import store
@@ -516,21 +566,16 @@ def test_get_feed_refresh_true_fetches_from_strava_and_writes_cache(
     # Pre-populate cache with stale activity
     store.write_activity_cache([dict(_CACHED_ACTIVITY)], _CACHE_TS)
 
-    new_entry = {
-        "id": "55000000002",
-        "name": "Evening Ride",
-        "sport_type": "Ride",
-        "has_kudoed": False,
-        "distance": 30000.0,
-        "moving_time": 3600,
-        "athlete": {"id": "300000002", "name": "Bob Radler"},
-    }
-    feed_html = (
-        "<html><script>var pageView = " + json.dumps({"entries": [new_entry]}) + ";</script></html>"
-    )
-
     mock_instance = AsyncMock()
-    mock_instance.fetch_following_feed.return_value = feed_html
+    mock_instance.fetch_following_feed.return_value = _make_feed_payload(
+        "55000000002",
+        "Evening Ride",
+        sport_type="Ride",
+        athlete_id="300000002",
+        athlete_name="Bob Radler",
+        distance_km=30.0,
+        elapsed_time=3600,
+    )
     mock_instance.aclose = AsyncMock()
 
     with patch("kudosy.routes.StravaClient", return_value=mock_instance):
@@ -555,7 +600,6 @@ def test_get_feed_first_boot_empty_cache_fetches_live_and_writes(
     app_client: TestClient, data_dir: Path
 ) -> None:
     """Empty cache on first boot: fetches live and populates the cache."""
-    import json
     from unittest.mock import AsyncMock, patch
 
     from kudosy import store
@@ -563,23 +607,16 @@ def test_get_feed_first_boot_empty_cache_fetches_live_and_writes(
     store.write_user_config_raw({"stravaSessionCookie": "valid-cookie", "athleteId": "20000001"})
     # bootstrap seeded fetched_at=None — cache is empty
 
-    feed_entry = {
-        "id": "55000000003",
-        "name": "First Run",
-        "sport_type": "Run",
-        "has_kudoed": False,
-        "distance": 5000.0,
-        "moving_time": 1500,
-        "athlete": {"id": "300000003", "name": "Carol Läuferin"},
-    }
-    feed_html = (
-        "<html><script>var pageView = "
-        + json.dumps({"entries": [feed_entry]})
-        + ";</script></html>"
-    )
-
     mock_instance = AsyncMock()
-    mock_instance.fetch_following_feed.return_value = feed_html
+    mock_instance.fetch_following_feed.return_value = _make_feed_payload(
+        "55000000003",
+        "First Run",
+        sport_type="Run",
+        athlete_id="300000003",
+        athlete_name="Carol Läuferin",
+        distance_km=5.0,
+        elapsed_time=1500,
+    )
     mock_instance.aclose = AsyncMock()
 
     with patch("kudosy.routes.StravaClient", return_value=mock_instance):

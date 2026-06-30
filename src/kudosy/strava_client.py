@@ -5,6 +5,17 @@ encapsulated in this module and feed.py. Changing endpoints only touches here.
 
 Authentication: uses the user's _strava4_session browser cookie.
 The CSRF token is extracted from a page's <meta name="csrf-token"> tag.
+
+Feed format (verified 2026-06-30 via HAR capture):
+  The following feed is a JSON XHR endpoint::
+
+      GET /dashboard/feed?feed_type=following&athlete_id=<id>
+      Accept: application/json
+      X-Requested-With: XMLHttpRequest
+      Accept-Language: en   ← forces English stat labels & decimal format
+
+  Use fetch_current_athlete_id() to resolve the athlete ID when the user has
+  not configured one explicitly.
 """
 
 from __future__ import annotations
@@ -12,6 +23,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -25,6 +37,7 @@ log = logging.getLogger(__name__)
 _BASE = "https://www.strava.com"
 _DASHBOARD_URL = f"{_BASE}/dashboard"
 _FEED_URL = f"{_BASE}/dashboard/feed"
+_CURRENT_ATHLETE_URL = f"{_BASE}/frontend/athletes/current"
 _KUDO_URL = f"{_BASE}/feed/activity/{{activity_id}}/kudo"
 _ATHLETE_URL = f"{_BASE}/athletes/{{athlete_id}}"
 _ATHLETE_SEARCH_URL = f"{_BASE}/athletes/search"
@@ -90,21 +103,74 @@ class StravaClient:
         log.debug("CSRF Token: %s…", token[:8])
         return token
 
-    async def fetch_following_feed(self, *, num_entries: int = 60) -> str:
-        """Fetch the following activity feed as HTML.
+    async def fetch_current_athlete_id(self) -> str | None:
+        """Return the numeric athlete ID string for the current session.
 
-        Fetches the Strava dashboard page which embeds activity feed data as
-        JSON in data-react-props attributes (appContext.feedProps.preFetchedEntries).
-        Returns raw HTML string for the feed parser to extract activities from.
+        Fetches ``/frontend/athletes/current`` and reads
+        ``currentAthlete.id_str``.  Returns ``None`` on any error.
+        """
+        client = self._get_client()
+        try:
+            resp = await client.get(
+                _CURRENT_ATHLETE_URL,
+                headers={"Accept": "application/json"},
+                timeout=10.0,
+            )
+            self._check_auth(resp)
+            data = resp.json()
+            id_str = (
+                data.get("currentAthlete", {}).get("id_str")
+                or str(data.get("currentAthlete", {}).get("id") or "")
+                or None
+            )
+            return id_str or None
+        except Exception:
+            log.debug("Could not resolve current athlete ID", exc_info=True)
+            return None
+
+    async def fetch_following_feed(
+        self, athlete_id: str, *, dump_raw: Path | None = None
+    ) -> dict[str, Any]:
+        """Fetch the following activity feed as a parsed JSON dict.
+
+        Calls ``GET /dashboard/feed?feed_type=following&athlete_id=<id>``.
+        The response is the canonical feed format processed by
+        :class:`~kudosy.feed.StructuredFeedParser`.
+
+        The ``Accept-Language: en`` header is sent to get English stat labels
+        and English decimal formatting, ensuring deterministic parsing.
+
+        Args:
+            athlete_id:  The numeric Strava athlete ID of the logged-in user.
+            dump_raw:    If given, write the raw JSON bytes to this path
+                         (useful for debugging format changes).
+
+        Returns:
+            The decoded JSON dict from the feed endpoint.
+
+        Raises:
+            AuthError: if the session cookie is expired/invalid.
         """
         client = self._get_client()
         resp = await client.get(
-            _DASHBOARD_URL,
-            params={"num_entries": num_entries},
+            _FEED_URL,
+            params={"feed_type": "following", "athlete_id": athlete_id},
+            headers={
+                "Accept": "application/json, text/plain, */*",
+                "X-Requested-With": "XMLHttpRequest",
+                "Referer": _DASHBOARD_URL,
+                "Accept-Language": "en",
+            },
             timeout=15.0,
         )
         self._check_auth(resp)
-        return resp.text
+        if dump_raw is not None:
+            try:
+                dump_raw.write_bytes(resp.content)
+                log.debug("Raw feed dumped to %s", dump_raw)
+            except OSError as exc:
+                log.debug("Could not dump raw feed: %s", exc)
+        return resp.json()  # type: ignore[no-any-return]
 
     async def send_kudos(self, activity_id: str, csrf_token: str) -> bool:
         """POST a kudo for *activity_id*. Returns True on success."""
