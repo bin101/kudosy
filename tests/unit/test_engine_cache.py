@@ -51,7 +51,9 @@ def make_fake_client(send_kudos_result: bool = True) -> AsyncMock:
 _USER_CFG = UserConfig(
     stravaSessionCookie="test-cookie",
     athleteId="20000001",
-    catchAll=CatchAll(minDistance=1.0),  # 1 km; test activities have no stat, gate uses presence of rule
+    catchAll=CatchAll(
+        minDistance=1.0
+    ),  # 1 km; test activities have no stat, gate uses presence of rule
 )
 
 

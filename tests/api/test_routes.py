@@ -688,11 +688,13 @@ def test_get_feed_recomputes_decisions_on_config_change(
     from kudosy import store
 
     # Include a Run rule so the activity passes the always-on rule gate
-    store.write_user_config_raw({
-        "stravaSessionCookie": "valid-cookie",
-        "athleteId": "20000001",
-        "kudoRules": {"minDistance": {"Run": 1.0}, "minTime": {}, "activityNames": []},
-    })
+    store.write_user_config_raw(
+        {
+            "stravaSessionCookie": "valid-cookie",
+            "athleteId": "20000001",
+            "kudoRules": {"minDistance": {"Run": 1.0}, "minTime": {}, "activityNames": []},
+        }
+    )
     store.write_activity_cache([dict(_CACHED_ACTIVITY)], _CACHE_TS)
 
     mock_cls = MagicMock()

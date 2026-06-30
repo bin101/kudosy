@@ -13,7 +13,15 @@ from unittest.mock import AsyncMock
 import pytest
 
 from kudosy.engine import run_kudos
-from kudosy.models import Activity, ActivityStats, AppSettings, CatchAll, KudoRules, RunResult, UserConfig
+from kudosy.models import (
+    Activity,
+    ActivityStats,
+    AppSettings,
+    CatchAll,
+    KudoRules,
+    RunResult,
+    UserConfig,
+)
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -75,6 +83,7 @@ def make_fake_client(
 # Rule-gating is always active: kudos require at least one distance or duration
 # rule. Tests that verify the "happy path" (kudos should be given) must provide
 # a config with a rule that the test activities satisfy.
+
 
 def _user_with_rule() -> UserConfig:
     """Return a minimal UserConfig with a catchAll rule that the default test activity passes."""
