@@ -1110,7 +1110,11 @@ function renderFeed() {
 
     const displayStats = (act.stats && act.stats.display) ? act.stats.display : [];
     const statsParts = displayStats
-      .map(s => `<span class="feed-stat"><strong>${s.label}:</strong> ${s.raw}</span>`)
+      .map(s => {
+        const labelKey = `stat.${s.key}`;
+        const label = t(labelKey) !== labelKey ? t(labelKey) : s.label;
+        return `<span class="feed-stat"><strong>${label}:</strong> ${s.raw}</span>`;
+      })
       .join('');
     const statsHtml  = statsParts ? `<div class="feed-stats">${statsParts}</div>` : '';
     const sportLabel = act.sport_type ? formatSportLabel(act.sport_type) : '—';

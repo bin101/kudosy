@@ -264,6 +264,9 @@ class TestClassifyStat:
     def test_unknown_label(self) -> None:
         assert classify_stat("Something Else") == "unknown"
 
+    def test_carbon_saved_label(self) -> None:
+        assert classify_stat("Carbon Saved") == "carbon_saved"
+
     def test_swim_pace_detected_from_raw(self) -> None:
         # Even if label is generic "Pace", /100m in raw signals swim pace.
         assert classify_stat("Pace", "1:37 /100m") == "swim_pace"

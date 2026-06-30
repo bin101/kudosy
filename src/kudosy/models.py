@@ -15,7 +15,7 @@ class StatValue(BaseModel):
     """A single parsed stat entry from the Strava activity feed."""
 
     key: str
-    """Canonical key: "distance" | "time" | "elevation_gain" | "pace" | "swim_pace" | "unknown"."""
+    """Canonical key: "distance" | "time" | "elevation_gain" | "pace" | "swim_pace" | "carbon_saved" | "unknown"."""  # noqa: E501
 
     label: str
     """Display label as provided by Strava (e.g. "Elev Gain", "Pace")."""
