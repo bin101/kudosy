@@ -5,8 +5,15 @@ Precedence (highest → lowest):
   2. has_kudoed == True        → SKIP (ALREADY)
   3. Athlete in allowAthletes  → GIVE (ALLOW) — overrides distance/time criteria
   4. activity name matches a regex → GIVE (NAME_MATCH) — overrides thresholds
-  5. Stats below minDistance or minTime for sport type → SKIP (CRITERIA)
-  6. Default → GIVE (DEFAULT)
+  5. Sport type has no effective rule → SKIP (NO_RULE) — rule-gating (always active)
+  6. Stats below minDistance or minTime for sport type → SKIP (CRITERIA)
+  7. Default → GIVE (DEFAULT)
+
+Rule-gating (step 5): kudos are given only when the sport type has at least one
+effective Distance or Duration rule, regardless of whether it comes from a
+per-sport rule, a category rule, or a catchAll rule (all three sources collapse
+into the same flat per-sport dicts after build_effective_config, so a single
+dict lookup captures all sources).
 
 Note on missing stats: If a rule (e.g. minDistance) exists for a sport type
 but the activity has no Distance stat, the rule is treated as not violated
@@ -37,6 +44,22 @@ def _check_name_match(activity_name: str, patterns: list[str]) -> bool:
         except re.error:
             log.warning("Invalid regex pattern %r — skipping", pattern)
     return False
+
+
+def _has_rule(sport: str, eff: EffectiveConfig) -> bool:
+    """Return True when *sport* has at least one effective Distance OR Duration rule.
+
+    After build_effective_config, catchAll / category / per-sport rules are all
+    collapsed into the flat per-sport dicts — a single dict lookup per metric
+    captures all three sources.  A rule "counts" only when its value is > 0
+    (the merge never stores non-positive values, so presence in the dict already
+    implies > 0; the explicit check is a defensive guard).
+    """
+    dist = eff.kudoRules.minDistance.get(sport)
+    if dist is not None and dist > 0:
+        return True
+    time = eff.kudoRules.minTime.get(sport)
+    return time is not None and time > 0
 
 
 def _check_criteria(activity: Activity, eff: EffectiveConfig) -> bool:
@@ -95,9 +118,13 @@ def decide(activity: Activity, eff: EffectiveConfig) -> Decision:
     ):
         return Decision(give_kudos=_GIVE, reason=DecisionReason.NAME_MATCH)
 
-    # 5. Stats criteria
+    # 5. Rule-gating: sport type must have at least one effective rule
+    if not _has_rule(activity.sport_type, eff):
+        return Decision(give_kudos=_SKIP, reason=DecisionReason.NO_RULE)
+
+    # 6. Stats criteria
     if _check_criteria(activity, eff):
         return Decision(give_kudos=_SKIP, reason=DecisionReason.CRITERIA)
 
-    # 6. Default → give kudos
+    # 7. Default → give kudos
     return Decision(give_kudos=_GIVE, reason=DecisionReason.DEFAULT)

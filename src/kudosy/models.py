@@ -75,6 +75,12 @@ class KudoRules(BaseModel):
 
     minDistance: dict[str, float] = {}
     minTime: dict[str, float] = {}
+    # Category-level rules: keyed by category name (e.g. "FootSports").
+    # On the user layer these hold the user's category settings; on the
+    # effective layer they are always empty (already expanded into the
+    # flat per-sport dicts by build_effective_config).
+    categoryMinDistance: dict[str, float] = {}
+    categoryMinTime: dict[str, float] = {}
     activityNames: list[str] = []
 
 
@@ -230,7 +236,8 @@ class DecisionReason(StrEnum):
     ALLOW = "allow"  # athlete in allow list → always give kudos (overrides criteria)
     CRITERIA = "criteria"  # below minDistance/minTime threshold
     NAME_MATCH = "name_match"  # activity name matched a regex → always give
-    DEFAULT = "default"  # no rule matched → give kudos
+    NO_RULE = "no_rule"  # sport type has no effective rule → gating skips it
+    DEFAULT = "default"  # rule exists and criteria passed → give kudos
 
 
 class Decision(BaseModel):

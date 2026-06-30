@@ -107,7 +107,13 @@ function formatSportLabel(type) {
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
-let sportTypes    = [];
+let sportTypes      = [];
+let sportCategories = {};   // { FootSports: [...], CycleSports: [...], … }
+// The five canonical category names — used to distinguish a category-keyed row from
+// a sport-keyed row when reading the rules tables back.
+const CATEGORY_NAME_SET = new Set([
+  'FootSports', 'CycleSports', 'WaterSports', 'WinterSports', 'OtherSports',
+]);
 let athleteLabels = {};
 let athleteAvatars = {};
 let pollTimer     = null;
@@ -185,6 +191,7 @@ function buildSportTypeSelect(selectedType = '') {
   const sel = document.createElement('select');
   sel.className = 'sport-type-select';
 
+  // Blank placeholder (always first, outside any optgroup)
   const blank = document.createElement('option');
   blank.value = '';
   blank.textContent = t('table.sportType.placeholder');
@@ -192,20 +199,54 @@ function buildSportTypeSelect(selectedType = '') {
   sel.appendChild(blank);
 
   let found = !selectedType;
-  for (const type of sportTypes) {
-    const opt = document.createElement('option');
-    opt.value = type;
-    opt.textContent = formatSportLabel(type);
-    if (type === selectedType) { opt.selected = true; found = true; }
-    sel.appendChild(opt);
+
+  // Prefer the grouped format when category data is available
+  const hasCats = Object.keys(sportCategories).length > 0;
+  const cats = hasCats ? sportCategories : { '': sportTypes };
+
+  for (const [cat, sports] of Object.entries(cats)) {
+    if (!sports.length) continue;
+
+    let container;
+    if (hasCats) {
+      container = document.createElement('optgroup');
+      const catLabel = t(`category.${cat}`);
+      container.label = (catLabel !== `category.${cat}`) ? catLabel : cat;
+
+      // Selectable category option — selecting it applies the rule to all members
+      const catOpt = document.createElement('option');
+      catOpt.value = cat;
+      catOpt.className = 'opt-category';
+      const allLabel = t('table.category.all');
+      catOpt.textContent = allLabel !== 'table.category.all'
+        ? allLabel.replace('{cat}', container.label)
+        : `★ ${container.label}`;
+      if (cat === selectedType) { catOpt.selected = true; found = true; }
+      container.appendChild(catOpt);
+    } else {
+      container = sel;
+    }
+
+    for (const type of sports) {
+      const opt = document.createElement('option');
+      opt.value = type;
+      opt.textContent = formatSportLabel(type);
+      if (type === selectedType) { opt.selected = true; found = true; }
+      container.appendChild(opt);
+    }
+
+    if (hasCats) sel.appendChild(container);
   }
 
+  // Fallback: a saved value that is no longer in the active lists
   if (!found && selectedType) {
     const opt = document.createElement('option');
     opt.value = selectedType;
     opt.textContent = `${formatSportLabel(selectedType)} ↑`;
     opt.selected = true;
-    sel.insertBefore(opt, sel.children[1]);
+    // Insert right after the blank option; children[1] may be an <optgroup>
+    // when categories are loaded, but insertBefore still works correctly.
+    sel.insertBefore(opt, sel.children[1] || null);
   }
 
   return sel;
@@ -248,26 +289,42 @@ function addRuleRow(tbody, sportType = '', value = '') {
   tbody.appendChild(tr);
 }
 
+/**
+ * Read all rows from a rules table.
+ * Returns { sport: {Run: 5, …}, category: {FootSports: 8, …} }
+ * A row is "category" when its select value is one of the five CATEGORY_NAME_SET names.
+ */
 function getRulesFromTable(tbody) {
-  const result = {};
+  const sport    = {};
+  const category = {};
   tbody.querySelectorAll('tr').forEach(tr => {
-    const sel    = tr.querySelector('select');
-    const numIn  = tr.querySelector('input[type="number"]');
+    const sel   = tr.querySelector('select');
+    const numIn = tr.querySelector('input[type="number"]');
     if (!sel || !numIn) return;
-    const type = sel.value.trim();
-    const raw  = numIn.value.trim();
-    if (type && raw !== '') {
+    const key = sel.value.trim();
+    const raw = numIn.value.trim();
+    if (key && raw !== '') {
       const val = parseFloat(raw);
-      if (!isNaN(val)) result[type] = val;
+      if (!isNaN(val)) {
+        if (CATEGORY_NAME_SET.has(key)) category[key] = val;
+        else sport[key] = val;
+      }
     }
   });
-  return result;
+  return { sport, category };
 }
 
-function populateRulesTable(tbody, rules) {
+/**
+ * Populate a rules table from two dicts: per-sport rules and per-category rules.
+ * Both are loaded into the same table; the select in each row distinguishes them.
+ */
+function populateRulesTable(tbody, sportRules, categoryRules) {
   tbody.innerHTML = '';
-  for (const [type, val] of Object.entries(rules || {})) {
+  for (const [type, val] of Object.entries(sportRules || {})) {
     addRuleRow(tbody, type, val);
+  }
+  for (const [cat, val] of Object.entries(categoryRules || {})) {
+    addRuleRow(tbody, cat, val);
   }
 }
 
@@ -526,8 +583,8 @@ async function loadConfig() {
     addAthleteManagedRow(manageList, id, athleteLabels[id] || '', 'allow', athleteAvatars[id] || '');
   }
 
-  populateRulesTable($('tbody-distance'), cfg.kudoRules?.minDistance);
-  populateRulesTable($('tbody-time'),     cfg.kudoRules?.minTime);
+  populateRulesTable($('tbody-distance'), cfg.kudoRules?.minDistance, cfg.kudoRules?.categoryMinDistance);
+  populateRulesTable($('tbody-time'),     cfg.kudoRules?.minTime,     cfg.kudoRules?.categoryMinTime);
 
   const namesList = $('activity-names-list');
   namesList.innerHTML = '';
@@ -549,11 +606,17 @@ async function saveConfig(e) {
         minDistance: parseFloat($('catchAllDist').value) || 0,
         minTime:     parseFloat($('catchAllTime').value) || 0,
       },
-      kudoRules: {
-        minDistance:   getRulesFromTable($('tbody-distance')),
-        minTime:       getRulesFromTable($('tbody-time')),
-        activityNames: getListValues($('activity-names-list')),
-      },
+      kudoRules: (() => {
+        const dist = getRulesFromTable($('tbody-distance'));
+        const time = getRulesFromTable($('tbody-time'));
+        return {
+          minDistance:         dist.sport,
+          minTime:             time.sport,
+          categoryMinDistance: dist.category,
+          categoryMinTime:     time.category,
+          activityNames:       getListValues($('activity-names-list')),
+        };
+      })(),
     };
     if (!cfg.kudoRules.activityNames.length) delete cfg.kudoRules.activityNames;
     await putJson('/api/config', cfg);
@@ -1293,9 +1356,13 @@ function initRevealButtons() {
 
 async function init() {
   try {
-    sportTypes = await fetchJson('/api/sport-types');
+    [sportTypes, sportCategories] = await Promise.all([
+      fetchJson('/api/sport-types'),
+      fetchJson('/api/sport-categories'),
+    ]);
   } catch {
-    sportTypes = [];
+    sportTypes      = [];
+    sportCategories = {};
   }
 
   // Apply static translations for the initial language

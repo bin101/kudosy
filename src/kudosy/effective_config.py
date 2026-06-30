@@ -1,18 +1,33 @@
-"""Pure two-layer effective-config merge.
+"""Pure three-layer effective-config merge.
 
 Priority (highest → lowest):
-  1. User per-sport rules  (from config.yaml kudoRules)
-  2. Catch-all rule (from config.yaml catchAll) expanded over every sport type
+  1. User per-sport rules        (kudoRules.minDistance / minTime)
+  2. User category rules         (kudoRules.categoryMinDistance / minTime),
+                                  expanded over each category's member sports
+  3. Catch-all rule              (catchAll.*), expanded over every sport type
 
-Setting a value to 0 explicitly removes a rule for a sport type, even if the
-catch-all would otherwise apply.  activityNames is taken directly from the user
-config (no union needed — there is only one layer).
+At every layer: value > 0 SETS the rule, value == 0 REMOVES (pops) it.
+A category 0 removes catch-all-set rules for that category's members; a
+per-sport 0 removes whatever any lower layer set for that single sport.
+
+activityNames is taken directly from the user config (single layer, no merge).
+Category dicts are NOT copied onto the effective layer — they are fully
+expanded into the flat per-sport dicts here.
 """
 
 from __future__ import annotations
 
 from kudosy.models import EffectiveConfig, KudoRules, UserConfig
-from kudosy.sport_types import ALL_SPORT_TYPES
+from kudosy.sport_types import ALL_SPORT_TYPES, sports_in_category
+
+
+def _apply_layer(target: dict[str, float], updates: dict[str, float]) -> None:
+    """Apply one merge layer in-place: value > 0 sets, value == 0 removes."""
+    for key, val in updates.items():
+        if val > 0:
+            target[key] = val
+        else:
+            target.pop(key, None)
 
 
 def build_effective_config(
@@ -25,7 +40,7 @@ def build_effective_config(
     min_distance: dict[str, float] = {}
     min_time: dict[str, float] = {}
 
-    # Step 1: expand catch-all over all known sport types (only when > 0)
+    # ── Layer 3 (lowest): catch-all over every known sport type (only when > 0) ──
     if catch_all and catch_all.minDistance > 0:
         for sport in ALL_SPORT_TYPES:
             min_distance[sport] = catch_all.minDistance
@@ -33,17 +48,16 @@ def build_effective_config(
         for sport in ALL_SPORT_TYPES:
             min_time[sport] = catch_all.minTime
 
-    # Step 2: overlay user per-sport rules (highest priority; > 0 sets, 0 removes)
-    for sport, val in user_rules.minDistance.items():
-        if val > 0:
-            min_distance[sport] = val
-        else:
-            min_distance.pop(sport, None)
-    for sport, val in user_rules.minTime.items():
-        if val > 0:
-            min_time[sport] = val
-        else:
-            min_time.pop(sport, None)
+    # ── Layer 2: category rules, expanded over each category's member sports ──
+    # A category value of 0 removes any catch-all-set rule for its members.
+    for category, val in user_rules.categoryMinDistance.items():
+        _apply_layer(min_distance, {s: val for s in sports_in_category(category)})
+    for category, val in user_rules.categoryMinTime.items():
+        _apply_layer(min_time, {s: val for s in sports_in_category(category)})
+
+    # ── Layer 1 (highest): per-sport rules ──
+    _apply_layer(min_distance, user_rules.minDistance)
+    _apply_layer(min_time, user_rules.minTime)
 
     return EffectiveConfig(
         stravaSessionCookie=user.stravaSessionCookie if user else "",
@@ -53,6 +67,8 @@ def build_effective_config(
         kudoRules=KudoRules(
             minDistance=min_distance,
             minTime=min_time,
+            # Category dicts intentionally left empty on the effective layer —
+            # they have already been expanded into the flat per-sport dicts above.
             activityNames=user_rules.activityNames,
         ),
     )

@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from kudosy.engine import run_kudos
-from kudosy.models import Activity, AppSettings, UserConfig
+from kudosy.models import Activity, AppSettings, CatchAll, UserConfig
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -46,7 +46,15 @@ def make_fake_client(send_kudos_result: bool = True) -> AsyncMock:
     return client
 
 
-_USER_CFG = UserConfig(stravaSessionCookie="test-cookie", athleteId="20000001")
+# Rule-gating is always active: a catchAll rule is required so that test
+# activities (sport_type="Run") pass the gate and receive kudos.
+_USER_CFG = UserConfig(
+    stravaSessionCookie="test-cookie",
+    athleteId="20000001",
+    catchAll=CatchAll(
+        minDistance=1.0
+    ),  # 1 km; test activities have no stat, gate uses presence of rule
+)
 
 
 # ── Cache skip tests ──────────────────────────────────────────────────────────

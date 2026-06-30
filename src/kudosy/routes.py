@@ -19,6 +19,7 @@ from kudosy.decision import decide
 from kudosy.effective_config import build_effective_config
 from kudosy.feed import AuthError, StructuredFeedParser
 from kudosy.models import Activity, RunResult, RunStatus
+from kudosy.sport_types import categorize_sport_types
 from kudosy.store import (
     cache_athlete_avatar,
     cache_athlete_label,
@@ -121,6 +122,17 @@ async def put_settings(request: Request) -> dict[str, Any]:
 async def get_sport_types(request: Request) -> list[str]:
     state = request.app.state
     return state.active_sport_types  # type: ignore[no-any-return]
+
+
+@router.get("/api/sport-categories")
+async def get_sport_categories(request: Request) -> dict[str, list[str]]:
+    """Return active sport types grouped into the five official Strava categories.
+
+    Unknown (live-fetched) sport types that are not in the static category map
+    fall into ``OtherSports``.  All five category keys are always present.
+    """
+    active: list[str] = request.app.state.active_sport_types
+    return categorize_sport_types(active)
 
 
 # ── Athlete lookup ────────────────────────────────────────────────────────────
