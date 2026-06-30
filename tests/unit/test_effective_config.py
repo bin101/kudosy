@@ -86,3 +86,56 @@ class TestActivityNames:
     def test_null_user_config_empty_names(self) -> None:
         cfg = build_effective_config(None)
         assert cfg.kudoRules.activityNames == []
+
+
+class TestCategoryRules:
+    """Category keys are expanded to member sport types during the merge."""
+
+    def test_category_key_expands_to_members(self) -> None:
+        from kudosy.sport_types import SPORT_CATEGORIES
+
+        cfg = build_effective_config(_user(per_dist={"CycleSports": 10}))
+        for sport in SPORT_CATEGORIES["CycleSports"]:
+            assert cfg.kudoRules.minDistance.get(sport) == 10, f"Expected {sport} to have rule"
+
+    def test_category_key_does_not_appear_in_result(self) -> None:
+        cfg = build_effective_config(_user(per_dist={"FootSports": 5}))
+        assert "FootSports" not in cfg.kudoRules.minDistance
+
+    def test_sport_overrides_category(self) -> None:
+        # Category sets 10 km for all cycle sports; Run explicitly overrides to 3 km
+        cfg = build_effective_config(_user(per_dist={"FootSports": 10, "Run": 3}))
+        assert cfg.kudoRules.minDistance["Run"] == 3
+        assert cfg.kudoRules.minDistance["Walk"] == 10
+
+    def test_sport_zero_removes_category_member(self) -> None:
+        # Category sets 10 km; Run=0 removes Run specifically
+        cfg = build_effective_config(_user(per_dist={"FootSports": 10, "Run": 0}))
+        assert "Run" not in cfg.kudoRules.minDistance
+        assert cfg.kudoRules.minDistance["Walk"] == 10
+
+    def test_category_zero_removes_catchall_members(self) -> None:
+        # catchAll sets 5 km for all; CycleSports=0 removes cycle sports
+        from kudosy.sport_types import SPORT_CATEGORIES
+
+        cfg = build_effective_config(_user(catch_min_dist=5, per_dist={"CycleSports": 0}))
+        for sport in SPORT_CATEGORIES["CycleSports"]:
+            assert sport not in cfg.kudoRules.minDistance, f"{sport} should be removed"
+        # Non-cycle sports still have the catchAll value
+        assert cfg.kudoRules.minDistance.get("Run") == 5
+
+    def test_category_time_rule_expands(self) -> None:
+        from kudosy.sport_types import SPORT_CATEGORIES
+
+        cfg = build_effective_config(_user(per_time={"WaterSports": 30}))
+        for sport in SPORT_CATEGORIES["WaterSports"]:
+            assert cfg.kudoRules.minTime.get(sport) == 30
+
+    def test_multiple_categories(self) -> None:
+        from kudosy.sport_types import SPORT_CATEGORIES
+
+        cfg = build_effective_config(_user(per_dist={"CycleSports": 10, "FootSports": 5}))
+        for sport in SPORT_CATEGORIES["CycleSports"]:
+            assert cfg.kudoRules.minDistance.get(sport) == 10
+        for sport in SPORT_CATEGORIES["FootSports"]:
+            assert cfg.kudoRules.minDistance.get(sport) == 5

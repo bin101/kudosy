@@ -89,6 +89,56 @@ def parse_duration(raw: str | None) -> int | None:
     return total
 
 
+# ── Stats normalization ───────────────────────────────────────────────────────
+
+# Canonical keys for time stats used throughout the engine.
+STAT_KEY_TIME = "Time"  # moving time (used by decision.py criteria check)
+STAT_KEY_TOTAL_TIME = "Total Time"  # elapsed/total time
+
+
+def normalize_stats(stats: dict[str, str]) -> dict[str, str]:
+    """Normalize time entries in *stats* to canonical keys.
+
+    Scans all entries for values parseable as a duration (via parse_duration).
+    Non-time entries (distance, pace, heart rate, etc.) are kept as-is.
+
+    Rules:
+    - 0 duration entries: stats returned unchanged.
+    - 1 duration entry:   renamed to ``"Time"`` (moving time).
+    - 2+ duration entries: shortest → ``"Time"`` (moving), longest → ``"Total Time"``;
+      any intermediate values are discarded (they are ambiguous).
+
+    Original keys for duration entries are replaced.  This function is
+    idempotent: calling it twice produces the same result.
+
+    The decision engine reads ``stats["Time"]`` for minTime checks, so the
+    moving time is always kept under the ``"Time"`` key.
+    """
+    time_entries: list[tuple[str, int]] = []  # (original_key, seconds)
+    non_time: dict[str, str] = {}
+
+    for key, value in stats.items():
+        secs = parse_duration(value)
+        if secs is not None:
+            time_entries.append((key, secs))
+        else:
+            non_time[key] = value
+
+    if not time_entries:
+        return dict(stats)
+
+    result = dict(non_time)
+    if len(time_entries) == 1:
+        result[STAT_KEY_TIME] = stats[time_entries[0][0]]
+    else:
+        # Sort ascending by seconds; shortest = moving time, longest = total time.
+        time_entries.sort(key=lambda x: x[1])
+        result[STAT_KEY_TIME] = stats[time_entries[0][0]]
+        result[STAT_KEY_TOTAL_TIME] = stats[time_entries[-1][0]]
+
+    return result
+
+
 # ── Athlete name ──────────────────────────────────────────────────────────────
 
 _OG_TITLE_RE = (

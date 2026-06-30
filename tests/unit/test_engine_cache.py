@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from kudosy.engine import run_kudos
-from kudosy.models import Activity, AppSettings, UserConfig
+from kudosy.models import Activity, AppSettings, CatchAll, UserConfig
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -46,7 +46,12 @@ def make_fake_client(send_kudos_result: bool = True) -> AsyncMock:
     return client
 
 
-_USER_CFG = UserConfig(stravaSessionCookie="test-cookie", athleteId="20000001")
+# catchAll distance rule so Run (10.23 km) meets criteria (opt-in model requires a rule).
+_USER_CFG = UserConfig(
+    stravaSessionCookie="test-cookie",
+    athleteId="20000001",
+    catchAll=CatchAll(minDistance=5.0),
+)
 
 
 # ── Cache skip tests ──────────────────────────────────────────────────────────

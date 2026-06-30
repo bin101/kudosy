@@ -107,7 +107,8 @@ function formatSportLabel(type) {
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
-let sportTypes    = [];
+let sportTypes      = [];
+let sportCategories = {};   // { CycleSports: [...], FootSports: [...], ... }
 let athleteLabels = {};
 let athleteAvatars = {};
 let pollTimer     = null;
@@ -181,6 +182,9 @@ function initTabs() {
 
 // ── Sport type <select> ───────────────────────────────────────────────────────
 
+// Known category IDs — must match CATEGORY_IDS in sport_types.py.
+const CATEGORY_IDS = new Set(['FootSports', 'CycleSports', 'WaterSports', 'WinterSports', 'OtherSports']);
+
 function buildSportTypeSelect(selectedType = '') {
   const sel = document.createElement('select');
   sel.className = 'sport-type-select';
@@ -192,18 +196,51 @@ function buildSportTypeSelect(selectedType = '') {
   sel.appendChild(blank);
 
   let found = !selectedType;
-  for (const type of sportTypes) {
-    const opt = document.createElement('option');
-    opt.value = type;
-    opt.textContent = formatSportLabel(type);
-    if (type === selectedType) { opt.selected = true; found = true; }
-    sel.appendChild(opt);
+
+  if (Object.keys(sportCategories).length > 0) {
+    // Grouped mode: one optgroup per Strava category, with a selectable category option.
+    for (const [cat, members] of Object.entries(sportCategories)) {
+      const group = document.createElement('optgroup');
+      group.label = t(`category.${cat}`);
+
+      // Selectable category option (applies rule to all member sports).
+      const catOpt = document.createElement('option');
+      catOpt.value = cat;
+      catOpt.textContent = t(`category.${cat}.all`);
+      if (cat === selectedType) { catOpt.selected = true; found = true; }
+      group.appendChild(catOpt);
+
+      for (const type of members) {
+        const opt = document.createElement('option');
+        opt.value = type;
+        opt.textContent = formatSportLabel(type);
+        if (type === selectedType) { opt.selected = true; found = true; }
+        group.appendChild(opt);
+      }
+
+      sel.appendChild(group);
+    }
+  } else {
+    // Flat fallback (categories not yet loaded).
+    for (const type of sportTypes) {
+      const opt = document.createElement('option');
+      opt.value = type;
+      opt.textContent = formatSportLabel(type);
+      if (type === selectedType) { opt.selected = true; found = true; }
+      sel.appendChild(opt);
+    }
   }
 
+  // If the saved value is no longer present (deleted sport or unknown key),
+  // insert it at the top so the user can see and update it.
+  // Category IDs are valid even if not in sportCategories (e.g. empty category).
   if (!found && selectedType) {
     const opt = document.createElement('option');
     opt.value = selectedType;
-    opt.textContent = `${formatSportLabel(selectedType)} ↑`;
+    const label = CATEGORY_IDS.has(selectedType)
+      ? t(`category.${selectedType}.all`)
+      : formatSportLabel(selectedType);
+    opt.textContent = `${label} ↑`;
     opt.selected = true;
     sel.insertBefore(opt, sel.children[1]);
   }
@@ -1109,7 +1146,13 @@ function renderFeed() {
       : `<span class="feed-kudo-badge feed-kudo-pending">${t('feed.kudo.pending')}</span>`;
 
     const statsParts = Object.entries(act.stats)
-      .map(([k, v]) => `<span class="feed-stat"><strong>${k}:</strong> ${v}</span>`)
+      .map(([k, v]) => {
+        const label = k === 'Time'       ? t('feed.stat.movingTime')
+                    : k === 'Total Time' ? t('feed.stat.totalTime')
+                    : k === 'Distance'   ? t('feed.stat.distance')
+                    : k;
+        return `<span class="feed-stat"><strong>${label}:</strong> ${v}</span>`;
+      })
       .join('');
     const statsHtml  = statsParts ? `<div class="feed-stats">${statsParts}</div>` : '';
     const sportLabel = act.sport_type ? formatSportLabel(act.sport_type) : '—';
@@ -1288,9 +1331,13 @@ function initRevealButtons() {
 
 async function init() {
   try {
-    sportTypes = await fetchJson('/api/sport-types');
+    [sportTypes, sportCategories] = await Promise.all([
+      fetchJson('/api/sport-types').catch(() => []),
+      fetchJson('/api/sport-categories').catch(() => ({})),
+    ]);
   } catch {
     sportTypes = [];
+    sportCategories = {};
   }
 
   // Apply static translations for the initial language

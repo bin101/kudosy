@@ -3,10 +3,11 @@
 Precedence (highest → lowest):
   1. Athlete in ignoreAthletes → SKIP (IGNORE)
   2. has_kudoed == True        → SKIP (ALREADY)
-  3. Athlete in allowAthletes  → GIVE (ALLOW) — overrides distance/time criteria
+  3. Athlete in allowAthletes  → GIVE (ALLOW) — overrides all rules/criteria
   4. activity name matches a regex → GIVE (NAME_MATCH) — overrides thresholds
-  5. Stats below minDistance or minTime for sport type → SKIP (CRITERIA)
-  6. Default → GIVE (DEFAULT)
+  5. No distance/duration rule configured for this sport → SKIP (NO_RULE)
+  6. Stats below minDistance or minTime for sport type → SKIP (CRITERIA)
+  7. Rule exists and criteria met → GIVE (DEFAULT)
 
 Note on missing stats: If a rule (e.g. minDistance) exists for a sport type
 but the activity has no Distance stat, the rule is treated as not violated
@@ -93,9 +94,15 @@ def decide(activity: Activity, eff: EffectiveConfig) -> Decision:
     ):
         return Decision(give_kudos=_GIVE, reason=DecisionReason.NAME_MATCH)
 
-    # 5. Stats criteria
+    # 5. No rule configured for this sport type → skip (opt-in model)
+    sport = activity.sport_type
+    has_rule = sport in eff.kudoRules.minDistance or sport in eff.kudoRules.minTime
+    if not has_rule:
+        return Decision(give_kudos=_SKIP, reason=DecisionReason.NO_RULE)
+
+    # 6. Stats criteria
     if _check_criteria(activity, eff):
         return Decision(give_kudos=_SKIP, reason=DecisionReason.CRITERIA)
 
-    # 6. Default → give kudos
+    # 7. Rule exists and criteria met → give kudos
     return Decision(give_kudos=_GIVE, reason=DecisionReason.DEFAULT)

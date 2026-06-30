@@ -13,7 +13,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from kudosy.engine import run_kudos
-from kudosy.models import Activity, AppSettings, KudoRules, RunResult, UserConfig
+from kudosy.models import Activity, AppSettings, CatchAll, KudoRules, RunResult, UserConfig
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -72,9 +72,14 @@ async def test_dry_run_returns_result() -> None:
     activities = [make_activity()]
     client = make_fake_client()
     parser = FakeFeedParser(activities)
+    # Provide a catchAll distance rule so Run (10.23 km) meets criteria (opt-in model).
+    user_cfg = UserConfig(
+        stravaSessionCookie="x",
+        catchAll=CatchAll(minDistance=5.0),
+    )
 
     result = await run_kudos(
-        user_cfg=None,
+        user_cfg=user_cfg,
         settings=AppSettings(),
         client=client,
         feed_parser=parser,
@@ -95,9 +100,14 @@ async def test_live_run_sends_kudos() -> None:
     activities = [make_activity()]
     client = make_fake_client(send_kudos_result=True)
     parser = FakeFeedParser(activities)
+    # Provide a catchAll distance rule so Run (10.23 km) meets criteria (opt-in model).
+    user_cfg = UserConfig(
+        stravaSessionCookie="x",
+        catchAll=CatchAll(minDistance=5.0),
+    )
 
     result = await run_kudos(
-        user_cfg=None,
+        user_cfg=user_cfg,
         settings=AppSettings(
             minKudosDelaySeconds=0.0,
             maxKudosDelaySeconds=0.0,
@@ -238,9 +248,13 @@ async def test_failed_kudos_not_counted() -> None:
     activities = [make_activity(activity_id="10000000001")]
     client = make_fake_client(send_kudos_result=False)
     parser = FakeFeedParser(activities)
+    user_cfg = UserConfig(
+        stravaSessionCookie="x",
+        catchAll=CatchAll(minDistance=5.0),
+    )
 
     result = await run_kudos(
-        user_cfg=None,
+        user_cfg=user_cfg,
         settings=AppSettings(
             minKudosDelaySeconds=0.0,
             maxKudosDelaySeconds=0.0,
@@ -300,9 +314,13 @@ async def test_multiple_activities_all_given() -> None:
     ]
     client = make_fake_client()
     parser = FakeFeedParser(activities)
+    user_cfg = UserConfig(
+        stravaSessionCookie="x",
+        catchAll=CatchAll(minDistance=5.0),
+    )
 
     result = await run_kudos(
-        user_cfg=None,
+        user_cfg=user_cfg,
         settings=AppSettings(
             minKudosDelaySeconds=0.0,
             maxKudosDelaySeconds=0.0,

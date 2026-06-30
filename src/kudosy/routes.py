@@ -19,6 +19,7 @@ from kudosy.decision import decide
 from kudosy.effective_config import build_effective_config
 from kudosy.feed import AuthError, StravaHtmlFeedParser
 from kudosy.models import Activity, RunResult, RunStatus
+from kudosy.parsers import normalize_stats
 from kudosy.store import (
     cache_athlete_avatar,
     cache_athlete_label,
@@ -121,6 +122,42 @@ async def put_settings(request: Request) -> dict[str, Any]:
 async def get_sport_types(request: Request) -> list[str]:
     state = request.app.state
     return state.active_sport_types  # type: ignore[no-any-return]
+
+
+@router.get("/api/sport-categories")
+async def get_sport_categories(request: Request) -> dict[str, list[str]]:
+    """Return sport types grouped by Strava category.
+
+    Each category key maps to the intersection of the hardcoded category members
+    and the currently active sport types, preserving the canonical order.
+    Sport types present in the active list but not in any hardcoded category
+    are collected in an 'OtherSports' bucket at the end (deduped against the
+    hardcoded OtherSports members).
+    """
+    from kudosy.sport_types import SPORT_CATEGORIES
+
+    active: list[str] = request.app.state.active_sport_types
+    active_set = set(active)
+
+    result: dict[str, list[str]] = {}
+    # Walk categories in declaration order; filter to active sport types.
+    for cat, members in SPORT_CATEGORIES.items():
+        filtered = [s for s in members if s in active_set]
+        if filtered:
+            result[cat] = filtered
+
+    # Any active sport type not covered by the hardcoded categories → OtherSports.
+    categorised = {s for sports in result.values() for s in sports}
+    extras = [s for s in active if s not in categorised]
+    if extras:
+        result.setdefault("OtherSports", [])
+        seen = set(result["OtherSports"])
+        for s in extras:
+            if s not in seen:
+                result["OtherSports"].append(s)
+                seen.add(s)
+
+    return result
 
 
 # ── Athlete lookup ────────────────────────────────────────────────────────────
@@ -304,6 +341,11 @@ def _decorate_feed(raw_acts: list[dict[str, Any]], effective: Any) -> list[dict[
     out: list[dict[str, Any]] = []
     for raw in raw_acts:
         try:
+            # Normalize time stats so cached activities with raw Strava labels
+            # are transparently re-labelled to canonical "Time"/"Total Time" keys.
+            stats = raw.get("stats")
+            if isinstance(stats, dict):
+                raw = {**raw, "stats": normalize_stats(stats)}
             act = Activity.model_validate(raw)
         except Exception:
             log.debug("_decorate_feed: skipping invalid activity entry: %s", raw)

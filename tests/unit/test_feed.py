@@ -549,3 +549,35 @@ def test_react_props_camel_case_moving_time() -> None:
     assert len(result) == 1
     assert "Time" in result[0].stats
     assert "1h" in result[0].stats["Time"]
+
+
+def test_react_props_two_time_stats_normalized() -> None:
+    """When Strava delivers both moving time and elapsed time as stats, the parser
+    normalizes them: shorter → 'Time' (moving time), longer → 'Total Time'."""
+    entries = [
+        {
+            "entity": "Activity",
+            "activity": {
+                "id": 11000000099,
+                "activityName": "Dual Time Ride",
+                "type": "Ride",
+                "athlete": {"athleteId": 300000099, "athleteName": "Dual Timer"},
+                "kudosAndComments": {"hasKudoed": False},
+                "stats": [
+                    {"key": "stat_one", "value": "30.10 km"},
+                    {"key": "stat_one_subtitle", "value": "Distance"},
+                    {"key": "stat_two", "value": "1h 05m"},
+                    {"key": "stat_two_subtitle", "value": "Moving Time"},
+                    {"key": "stat_three", "value": "1h 22m"},
+                    {"key": "stat_three_subtitle", "value": "Elapsed Time"},
+                ],
+            },
+        }
+    ]
+    result = _parser().parse(_make_react_html(entries))
+    assert len(result) == 1
+    stats = result[0].stats
+    assert stats["Time"] == "1h 05m", "Shorter time should be moving time"
+    assert stats["Total Time"] == "1h 22m", "Longer time should be total time"
+    assert "Moving Time" not in stats
+    assert "Elapsed Time" not in stats

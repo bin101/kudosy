@@ -602,7 +602,14 @@ def test_get_feed_recomputes_decisions_on_config_change(
 
     from kudosy import store
 
-    store.write_user_config_raw({"stravaSessionCookie": "valid-cookie", "athleteId": "20000001"})
+    # Provide a catchAll distance rule so Run (10 km) passes criteria → give kudos.
+    store.write_user_config_raw(
+        {
+            "stravaSessionCookie": "valid-cookie",
+            "athleteId": "20000001",
+            "catchAll": {"minDistance": 5.0, "minTime": 0.0},
+        }
+    )
     store.write_activity_cache([dict(_CACHED_ACTIVITY)], _CACHE_TS)
 
     mock_cls = MagicMock()

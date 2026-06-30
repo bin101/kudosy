@@ -158,7 +158,8 @@ class DecisionReason(StrEnum):
     ALLOW = "allow"  # athlete in allow list → always give kudos (overrides criteria)
     CRITERIA = "criteria"  # below minDistance/minTime threshold
     NAME_MATCH = "name_match"  # activity name matched a regex → always give
-    DEFAULT = "default"  # no rule matched → give kudos
+    NO_RULE = "no_rule"  # no distance/duration rule configured for this sport → skip
+    DEFAULT = "default"  # rule exists, criteria met → give kudos
 
 
 class Decision(BaseModel):

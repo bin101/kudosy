@@ -3,7 +3,10 @@
 import pytest
 
 from kudosy.parsers import (
+    STAT_KEY_TIME,
+    STAT_KEY_TOTAL_TIME,
     decode_html_entities,
+    normalize_stats,
     parse_athlete_name,
     parse_distance,
     parse_duration,
@@ -109,6 +112,72 @@ class TestParseDuration:
     )
     def test_invalid_or_missing(self, raw: str | None) -> None:
         assert parse_duration(raw) is None  # type: ignore[arg-type]
+
+
+class TestNormalizeStats:
+    """Tests for normalize_stats — canonical time-key normalization."""
+
+    def test_no_time_entries_unchanged(self) -> None:
+        stats = {"Distance": "10.00 km", "Avg Heart Rate": "164 bpm"}
+        result = normalize_stats(stats)
+        assert result == stats
+
+    def test_single_time_entry_renamed_to_time(self) -> None:
+        stats = {"Moving Time": "37m 11s", "Distance": "10.00 km"}
+        result = normalize_stats(stats)
+        assert result[STAT_KEY_TIME] == "37m 11s"
+        assert "Moving Time" not in result
+
+    def test_two_time_entries_moving_and_total(self) -> None:
+        # Shorter = moving time, longer = total time
+        stats = {"Moving Time": "37m 11s", "Elapsed Time": "45m 0s", "Distance": "10.00 km"}
+        result = normalize_stats(stats)
+        assert result[STAT_KEY_TIME] == "37m 11s"
+        assert result[STAT_KEY_TOTAL_TIME] == "45m 0s"
+        assert "Moving Time" not in result
+        assert "Elapsed Time" not in result
+
+    def test_two_time_entries_longer_second(self) -> None:
+        # Order in dict doesn't matter — sort by value
+        stats = {"Elapsed Time": "1h 5m", "Moving Time": "50m 0s"}
+        result = normalize_stats(stats)
+        assert result[STAT_KEY_TIME] == "50m 0s"
+        assert result[STAT_KEY_TOTAL_TIME] == "1h 5m"
+
+    def test_already_canonical_keys_are_idempotent(self) -> None:
+        stats = {STAT_KEY_TIME: "37m 11s", STAT_KEY_TOTAL_TIME: "45m 0s"}
+        result = normalize_stats(stats)
+        assert result[STAT_KEY_TIME] == "37m 11s"
+        assert result[STAT_KEY_TOTAL_TIME] == "45m 0s"
+
+    def test_single_canonical_time_key_idempotent(self) -> None:
+        stats = {STAT_KEY_TIME: "37m 11s", "Distance": "10.00 km"}
+        result = normalize_stats(stats)
+        assert result == stats
+
+    def test_empty_stats(self) -> None:
+        assert normalize_stats({}) == {}
+
+    def test_non_time_stats_preserved(self) -> None:
+        stats = {"Distance": "30.10 km", "Avg Heart Rate": "164 bpm", "Elevation": "320 m"}
+        result = normalize_stats(stats)
+        assert result["Distance"] == "30.10 km"
+        assert result["Avg Heart Rate"] == "164 bpm"
+
+    def test_decision_engine_reads_moving_time(self) -> None:
+        """After normalization, decision.py must read stats['Time'] = moving time."""
+        from kudosy.parsers import parse_duration
+
+        stats = normalize_stats({"Bewegungszeit": "37m 11s", "Verstrichene Zeit": "45m 0s"})
+        moving_secs = parse_duration(stats[STAT_KEY_TIME])
+        assert moving_secs == 2231  # 37*60 + 11
+
+    def test_zero_moving_time_two_entries(self) -> None:
+        # Both are 0 → still idempotent; Time = Total Time = same value
+        stats = {"Moving Time": "0h 0m", "Elapsed Time": "0h 0m"}
+        result = normalize_stats(stats)
+        assert STAT_KEY_TIME in result
+        assert STAT_KEY_TOTAL_TIME in result
 
 
 class TestDecodeHtmlEntities:
