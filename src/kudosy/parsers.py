@@ -63,11 +63,13 @@ def parse_distance(raw: str | None) -> float | None:
 
 # ── Duration ──────────────────────────────────────────────────────────────────
 
-# Matches: "1h 5m", "37m 11s", "0h 0m", "2h", "45m", "30s"
+# Matches: "1h 5m", "37m 11s", "1h 26min", "43min 2s", "0h 0m", "2h", "45m", "30s"
+# \b after each unit prevents "160 SPM" (cadence) from matching via S→seconds.
+# m(?:in)? handles both "m" (minutes) and "min" (from Strava's German/abbr-stripped output).
 _DUR_PARTS_RE = re.compile(
-    r"(?:(?P<h>\d+)\s*h)?"
-    r"\s*(?:(?P<m>\d+)\s*m)?"
-    r"\s*(?:(?P<s>\d+)\s*s)?",
+    r"(?:(?P<h>\d+)\s*h\b)?"
+    r"\s*(?:(?P<m>\d+)\s*m(?:in)?\b)?"
+    r"\s*(?:(?P<s>\d+)\s*s\b)?",
     re.IGNORECASE,
 )
 

@@ -110,10 +110,24 @@ class TestParseDuration:
             None,
             "N/A",
             "no time",
+            "160 SPM",  # cadence (steps/min): "S" must NOT match seconds
+            "160 spm",  # lowercase variant
+            "85 rpm",  # cycling cadence
         ],
     )
     def test_invalid_or_missing(self, raw: str | None) -> None:
         assert parse_duration(raw) is None  # type: ignore[arg-type]
+
+    @pytest.mark.parametrize(
+        ("raw", "expected_s"),
+        [
+            ("43min 2s", 2582),  # Strava German abbr-stripped "min" format
+            ("1h 26min", 5160),  # hours + "min" variant
+        ],
+    )
+    def test_min_format(self, raw: str, expected_s: int) -> None:
+        """parse_duration must handle 'min' (not just 'm') for minutes."""
+        assert parse_duration(raw) == expected_s
 
 
 class TestNormalizeStats:
