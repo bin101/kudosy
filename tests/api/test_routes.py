@@ -217,6 +217,54 @@ def test_get_sport_types(app_client: TestClient) -> None:
     assert "Ride" in types
 
 
+# ── /api/sport-categories ─────────────────────────────────────────────────────
+
+
+def test_get_sport_categories_structure(app_client: TestClient) -> None:
+    """GET /api/sport-categories returns a dict with the five category keys."""
+    from kudosy.sport_types import CATEGORY_NAMES
+
+    resp = app_client.get("/api/sport-categories")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert isinstance(data, dict)
+    assert list(data.keys()) == CATEGORY_NAMES
+
+
+def test_get_sport_categories_well_known_placements(app_client: TestClient) -> None:
+    """Run must be in FootSports, Ride in CycleSports."""
+    resp = app_client.get("/api/sport-categories")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "Run" in data["FootSports"]
+    assert "Ride" in data["CycleSports"]
+    assert "Swim" in data["WaterSports"]
+    assert "AlpineSki" in data["WinterSports"]
+    assert "WeightTraining" in data["OtherSports"]
+
+
+def test_get_sport_categories_config_round_trip(app_client: TestClient) -> None:
+    """PUT config with categoryMinDistance → GET config returns the field intact."""
+    payload = {
+        "stravaSessionCookie": "some-cookie",
+        "athleteId": "20000001",
+        "kudoRules": {
+            "minDistance": {},
+            "minTime": {},
+            "categoryMinDistance": {"FootSports": 5.0},
+            "categoryMinTime": {},
+            "activityNames": [],
+        },
+    }
+    put_resp = app_client.put("/api/config", json=payload)
+    assert put_resp.status_code == 200
+
+    get_resp = app_client.get("/api/config")
+    assert get_resp.status_code == 200
+    cfg = get_resp.json()
+    assert cfg["kudoRules"]["categoryMinDistance"] == {"FootSports": 5.0}
+
+
 # ── /api/athlete-labels ───────────────────────────────────────────────────────
 
 
@@ -639,7 +687,12 @@ def test_get_feed_recomputes_decisions_on_config_change(
 
     from kudosy import store
 
-    store.write_user_config_raw({"stravaSessionCookie": "valid-cookie", "athleteId": "20000001"})
+    # Include a Run rule so the activity passes the always-on rule gate
+    store.write_user_config_raw({
+        "stravaSessionCookie": "valid-cookie",
+        "athleteId": "20000001",
+        "kudoRules": {"minDistance": {"Run": 1.0}, "minTime": {}, "activityNames": []},
+    })
     store.write_activity_cache([dict(_CACHED_ACTIVITY)], _CACHE_TS)
 
     mock_cls = MagicMock()
@@ -657,6 +710,7 @@ def test_get_feed_recomputes_decisions_on_config_change(
             "stravaSessionCookie": "valid-cookie",
             "athleteId": "20000001",
             "ignoreAthletes": ["300000001"],
+            "kudoRules": {"minDistance": {"Run": 1.0}, "minTime": {}, "activityNames": []},
         }
     )
 
