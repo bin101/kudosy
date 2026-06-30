@@ -91,50 +91,73 @@ def parse_duration(raw: str | None) -> int | None:
 
 # ── Stats normalization ───────────────────────────────────────────────────────
 
-# Canonical keys for time stats used throughout the engine.
-STAT_KEY_TIME = "Time"  # moving time (used by decision.py criteria check)
+# Canonical keys used throughout the engine and frontend.
+STAT_KEY_TIME = "Time"  # moving time (decision.py reads this for minTime checks)
 STAT_KEY_TOTAL_TIME = "Total Time"  # elapsed/total time
+STAT_KEY_DISTANCE = "Distance"
+STAT_KEY_ELEVATION = "Elevation"
+
+# Matches bare distance values: "30.10 km", "500 m", "2,800 m".
+# For the "m" unit a space is required ("500 m", not "500m") to distinguish
+# distance-in-metres from time-in-minutes ("45m" without space = 45 minutes).
+# Excludes compound units like "23.4 km/h" (speed) or "5:23 /km" (pace).
+_DIST_ONLY_RE = re.compile(r"^[\d,]+(?:\.\d+)?(?:\s+m|\s*km)\s*$", re.IGNORECASE)
+
+
+def _is_distance_value(val: str) -> bool:
+    return bool(_DIST_ONLY_RE.match(val.strip()))
 
 
 def normalize_stats(stats: dict[str, str]) -> dict[str, str]:
-    """Normalize time entries in *stats* to canonical keys.
+    """Normalize time and distance entries in *stats* to canonical keys.
 
-    Scans all entries for values parseable as a duration (via parse_duration).
-    Non-time entries (distance, pace, heart rate, etc.) are kept as-is.
-
-    Rules:
-    - 0 duration entries: stats returned unchanged.
+    Time normalization (value-based, via parse_duration):
+    - 0 duration entries: unchanged.
     - 1 duration entry:   renamed to ``"Time"`` (moving time).
-    - 2+ duration entries: shortest → ``"Time"`` (moving), longest → ``"Total Time"``;
-      any intermediate values are discarded (they are ambiguous).
+    - 2+ duration entries: shortest → ``"Time"``, longest → ``"Total Time"``;
+      intermediate values are discarded.
 
-    Original keys for duration entries are replaced.  This function is
-    idempotent: calling it twice produces the same result.
+    Distance/elevation normalization (value-based + position-based):
+    - 1 distance entry:  renamed to ``"Distance"``.
+    - 2+ entries: first (by insertion order) → ``"Distance"``,
+      second → ``"Elevation"``; further entries are discarded.
+    - Insertion order mirrors Strava's consistent stat ordering (Distance first).
+    - Speed ("23.4 km/h") and pace ("5:23 /km") are NOT matched.
 
-    The decision engine reads ``stats["Time"]`` for minTime checks, so the
-    moving time is always kept under the ``"Time"`` key.
+    Non-time, non-distance entries (pace, heart rate, etc.) are kept as-is.
+    This function is idempotent.
     """
     time_entries: list[tuple[str, int]] = []  # (original_key, seconds)
-    non_time: dict[str, str] = {}
+    dist_entries: list[tuple[str, str]] = []  # (original_key, original_value)
+    rest: dict[str, str] = {}
 
     for key, value in stats.items():
-        secs = parse_duration(value)
-        if secs is not None:
-            time_entries.append((key, secs))
+        # Distance check must come first: "500 m" would be parsed as 500 minutes
+        # by parse_duration if we checked time first.
+        if _is_distance_value(value):
+            dist_entries.append((key, value))
         else:
-            non_time[key] = value
+            secs = parse_duration(value)
+            if secs is not None:
+                time_entries.append((key, secs))
+            else:
+                rest[key] = value
 
-    if not time_entries:
-        return dict(stats)
+    result = dict(rest)
 
-    result = dict(non_time)
-    if len(time_entries) == 1:
-        result[STAT_KEY_TIME] = stats[time_entries[0][0]]
-    else:
-        # Sort ascending by seconds; shortest = moving time, longest = total time.
-        time_entries.sort(key=lambda x: x[1])
-        result[STAT_KEY_TIME] = stats[time_entries[0][0]]
-        result[STAT_KEY_TOTAL_TIME] = stats[time_entries[-1][0]]
+    if time_entries:
+        if len(time_entries) == 1:
+            result[STAT_KEY_TIME] = stats[time_entries[0][0]]
+        else:
+            # Sort ascending by seconds; shortest = moving time, longest = total time.
+            time_entries.sort(key=lambda x: x[1])
+            result[STAT_KEY_TIME] = stats[time_entries[0][0]]
+            result[STAT_KEY_TOTAL_TIME] = stats[time_entries[-1][0]]
+
+    if dist_entries:
+        result[STAT_KEY_DISTANCE] = dist_entries[0][1]
+        if len(dist_entries) >= 2:
+            result[STAT_KEY_ELEVATION] = dist_entries[1][1]
 
     return result
 

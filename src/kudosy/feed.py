@@ -15,7 +15,7 @@ import re
 from typing import Any, ClassVar, Protocol
 
 from kudosy.models import Activity
-from kudosy.parsers import STAT_KEY_TIME, normalize_stats
+from kudosy.parsers import STAT_KEY_DISTANCE, STAT_KEY_TIME, normalize_stats
 
 log = logging.getLogger(__name__)
 
@@ -222,11 +222,14 @@ class StravaHtmlFeedParser:
                 label = inline_sub or subtitle_map.get(key) or key
                 stats[label] = value
 
-        # Numeric fallback (covers both camelCase movingTime and snake_case moving_time)
-        if "Distance" not in stats:
+        # Normalize locale-specific stat labels to canonical keys first,
+        # then apply numeric fallbacks only for keys still missing.
+        stats = normalize_stats(stats)
+
+        if STAT_KEY_DISTANCE not in stats:
             d = activity.get("distance")
             if d is not None:
-                stats["Distance"] = f"{float(d) / 1000:.2f} km"
+                stats[STAT_KEY_DISTANCE] = f"{float(d) / 1000:.2f} km"
         if STAT_KEY_TIME not in stats:
             t = (
                 activity.get("movingTime")
@@ -239,8 +242,6 @@ class StravaHtmlFeedParser:
                 h, rem = divmod(secs, 3600)
                 m, s = divmod(rem, 60)
                 stats[STAT_KEY_TIME] = f"{h}h {m}m" if h else f"{m}m {s}s"
-
-        stats = normalize_stats(stats)
 
         return Activity(
             athlete_name=athlete_name,

@@ -3,6 +3,8 @@
 import pytest
 
 from kudosy.parsers import (
+    STAT_KEY_DISTANCE,
+    STAT_KEY_ELEVATION,
     STAT_KEY_TIME,
     STAT_KEY_TOTAL_TIME,
     decode_html_entities,
@@ -178,6 +180,49 @@ class TestNormalizeStats:
         result = normalize_stats(stats)
         assert STAT_KEY_TIME in result
         assert STAT_KEY_TOTAL_TIME in result
+
+    # ── Distance / elevation normalization ────────────────────────────────────
+
+    def test_locale_distance_label_renamed_to_canonical(self) -> None:
+        stats = {"Distanz": "30.10 km", "Bewegungszeit": "1h 5m"}
+        result = normalize_stats(stats)
+        assert result[STAT_KEY_DISTANCE] == "30.10 km"
+        assert STAT_KEY_TIME in result
+        assert "Distanz" not in result
+
+    def test_two_distance_entries_first_is_distance_second_is_elevation(self) -> None:
+        # Strava always orders Distance before Elevation in the stats list.
+        stats = {"Distanz": "30.10 km", "Hm": "250 m"}
+        result = normalize_stats(stats)
+        assert result[STAT_KEY_DISTANCE] == "30.10 km"
+        assert result[STAT_KEY_ELEVATION] == "250 m"
+        assert "Distanz" not in result
+        assert "Hm" not in result
+
+    def test_single_distance_in_metres_becomes_distance(self) -> None:
+        stats = {"Distanz": "500 m"}
+        result = normalize_stats(stats)
+        assert result[STAT_KEY_DISTANCE] == "500 m"
+
+    def test_canonical_distance_elevation_are_idempotent(self) -> None:
+        stats = {STAT_KEY_DISTANCE: "30.10 km", STAT_KEY_ELEVATION: "250 m"}
+        result = normalize_stats(stats)
+        assert result[STAT_KEY_DISTANCE] == "30.10 km"
+        assert result[STAT_KEY_ELEVATION] == "250 m"
+
+    def test_speed_not_treated_as_distance(self) -> None:
+        # "23.4 km/h" must NOT be classified as a distance value.
+        stats = {"Speed": "23.4 km/h", STAT_KEY_DISTANCE: "30.10 km"}
+        result = normalize_stats(stats)
+        assert result["Speed"] == "23.4 km/h"
+        assert result[STAT_KEY_DISTANCE] == "30.10 km"
+        assert STAT_KEY_ELEVATION not in result
+
+    def test_heart_rate_not_treated_as_distance(self) -> None:
+        stats = {"Avg HR": "145 bpm", STAT_KEY_DISTANCE: "10.00 km"}
+        result = normalize_stats(stats)
+        assert result["Avg HR"] == "145 bpm"
+        assert STAT_KEY_ELEVATION not in result
 
 
 class TestDecodeHtmlEntities:

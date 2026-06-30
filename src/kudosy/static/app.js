@@ -1150,6 +1150,7 @@ function renderFeed() {
         const label = k === 'Time'       ? t('feed.stat.movingTime')
                     : k === 'Total Time' ? t('feed.stat.totalTime')
                     : k === 'Distance'   ? t('feed.stat.distance')
+                    : k === 'Elevation'  ? t('feed.stat.elevation')
                     : k;
         return `<span class="feed-stat"><strong>${label}:</strong> ${v}</span>`;
       })
