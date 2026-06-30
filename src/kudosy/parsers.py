@@ -19,11 +19,17 @@ _ENTITIES: dict[str, str] = {
     "&apos;": "'",
 }
 _ENTITY_RE = re.compile("|".join(re.escape(k) for k in _ENTITIES))
+_HTML_TAG_RE = re.compile(r"<[^>]+>")
 
 
 def decode_html_entities(s: str) -> str:
     """Replace the six most common HTML entities in *s*."""
     return _ENTITY_RE.sub(lambda m: _ENTITIES[m.group()], s)
+
+
+def _strip_html(s: str) -> str:
+    """Remove HTML tags (e.g. Strava's <abbr> unit tooltips) from a string."""
+    return _HTML_TAG_RE.sub("", s).strip()
 
 
 # ── Distance ──────────────────────────────────────────────────────────────────
@@ -127,32 +133,38 @@ def normalize_stats(stats: dict[str, str]) -> dict[str, str]:
     Non-time, non-distance entries (pace, heart rate, etc.) are kept as-is.
     This function is idempotent.
     """
-    time_entries: list[tuple[str, int]] = []  # (original_key, seconds)
-    dist_entries: list[tuple[str, str]] = []  # (original_key, original_value)
+    time_entries: list[tuple[str, int, str]] = []  # (original_key, seconds, plain_value)
+    dist_entries: list[tuple[str, str]] = []  # (original_key, plain_value)
     rest: dict[str, str] = {}
 
     for key, value in stats.items():
+        # Strip <abbr> tooltips that Strava embeds in stat values (e.g.
+        # "41,17<abbr class='unit' title='Kilometer'> km</abbr>") so the
+        # regex classifiers see plain text.  We store the stripped plain
+        # value so downstream callers (decision.py parse_duration) also
+        # receive parseable text.
+        plain = _strip_html(value)
         # Distance check must come first: "500 m" would be parsed as 500 minutes
         # by parse_duration if we checked time first.
-        if _is_distance_value(value):
-            dist_entries.append((key, value))
+        if _is_distance_value(plain):
+            dist_entries.append((key, plain))
         else:
-            secs = parse_duration(value)
+            secs = parse_duration(plain)
             if secs is not None:
-                time_entries.append((key, secs))
+                time_entries.append((key, secs, plain))
             else:
-                rest[key] = value
+                rest[key] = plain
 
     result = dict(rest)
 
     if time_entries:
         if len(time_entries) == 1:
-            result[STAT_KEY_TIME] = stats[time_entries[0][0]]
+            result[STAT_KEY_TIME] = time_entries[0][2]
         else:
             # Sort ascending by seconds; shortest = moving time, longest = total time.
             time_entries.sort(key=lambda x: x[1])
-            result[STAT_KEY_TIME] = stats[time_entries[0][0]]
-            result[STAT_KEY_TOTAL_TIME] = stats[time_entries[-1][0]]
+            result[STAT_KEY_TIME] = time_entries[0][2]
+            result[STAT_KEY_TOTAL_TIME] = time_entries[-1][2]
 
     if dist_entries:
         result[STAT_KEY_DISTANCE] = dist_entries[0][1]

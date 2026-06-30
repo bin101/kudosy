@@ -224,6 +224,62 @@ class TestNormalizeStats:
         assert result["Avg HR"] == "145 bpm"
         assert STAT_KEY_ELEVATION not in result
 
+    # ── HTML-embedded values (Strava <abbr> unit tooltips) ────────────────────
+
+    def test_html_abbr_distance_stripped_and_classified(self) -> None:
+        """Values with <abbr> tooltip tags must be treated as distance."""
+        stats = {"Distanz": "41,17<abbr class='unit' title='Kilometer'> km</abbr>"}
+        result = normalize_stats(stats)
+        assert result[STAT_KEY_DISTANCE] == "41,17 km"
+        assert "Distanz" not in result
+
+    def test_html_abbr_distance_and_elevation_classified_by_order(self) -> None:
+        """With two distance-shaped values, first → Distance, second → Elevation."""
+        stats = {
+            "Distanz": "30,10<abbr class='unit' title='Kilometer'> km</abbr>",
+            "Höhenmeter": "59<abbr class='unit' title='Meter'> m</abbr>",
+        }
+        result = normalize_stats(stats)
+        assert result[STAT_KEY_DISTANCE] == "30,10 km"
+        assert result[STAT_KEY_ELEVATION] == "59 m"
+        assert "Distanz" not in result
+        assert "Höhenmeter" not in result
+
+    def test_html_abbr_time_stripped_and_classified(self) -> None:
+        stats = {
+            "Zeit": "1<abbr class='unit' title='Stunde'>h</abbr> 26<abbr class='unit' title='Minute'>min</abbr>"
+        }
+        result = normalize_stats(stats)
+        assert result[STAT_KEY_TIME] == "1h 26min"
+        assert "Zeit" not in result
+
+    def test_html_abbr_full_activity_real_world(self) -> None:
+        """Mirrors an actual activity-cache.json entry with Strava HTML tooltips."""
+        stats = {
+            "Distanz": "4,71<abbr class='unit' title='Kilometer'> km</abbr>",
+            "Höhenmeter": "45<abbr class='unit' title='Meter'> m</abbr>",
+            "Zeit": "43<abbr class='unit' title='Minute'>min</abbr> 2<abbr class='unit' title='Sekunde'>s</abbr>",
+            "Time": "44m 51s",
+        }
+        result = normalize_stats(stats)
+        assert result[STAT_KEY_DISTANCE] == "4,71 km"
+        assert result[STAT_KEY_ELEVATION] == "45 m"
+        assert result[STAT_KEY_TIME] == "43min 2s"
+        assert result[STAT_KEY_TOTAL_TIME] == "44m 51s"
+        assert "Distanz" not in result
+        assert "Höhenmeter" not in result
+        assert "Zeit" not in result
+
+    def test_html_abbr_values_idempotent_after_strip(self) -> None:
+        """After HTML is stripped, re-running normalize_stats must be stable."""
+        stats = {
+            "Distanz": "4,71<abbr class='unit' title='Kilometer'> km</abbr>",
+            "Zeit": "43<abbr class='unit' title='Minute'>min</abbr> 2<abbr class='unit' title='Sekunde'>s</abbr>",
+        }
+        first = normalize_stats(stats)
+        second = normalize_stats(first)
+        assert first == second
+
 
 class TestDecodeHtmlEntities:
     @pytest.mark.parametrize(
