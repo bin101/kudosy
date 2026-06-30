@@ -5,6 +5,23 @@ All notable changes to Kudosy will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0](https://github.com/bin101/kudosy/compare/v1.5.0...v1.6.0) (2026-06-30)
+
+
+### Features
+
+* rebuild Strava feed parsing from scratch with structured ActivityStats ([d0e23ee](https://github.com/bin101/kudosy/commit/d0e23ee8a709c9b46e5f762d2f8f58baf5116938))
+* rebuild Strava feed parsing from scratch with structured ActivityStats ([1bcfb83](https://github.com/bin101/kudosy/commit/1bcfb831802d40db729e178b35084004b96810e7))
+* rule-gating and Strava sport categories ([1ea7cc7](https://github.com/bin101/kudosy/commit/1ea7cc7e523ace92f3bc34d88f44745a36db2650))
+* rule-gating and Strava sport categories ([0aac58f](https://github.com/bin101/kudosy/commit/0aac58f35dd189a3bb1de5d63cddfe8c1a223161))
+
+
+### Bug Fixes
+
+* localize feed stat labels (DE/EN/FR/ES/IT) ([4df7751](https://github.com/bin101/kudosy/commit/4df7751c71c10268fb9f83c304923522002cf5b1))
+* localize feed stat labels using canonical key + i18n ([ec221b6](https://github.com/bin101/kudosy/commit/ec221b6c395eead3f75ef44b56adea384a4e545a))
+* reformat import blocks to satisfy ruff 0.15.20 isort rules ([def703a](https://github.com/bin101/kudosy/commit/def703a407337538be6a5ae2215485b4b63578b5))
+
 ## [1.5.0](https://github.com/bin101/kudosy/compare/v1.4.0...v1.5.0) (2026-06-23)
 
 
