@@ -232,6 +232,14 @@ def write_activity_cache(activities: list[dict[str, Any]], fetched_at: str) -> N
     )
 
 
+def clear_activity_cache() -> None:
+    """Reset the activity feed cache to empty (no activities, no timestamp)."""
+    _write_json_atomic(
+        _path(_ACTIVITY_CACHE_FILE),
+        {"fetched_at": None, "activities": []},
+    )
+
+
 def mark_activity_kudoed_in_cache(activity_id: str) -> None:
     """Flip has_kudoed=True for a single cached activity. No-op if not present."""
     activities, fetched_at = read_activity_cache()

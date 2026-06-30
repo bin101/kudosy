@@ -92,7 +92,9 @@ def test_serve_index_injects_version(app_client: TestClient, data_dir: Path) -> 
     body = resp.text
     assert f"app.js?v={__version__}" in body
     assert f"styles.css?v={__version__}" in body
-    assert f'"./i18n.js?v={__version__}"' in body
+    # i18n.js is intentionally NOT versioned — always fetched fresh (no-store).
+    assert '"./i18n.js"' in body
+    assert f'"./i18n.js?v={__version__}"' not in body
     assert resp.headers["cache-control"] == "no-store"
 
 

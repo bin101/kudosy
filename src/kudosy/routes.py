@@ -23,6 +23,7 @@ from kudosy.parsers import normalize_stats
 from kudosy.store import (
     cache_athlete_avatar,
     cache_athlete_label,
+    clear_activity_cache,
     mark_activity_kudoed_in_cache,
     mark_kudoed,
     read_activity_cache,
@@ -51,7 +52,9 @@ _STATIC_DIR = Path(__file__).parent / "static"
 async def serve_index() -> HTMLResponse:
     """Serve index.html with versioned asset URLs for cache busting."""
     v = __version__
-    importmap = json.dumps({"imports": {"./i18n.js": f"./i18n.js?v={v}"}})
+    # i18n.js is intentionally NOT versioned so the browser always fetches
+    # the latest translations (served with no-store by the middleware).
+    importmap = json.dumps({"imports": {"./i18n.js": "./i18n.js"}})
     content = (_STATIC_DIR / "index.html").read_text()
     content = content.replace('href="styles.css"', f'href="styles.css?v={v}"')
     content = content.replace(
@@ -399,6 +402,21 @@ async def get_feed(request: Request) -> dict[str, Any]:
         raise HTTPException(status_code=401, detail={"code": code, "message": str(exc)}) from exc
     finally:
         await client.aclose()
+
+
+# ── Feed cache clear ──────────────────────────────────────────────────────────
+
+
+@router.delete("/api/feed/cache")
+async def delete_feed_cache() -> dict[str, bool]:
+    """Clear the persisted activity feed cache.
+
+    After this call the cache is empty; the next GET /api/feed (without
+    ?refresh=true) will return an empty feed.  Use the frontend button or
+    follow up with GET /api/feed?refresh=true to fetch a live snapshot.
+    """
+    clear_activity_cache()
+    return {"ok": True}
 
 
 # ── Single-kudo ───────────────────────────────────────────────────────────────

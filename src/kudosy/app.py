@@ -168,7 +168,11 @@ def create_app() -> FastAPI:
     ) -> Response:
         response = await call_next(request)
         if "v=" in request.url.query:
+            # Versioned asset — cache forever (content-addressed by version).
             response.headers["Cache-Control"] = "max-age=31536000, immutable"
+        elif request.url.path.endswith((".js", ".css")):
+            # Unversioned JS/CSS (e.g. i18n.js) — always fetch fresh.
+            response.headers["Cache-Control"] = "no-store"
         return response
 
     app.include_router(router)

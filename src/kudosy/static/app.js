@@ -1235,9 +1235,26 @@ function renderFeed() {
   });
 }
 
+async function clearFeedCache() {
+  const btn = $('btn-clear-feed-cache');
+  setButtonLoading(btn, true);
+  try {
+    await fetchJson('/api/feed/cache', { method: 'DELETE' });
+  } catch (err) {
+    console.error('Failed to clear feed cache:', err);
+    return;
+  } finally {
+    setButtonLoading(btn, false);
+  }
+  loadFeed(true);
+}
+
 function initFeedTab() {
-  const btn = $('btn-refresh-feed');
-  if (btn) btn.addEventListener('click', () => loadFeed(true));
+  const refreshBtn = $('btn-refresh-feed');
+  if (refreshBtn) refreshBtn.addEventListener('click', () => loadFeed(true));
+
+  const clearBtn = $('btn-clear-feed-cache');
+  if (clearBtn) clearBtn.addEventListener('click', clearFeedCache);
 
   // Status filter buttons
   const statusGroup = document.getElementById('feed-filter-status');
