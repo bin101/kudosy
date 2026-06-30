@@ -364,6 +364,19 @@ class TestStatParsing:
         result = _parser().parse(_make_payload([_activity(stats=stats)]))
         assert "WeirdStat" in result[0].stats.extra
 
+    def test_carbon_saved_in_display_not_extra(self) -> None:
+        """'Carbon Saved' is classified as carbon_saved, not unknown → must not land in extra."""
+        stats = _stat_pair("stat_three", "4.16 kg CO2", "Carbon Saved")
+        result = _parser().parse(_make_payload([_activity(stats=stats)]))
+        act = result[0]
+        # Must appear in display with key='carbon_saved'
+        carbon_entries = [s for s in act.stats.display if s.key == "carbon_saved"]
+        assert len(carbon_entries) == 1
+        assert carbon_entries[0].label == "Carbon Saved"
+        assert carbon_entries[0].raw == "4.16 kg CO2"
+        # Must NOT land in extra
+        assert "Carbon Saved" not in act.stats.extra
+
     def test_stat_item_without_subtitle_goes_to_extra(self) -> None:
         """If no subtitle is paired, the machine key becomes the label and the
         stat is unclassified (goes to extra), because there is no /km or /100m

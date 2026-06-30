@@ -204,6 +204,7 @@ _LABEL_MAP: dict[str, str] = {
     "elev gain": "elevation_gain",
     "elevation gain": "elevation_gain",
     "pace": "pace",
+    "carbon saved": "carbon_saved",
 }
 
 
@@ -215,7 +216,7 @@ def classify_stat(label: str, raw: str = "") -> str:
     For all other labels the lookup table takes precedence.
 
     Returns one of: ``"distance"``, ``"time"``, ``"elevation_gain"``,
-    ``"pace"``, ``"swim_pace"``, ``"unknown"``.
+    ``"pace"``, ``"swim_pace"``, ``"carbon_saved"``, ``"unknown"``.
     """
     # Inspect the cleaned raw value for pace unit hints — must run before
     # the label lookup because "Pace" is used for both /km (Run) and /100m (Swim).

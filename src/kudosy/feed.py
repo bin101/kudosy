@@ -267,7 +267,7 @@ class StructuredFeedParser:
                 if numeric_value is not None:
                     pace_s_per_100m = numeric_value
 
-            else:
+            elif canonical_key == "unknown":
                 extra[label] = cleaned
 
             display.append(
