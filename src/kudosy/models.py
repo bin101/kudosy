@@ -8,6 +8,65 @@ from typing import Any
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+# ── Activity stats ─────────────────────────────────────────────────────────────
+
+
+class StatValue(BaseModel):
+    """A single parsed stat entry from the Strava activity feed."""
+
+    key: str
+    """Canonical key: "distance" | "time" | "elevation_gain" | "pace" | "swim_pace" | "unknown"."""
+
+    label: str
+    """Display label as provided by Strava (e.g. "Elev Gain", "Pace")."""
+
+    raw: str
+    """Cleaned display string with HTML markup stripped (e.g. "116 m", "8:06 /km")."""
+
+    value: float | None = None
+    """Normalised numeric value in the canonical unit (see ``unit``)."""
+
+    unit: str | None = None
+    """Canonical unit: "m" (metres/seconds), "s" (seconds), "s/km", "s/100m"."""
+
+
+class ActivityStats(BaseModel):
+    """Typed, normalised stats for one activity from the following feed.
+
+    The feed provides at most 3 headline stats per activity; which ones depend
+    on the sport type (e.g. Run → distance/pace/time, Ride → distance/elev/time).
+
+    All fields are optional because not every sport produces every stat.
+    Numeric values are in SI/canonical units (metres, seconds, seconds-per-km …).
+    The ``display`` list preserves the original order and labels for UI rendering.
+    Unknown stat types land in ``extra`` as label→raw-string pairs.
+    """
+
+    distance_m: float | None = None
+    """Total distance in metres."""
+
+    moving_time_s: int | None = None
+    """Moving time in seconds (from the "Time" stat)."""
+
+    elapsed_time_s: int | None = None
+    """Elapsed/total time in seconds (from activity.elapsedTime — always a clean int)."""
+
+    elevation_gain_m: float | None = None
+    """Elevation gain in metres."""
+
+    pace_s_per_km: float | None = None
+    """Average pace in seconds per kilometre (Run/TrailRun/Walk)."""
+
+    pace_s_per_100m: float | None = None
+    """Average pace in seconds per 100 m (Swim)."""
+
+    extra: dict[str, str] = {}
+    """Unclassified stats (label → cleaned raw string), preserved for transparency."""
+
+    display: list[StatValue] = []
+    """Stats in the order Strava presented them — use this for UI rendering."""
+
+
 # ── Config models ─────────────────────────────────────────────────────────────
 
 
@@ -139,15 +198,28 @@ class EffectiveConfig(BaseModel):
 
 
 class Activity(BaseModel):
-    """A single activity entry parsed from the Strava feed."""
+    """A single activity entry parsed from the Strava following feed.
 
-    athlete_name: str
-    athlete_id: str
+    Identifiers and core metadata come directly from the JSON feed response
+    (no HTML parsing needed).  The ``stats`` field holds typed, normalised
+    values alongside the original display strings for UI rendering.
+    """
+
     activity_id: str
     activity_name: str
     sport_type: str
+    athlete_id: str
+    athlete_name: str
+    athlete_avatar_url: str | None = None
     has_kudoed: bool
-    stats: dict[str, str]  # raw label→value map, e.g. {"Distance": "30.10 km"}
+    can_kudo: bool = True
+    kudos_count: int = 0
+    start_date: datetime | None = None
+    location: str | None = None
+    is_commute: bool = False
+    is_virtual: bool = False
+    device_name: str | None = None
+    stats: ActivityStats = Field(default_factory=ActivityStats)
 
 
 class DecisionReason(StrEnum):
@@ -172,15 +244,28 @@ class Decision(BaseModel):
 
 
 class FeedActivity(BaseModel):
-    """A feed activity enriched with the engine's decision, for GET /api/feed."""
+    """A feed activity enriched with the engine's decision, for GET /api/feed.
 
-    athlete_name: str
-    athlete_id: str
+    Inherits all Activity fields plus the engine's give_kudos / reason verdict.
+    """
+
+    # ── Identity ──────────────────────────────────────────────────────────────
     activity_id: str
     activity_name: str
     sport_type: str
+    athlete_id: str
+    athlete_name: str
+    athlete_avatar_url: str | None = None
     has_kudoed: bool
-    stats: dict[str, str]
+    can_kudo: bool = True
+    kudos_count: int = 0
+    start_date: datetime | None = None
+    location: str | None = None
+    is_commute: bool = False
+    is_virtual: bool = False
+    device_name: str | None = None
+    stats: ActivityStats = Field(default_factory=ActivityStats)
+    # ── Decision ──────────────────────────────────────────────────────────────
     give_kudos: bool
     reason: str  # DecisionReason value, e.g. "already", "default", "criteria"
 

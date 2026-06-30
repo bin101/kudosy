@@ -17,7 +17,7 @@ from fastapi.staticfiles import StaticFiles
 
 from kudosy import __version__
 from kudosy.engine import run_kudos
-from kudosy.feed import StravaHtmlFeedParser
+from kudosy.feed import StructuredFeedParser
 from kudosy.logging_conf import configure_logging, reset_log_handler
 from kudosy.routes import router
 from kudosy.scheduler import KudosyScheduler
@@ -79,7 +79,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     scheduler.start()
     _app_state["scheduler"] = scheduler
 
-    feed_parser = StravaHtmlFeedParser()
+    feed_parser = StructuredFeedParser()
 
     async def _run_job(dry_run: bool | None = None) -> Any:
         settings = read_settings()

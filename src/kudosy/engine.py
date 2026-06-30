@@ -37,7 +37,12 @@ _SKIP_REASONS = {
 }
 
 
-def _fmt_stats(stats: dict[str, str]) -> str:
+def _fmt_stats(stats: object) -> str:
+    from kudosy.models import ActivityStats
+
+    if isinstance(stats, ActivityStats):
+        parts = [f"{sv.label}={sv.raw}" for sv in stats.display]
+        return "{" + ", ".join(parts) + "}"
     return str(stats)
 
 
@@ -81,8 +86,17 @@ async def run_kudos(
         # 1. Authenticate & get CSRF token
         csrf_token = await client.get_csrf_token()
 
-        # 2. Fetch feed
-        raw_feed = await client.fetch_following_feed()
+        # 2. Resolve athlete ID (from config or live lookup)
+        athlete_id = (user_cfg.athleteId if user_cfg else "") or ""
+        if not athlete_id:
+            athlete_id = await client.fetch_current_athlete_id() or ""
+            if athlete_id:
+                log.debug("Resolved athlete ID from Strava: %s", athlete_id)
+            else:
+                log.warning("Could not resolve athlete ID — feed fetch may fail")
+
+        # 3. Fetch feed (JSON endpoint)
+        raw_feed = await client.fetch_following_feed(athlete_id)
         activities = feed_parser.parse(raw_feed)  # reassigns the pre-init'd list
         total = len(activities)
         log.info("Found %d activities", total)

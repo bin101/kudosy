@@ -1,7 +1,9 @@
 """Pure parsing functions — no I/O, no side effects.
 
-All functions accept str | None and return None on unparseable input,
-so callers can decide how to handle missing stats gracefully.
+Contains helper parsers used by :mod:`kudosy.strava_client` and other modules.
+
+Note: distance/duration parsing has moved to :mod:`kudosy.stat_parse` which
+handles the full Strava feed stat format (HTML-wrapped display strings).
 """
 
 from __future__ import annotations
@@ -24,69 +26,6 @@ _ENTITY_RE = re.compile("|".join(re.escape(k) for k in _ENTITIES))
 def decode_html_entities(s: str) -> str:
     """Replace the six most common HTML entities in *s*."""
     return _ENTITY_RE.sub(lambda m: _ENTITIES[m.group()], s)
-
-
-# ── Distance ──────────────────────────────────────────────────────────────────
-
-# "30.10 km", "222.02 km", "2,800 m", "500 m"
-_DIST_RE = re.compile(
-    r"(?P<val>[\d,]+(?:\.\d+)?)\s*(?P<unit>km|m)\b",
-    re.IGNORECASE,
-)
-
-
-def parse_distance(raw: str | None) -> float | None:
-    """Parse a Strava distance string and return metres, or None if unparseable.
-
-    Examples:
-        "30.10 km"  → 30100.0
-        "2,800 m"   → 2800.0
-        "500 m"     → 500.0
-    """
-    if not raw:
-        return None
-    m = _DIST_RE.search(raw)
-    if not m:
-        return None
-    # Remove thousands comma before float conversion
-    val = float(m.group("val").replace(",", ""))
-    if m.group("unit").lower() == "km":
-        return val * 1000.0
-    return val
-
-
-# ── Duration ──────────────────────────────────────────────────────────────────
-
-# Matches: "1h 5m", "37m 11s", "0h 0m", "2h", "45m", "30s"
-_DUR_PARTS_RE = re.compile(
-    r"(?:(?P<h>\d+)\s*h)?"
-    r"\s*(?:(?P<m>\d+)\s*m)?"
-    r"\s*(?:(?P<s>\d+)\s*s)?",
-    re.IGNORECASE,
-)
-
-
-def parse_duration(raw: str | None) -> int | None:
-    """Parse a Strava duration string and return seconds, or None if unparseable.
-
-    Examples:
-        "1h 5m"    → 3900
-        "37m 11s"  → 2231
-        "0h 0m"    → 0
-    """
-    if not raw:
-        return None
-    m = _DUR_PARTS_RE.search(raw)
-    if not m or not m.group():
-        return None
-    h = int(m.group("h") or 0)
-    mins = int(m.group("m") or 0)
-    secs = int(m.group("s") or 0)
-    total = h * 3600 + mins * 60 + secs
-    # Require at least one component was present
-    if h == 0 and mins == 0 and secs == 0 and not any(m.group(g) for g in ("h", "m", "s")):
-        return None
-    return total
 
 
 # ── Athlete name ──────────────────────────────────────────────────────────────

@@ -13,7 +13,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from kudosy.engine import run_kudos
-from kudosy.models import Activity, AppSettings, KudoRules, RunResult, UserConfig
+from kudosy.models import Activity, ActivityStats, AppSettings, KudoRules, RunResult, UserConfig
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -25,8 +25,15 @@ def make_activity(
     activity_name: str = "Morning Run",
     sport_type: str = "Run",
     has_kudoed: bool = False,
-    stats: dict[str, str] | None = None,
+    distance_m: float | None = 10230.0,
+    moving_time_s: int | None = 2700,
 ) -> Activity:
+    """Build a minimal Activity with typed ActivityStats.
+
+    Default values mirror the old "10.23 km / 45m 0s" baseline so that
+    existing tests which do not set explicit stats continue to pass unchanged.
+    """
+    stats = ActivityStats(distance_m=distance_m, moving_time_s=moving_time_s)
     return Activity(
         activity_id=activity_id,
         athlete_id=athlete_id,
@@ -34,7 +41,7 @@ def make_activity(
         activity_name=activity_name,
         sport_type=sport_type,
         has_kudoed=has_kudoed,
-        stats=stats or {"Distance": "10.23 km", "Time": "45m 0s"},
+        stats=stats,
     )
 
 
@@ -179,7 +186,8 @@ async def test_criteria_skips_short_run() -> None:
     activities = [
         make_activity(
             sport_type="Run",
-            stats={"Distance": "2.00 km", "Time": "15m 0s"},
+            distance_m=2000.0,  # 2 km — below the 5 km threshold
+            moving_time_s=900,  # 15m
         )
     ]
     user_cfg = UserConfig(
@@ -208,7 +216,8 @@ async def test_name_match_overrides_criteria() -> None:
         make_activity(
             sport_type="Run",
             activity_name="Epic Morning Run",
-            stats={"Distance": "0.50 km", "Time": "5m 0s"},
+            distance_m=500.0,  # 0.5 km — far below the 10 km threshold
+            moving_time_s=300,  # 5m
         )
     ]
     user_cfg = UserConfig(

@@ -17,7 +17,7 @@ from fastapi.responses import HTMLResponse, PlainTextResponse
 from kudosy import __version__
 from kudosy.decision import decide
 from kudosy.effective_config import build_effective_config
-from kudosy.feed import AuthError, StravaHtmlFeedParser
+from kudosy.feed import AuthError, StructuredFeedParser
 from kudosy.models import Activity, RunResult, RunStatus
 from kudosy.store import (
     cache_athlete_avatar,
@@ -342,13 +342,28 @@ async def get_feed(request: Request) -> dict[str, Any]:
             return {"fetched_at": fetched_at, "activities": _decorate_feed(cached_acts, effective)}
 
     # Live fetch (explicit refresh or empty cache / first boot).
+    import contextlib
     import datetime as _dt
+    from pathlib import Path
+
+    from kudosy.settings import get_settings
 
     client = StravaClient(cfg.stravaSessionCookie)
     try:
-        raw_feed = await client.fetch_following_feed()
-        activities = StravaHtmlFeedParser().parse(raw_feed)
-        raw_acts = [a.model_dump() for a in activities]
+        # Resolve athlete ID (from config or live lookup).
+        athlete_id = cfg.athleteId or await client.fetch_current_athlete_id() or ""
+        # Optional raw feed dump for debugging (written to DATA_DIR/last-feed-raw.json).
+        dump_path: Path | None = None
+        with contextlib.suppress(Exception):
+            dump_path = Path(get_settings().data_dir) / "last-feed-raw.json"
+        raw_feed = await client.fetch_following_feed(athlete_id, dump_raw=dump_path)
+        activities = StructuredFeedParser().parse(raw_feed)
+        # Cache avatar URLs from the live feed.
+        avatars = read_athlete_avatars()
+        for act in activities:
+            if act.athlete_id and act.athlete_avatar_url and act.athlete_id not in avatars:
+                cache_athlete_avatar(act.athlete_id, act.athlete_avatar_url)
+        raw_acts = [a.model_dump(mode="json") for a in activities]
         now_ts = _dt.datetime.now(_dt.UTC).isoformat()
         write_activity_cache(raw_acts, now_ts)
         return {"fetched_at": now_ts, "activities": _decorate_feed(raw_acts, effective)}
