@@ -5,6 +5,14 @@ All notable changes to Kudosy will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.1](https://github.com/bin101/kudosy/compare/v1.6.0...v1.6.1) (2026-07-01)
+
+
+### Bug Fixes
+
+* use model_dump(mode="json") so datetime fields are JSON-serializable in activity cache ([452bf61](https://github.com/bin101/kudosy/commit/452bf612a299cfe3d938dd62256872b2875a714f))
+* use model_dump(mode="json") so datetime fields are JSON-serializable in activity cache ([114eb62](https://github.com/bin101/kudosy/commit/114eb624fed09deaf1901b742e607adbdec2d8a7))
+
 ## [1.6.0](https://github.com/bin101/kudosy/compare/v1.5.0...v1.6.0) (2026-06-30)
 
 
