@@ -51,13 +51,30 @@ _STATIC_DIR = Path(__file__).parent / "static"
 async def serve_index() -> HTMLResponse:
     """Serve index.html with versioned asset URLs for cache busting."""
     v = __version__
-    importmap = json.dumps({"imports": {"./i18n.js": f"./i18n.js?v={v}"}})
+    # All local ES modules are mapped to their cache-busted ?v= variant so that
+    # a new release immediately invalidates every module in every browser.
+    _MODULES = [
+        "./i18n.js",
+        "./state.js",
+        "./dom.js",
+        "./api.js",
+        "./format.js",
+        "./schedule-matrix.js",
+        "./athletes.js",
+        "./config.js",
+        "./settings.js",
+        "./feed.js",
+        "./status.js",
+        "./tabs.js",
+        "./main.js",
+    ]
+    importmap = json.dumps({"imports": {m: f"{m}?v={v}" for m in _MODULES}})
     content = (_STATIC_DIR / "index.html").read_text()
     content = content.replace('href="styles.css"', f'href="styles.css?v={v}"')
     content = content.replace(
-        '<script src="app.js" type="module"></script>',
+        '<script src="main.js" type="module"></script>',
         f'<script type="importmap">{importmap}</script>\n  '
-        f'<script src="app.js?v={v}" type="module"></script>',
+        f'<script src="main.js?v={v}" type="module"></script>',
     )
     return HTMLResponse(content=content, headers={"Cache-Control": "no-store"})
 
