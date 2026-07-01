@@ -190,7 +190,7 @@ function initTabs() {
   });
 
   // Restore the last active tab from the URL hash, fall back to 'feed'.
-  const validTabs = new Set(['feed', 'config', 'settings', 'log']);
+  const validTabs = new Set(['feed', 'config', 'log']);
   const hashTab = location.hash.slice(1);
   activateTab(validTabs.has(hashTab) ? hashTab : 'feed');
 }
