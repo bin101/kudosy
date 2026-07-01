@@ -31,21 +31,25 @@
     </header>
 
     <nav class="tabs">
-      <button class="tab active" data-tab="config" data-i18n="tab.config">Konfiguration</button>
-      <button class="tab" data-tab="settings" data-i18n="tab.settings">Automatik</button>
       <button class="tab" data-tab="feed" data-i18n="tab.feed">Feed</button>
+      <button class="tab" data-tab="config" data-i18n="tab.config">Konfiguration</button>
       <button class="tab" data-tab="log" data-i18n="tab.log">Status &amp; Log</button>
     </nav>
   </div>
 
   <main class="content">
 
-    <!-- ── CONFIG ────────────────────────────────────────────────────── -->
-    <section id="tab-config" class="tab-pane active">
+    <!-- ── CONFIG (+ Automation merged) ────────────────────────────── -->
+    <section id="tab-config" class="tab-pane">
+
+      <!-- ── Kategorie: Zugangsdaten ──────────────────────────────── -->
+      <div class="section-divider">
+        <span class="section-divider-label" data-i18n="config.credentials.title">Zugangsdaten</span>
+      </div>
+
       <form id="form-config">
 
         <div class="card">
-          <h2 data-i18n="config.credentials.title">Zugangsdaten</h2>
           <div class="form-group">
             <label for="cookieInput" data-i18n="config.cookie.label">Strava Session Cookie</label>
             <div class="input-reveal">
@@ -68,6 +72,11 @@
           </div>
         </div>
 
+        <!-- ── Kategorie: Athleten ──────────────────────────────────── -->
+        <div class="section-divider">
+          <span class="section-divider-label" data-i18n="config.athletes.title">Athleten</span>
+        </div>
+
         <div class="card">
           <div class="card-header-row">
             <h2 data-i18n="config.athletes.title">Athleten-Verwaltung</h2>
@@ -79,6 +88,11 @@
           <p class="hint" data-i18n="config.athletes.hint">Pro Athlet entscheidest du: <strong>Deny</strong> überspringt alle Aktivitäten, <strong>Allow</strong> gibt immer Kudos (übersteuert Distanz-/Zeit-Regeln).</p>
           <ul class="dynamic-list athlete-manage-list" id="athlete-manage-list"></ul>
           <button type="button" class="btn btn-outline btn-sm" id="btn-add-athlete" data-i18n="config.athletes.addBtn">+ Athlet hinzufügen</button>
+        </div>
+
+        <!-- ── Kategorie: Kudo-Regeln ───────────────────────────────── -->
+        <div class="section-divider">
+          <span class="section-divider-label" data-i18n="config.rules.title">Kudo-Regeln</span>
         </div>
 
         <div class="card">
@@ -145,10 +159,12 @@
         </div>
 
       </form>
-    </section>
 
-    <!-- ── SETTINGS (Automatik) ──────────────────────────────────────── -->
-    <section id="tab-settings" class="tab-pane">
+      <!-- ── Kategorie: Automation ────────────────────────────────── -->
+      <div class="section-divider">
+        <span class="section-divider-label" data-i18n="tab.settings">Automation</span>
+      </div>
+
       <form id="form-settings">
 
         <div class="card">
@@ -169,6 +185,18 @@
             <label for="jitterMinutes" data-i18n="settings.jitter.label">Jitter ± (Minuten)</label>
             <input type="number" id="jitterMinutes" min="0" max="120" step="1">
             <small data-i18n="settings.jitter.hint">Zufälliger Versatz zum Intervall (±). Macht den Takt unvorhersehbar. Empfohlen: 15.</small>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2 data-i18n="settings.dryRun.title">Ausführungsmodus</h2>
+          <div class="form-group">
+            <label class="toggle-row">
+              <input type="checkbox" id="globalDryRun">
+              <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              <span data-i18n="settings.dryRun.label">Globaler Dry-Run</span>
+            </label>
+            <small data-i18n-html="settings.dryRun.hint">Wenn aktiv, sendet der Scheduler <strong>keine echten Kudos</strong>.</small>
           </div>
         </div>
 
@@ -197,18 +225,6 @@
           </div>
         </div>
 
-        <div class="card">
-          <h2 data-i18n="settings.dryRun.title">Ausführungsmodus</h2>
-          <div class="form-group">
-            <label class="toggle-row">
-              <input type="checkbox" id="globalDryRun">
-              <span class="toggle-track"><span class="toggle-thumb"></span></span>
-              <span data-i18n="settings.dryRun.label">Globaler Dry-Run</span>
-            </label>
-            <small data-i18n-html="settings.dryRun.hint">Wenn aktiv, sendet der Scheduler <strong>keine echten Kudos</strong>.</small>
-          </div>
-        </div>
-
         <div class="card" id="schedule-card">
           <h2 data-i18n="settings.schedule.title">Ruhezeiten</h2>
           <p class="hint" data-i18n="settings.schedule.hint">Definiere wann Kudos gegeben werden dürfen. Grüne Zellen = erlaubt. Klicke auf eine Zelle um sie umzuschalten, oder auf eine Zeilen-/Spaltenüberschrift um die gesamte Zeile/Spalte zu toggeln.</p>
@@ -234,10 +250,11 @@
         </div>
 
       </form>
+
     </section>
 
     <!-- ── FEED ──────────────────────────────────────────────────────── -->
-    <section id="tab-feed" class="tab-pane">
+    <section id="tab-feed" class="tab-pane active">
 
       <div class="card">
         <div class="card-header-row">

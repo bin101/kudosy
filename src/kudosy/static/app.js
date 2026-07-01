@@ -165,24 +165,34 @@ function initLangSelect() {
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────
 
+function activateTab(tabName) {
+  const btn = document.querySelector(`.tab[data-tab="${tabName}"]`);
+  if (!btn) return;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  btn.classList.add('active');
+  const pane = $(`tab-${tabName}`);
+  if (pane) pane.classList.add('active');
+  location.hash = tabName;
+  if (tabName === 'log') startPolling();
+  else if (tabName === 'feed') {
+    stopPolling(); pollStatus();
+    // Only fetch from Strava on first visit; use cached data on tab switches.
+    // The Refresh button is the explicit way to reload.
+    if (feedLoaded) renderFeed(); else loadFeed();
+  }
+  else { stopPolling(); pollStatus(); }
+}
+
 function initTabs() {
   document.querySelectorAll('.tab').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-      document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
-      btn.classList.add('active');
-      const pane = $(`tab-${btn.dataset.tab}`);
-      if (pane) pane.classList.add('active');
-      if (btn.dataset.tab === 'log') startPolling();
-      else if (btn.dataset.tab === 'feed') {
-        stopPolling(); pollStatus();
-        // Only fetch from Strava on first visit; use cached data on tab switches.
-        // The Refresh button is the explicit way to reload.
-        if (feedLoaded) renderFeed(); else loadFeed();
-      }
-      else { stopPolling(); pollStatus(); }
-    });
+    btn.addEventListener('click', () => activateTab(btn.dataset.tab));
   });
+
+  // Restore the last active tab from the URL hash, fall back to 'feed'.
+  const validTabs = new Set(['feed', 'config', 'log']);
+  const hashTab = location.hash.slice(1);
+  activateTab(validTabs.has(hashTab) ? hashTab : 'feed');
 }
 
 // ── Sport type <select> ───────────────────────────────────────────────────────
