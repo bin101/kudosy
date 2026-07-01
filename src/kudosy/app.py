@@ -24,6 +24,7 @@ from kudosy.scheduler import KudosyScheduler
 from kudosy.settings import get_settings
 from kudosy.sport_types import ALL_SPORT_TYPES, fetch_sport_types, merge_sport_types
 from kudosy.store import (
+    append_run_history,
     bootstrap,
     log_path,
     mark_kudoed,
@@ -128,6 +129,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
                             act["has_kudoed"] = True
                 write_activity_cache(acts, result.started_at.isoformat())
                 log.debug("Activity cache updated (%d entries)", len(acts))
+            # Persist a compact history entry for every completed run
+            if result:
+                append_run_history(
+                    {
+                        "started_at": result.started_at.isoformat(),
+                        "finished_at": result.finished_at.isoformat(),
+                        "dry_run": result.dry_run,
+                        "total": result.total,
+                        "would_give": result.would_give,
+                        "given": result.given,
+                        "success": result.success,
+                    }
+                )
             return result
         finally:
             await client.aclose()

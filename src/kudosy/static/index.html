@@ -34,6 +34,7 @@
       <button class="tab" data-tab="feed" data-i18n="tab.feed">Feed</button>
       <button class="tab" data-tab="config" data-i18n="tab.config">Konfiguration</button>
       <button class="tab" data-tab="log" data-i18n="tab.log">Status &amp; Log</button>
+      <button class="tab" data-tab="stats" data-i18n="tab.stats">Statistik</button>
     </nav>
   </div>
 
@@ -299,6 +300,59 @@
           </label>
         </div>
         <pre id="log-output" class="log-output" data-i18n="log.output.loading">Lade…</pre>
+      </div>
+
+    </section>
+
+    <!-- ── STATS ─────────────────────────────────────────────────────────── -->
+    <section id="tab-stats" class="tab-pane">
+
+      <div class="card">
+        <div class="card-header-row">
+          <h2 data-i18n="stats.title">Lauf-Statistik</h2>
+          <button type="button" class="btn btn-outline btn-sm" id="btn-refresh-stats" data-i18n="stats.refresh">🔄 Aktualisieren</button>
+        </div>
+
+        <p id="stats-error" class="hint feed-error" hidden></p>
+        <p id="stats-loading" class="hint" hidden data-i18n="log.output.loading">Lade…</p>
+
+        <!-- Summary cards -->
+        <div class="status-grid" style="margin-bottom:16px">
+          <div class="card status-card">
+            <div class="status-label" data-i18n="stats.totalRuns.label">Läufe gesamt</div>
+            <div class="status-value" id="stat-total-runs">—</div>
+          </div>
+          <div class="card status-card">
+            <div class="status-label" data-i18n="stats.totalKudos.label">Kudos vergeben</div>
+            <div class="status-value" id="stat-total-kudos">—</div>
+          </div>
+          <div class="card status-card">
+            <div class="status-label" data-i18n="stats.dryRuns.label">Dry-Runs</div>
+            <div class="status-value" id="stat-dry-runs">—</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Daily chart -->
+      <div class="card">
+        <h2 data-i18n="stats.chart.daily.title">Kudos pro Tag (letzte 14 Tage)</h2>
+        <canvas id="chart-kudos-daily" style="width:100%;height:140px;display:block;"></canvas>
+      </div>
+
+      <!-- History table -->
+      <div class="card">
+        <h2 data-i18n="stats.history.title">Letzte 20 Läufe</h2>
+        <div class="table-wrap">
+          <table class="rules-table">
+            <thead><tr>
+              <th data-i18n="stats.history.col.date">Datum</th>
+              <th data-i18n="stats.history.col.status">Status</th>
+              <th data-i18n="stats.history.col.scanned">Geprüft</th>
+              <th data-i18n="stats.history.col.kudos">Kudos</th>
+            </tr></thead>
+            <tbody id="history-tbody"></tbody>
+          </table>
+        </div>
       </div>
 
     </section>

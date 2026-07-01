@@ -95,7 +95,11 @@ _LABELS_FILE = "athlete-labels.json"
 _AVATARS_FILE = "athlete-avatars.json"
 _KUDOED_FILE = "kudoed-activities.json"
 _ACTIVITY_CACHE_FILE = "activity-cache.json"
+_HISTORY_FILE = "run-history.json"
 _LOG_FILE = "last-run.log"
+
+# Maximum number of history entries kept on disk — oldest are pruned.
+_MAX_HISTORY = 500
 
 _DEFAULT_SETTINGS = AppSettings()
 _DEFAULT_CONFIG = UserConfig()
@@ -242,6 +246,34 @@ def mark_activity_kudoed_in_cache(activity_id: str) -> None:
             act["has_kudoed"] = True
             write_activity_cache(activities, fetched_at)
             return
+
+
+# ── Run history ───────────────────────────────────────────────────────────────
+
+
+def read_run_history(limit: int = 100) -> list[dict[str, Any]]:
+    """Return the *limit* most-recent run-history entries (newest first).
+
+    Returns an empty list when the file does not exist or is corrupt.
+    """
+    raw = _read_json(_path(_HISTORY_FILE))
+    if not isinstance(raw, list):
+        return []
+    return raw[:limit]
+
+
+def append_run_history(entry: dict[str, Any]) -> None:
+    """Prepend *entry* to run-history.json and cap the list at _MAX_HISTORY.
+
+    The entry should be a compact dict derived from a RunResult.  Existing
+    entries are preserved; the list is written atomically.
+    """
+    raw = _read_json(_path(_HISTORY_FILE))
+    history: list[dict[str, Any]] = raw if isinstance(raw, list) else []
+    history.insert(0, entry)
+    if len(history) > _MAX_HISTORY:
+        history = history[:_MAX_HISTORY]
+    _write_json_atomic(_path(_HISTORY_FILE), history)
 
 
 def log_path() -> Path:

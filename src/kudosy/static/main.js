@@ -12,6 +12,7 @@ import { loadSettings, initSettingsTab } from './settings.js';
 import { initFeedTab } from './feed.js';
 import { pollStatus, initRunButtons } from './status.js';
 import { initAthleteSearchModal } from './athletes.js';
+import { initStatsTab } from './stats.js';
 
 async function init() {
   // Fetch sport-type lists before wiring the config tab (rules selects need them)
@@ -33,6 +34,7 @@ async function init() {
   initConfigTab();
   initSettingsTab();
   initFeedTab();
+  initStatsTab();
   initRunButtons();
   initRevealButtons();
   initAthleteSearchModal();
