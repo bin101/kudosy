@@ -14,6 +14,7 @@ import logging
 import re
 from collections.abc import Awaitable, Callable
 from typing import Any
+from urllib.parse import quote
 
 log = logging.getLogger(__name__)
 
@@ -69,9 +70,10 @@ def _format_ntfy(msg: dict[str, Any]) -> dict[str, Any]:
     ``_default_post`` to send ``content=`` with HTTP headers instead of
     ``json=``.
     """
+    # X-Title must be ASCII; ntfy URL-decodes header values so quote() is safe.
     return {
         "_body": msg["message"],
-        "X-Title": msg["title"],
+        "X-Title": quote(msg["title"]),
         "X-Priority": str(msg.get("priority", 3)),
         "X-Tags": ",".join(msg.get("tags", [])),
     }
