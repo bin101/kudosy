@@ -163,6 +163,26 @@ function initLangSelect() {
   });
 }
 
+// ── Auto-save ────────────────────────────────────────────────────────────────
+// Disabled during init so that loadConfig/loadSettings DOM mutations don't
+// trigger premature API calls. Enabled by init() after both loads complete.
+
+let _autoSaveEnabled    = false;
+let _saveConfigTimer    = null;
+let _saveSettingsTimer  = null;
+
+function debouncedSaveConfig() {
+  if (!_autoSaveEnabled) return;
+  clearTimeout(_saveConfigTimer);
+  _saveConfigTimer = setTimeout(saveConfig, 800);
+}
+
+function debouncedSaveSettings() {
+  if (!_autoSaveEnabled) return;
+  clearTimeout(_saveSettingsTimer);
+  _saveSettingsTimer = setTimeout(saveSettings, 800);
+}
+
 // ── Tabs ──────────────────────────────────────────────────────────────────────
 
 function activateTab(tabName) {
@@ -603,8 +623,7 @@ async function loadConfig() {
   }
 }
 
-async function saveConfig(e) {
-  e.preventDefault();
+async function saveConfig() {
   try {
     const { allowAthletes, ignoreAthletes } = getAthleteLists($('athlete-manage-list'));
     const cfg = {
@@ -630,25 +649,28 @@ async function saveConfig(e) {
     };
     if (!cfg.kudoRules.activityNames.length) delete cfg.kudoRules.activityNames;
     await putJson('/api/config', cfg);
-    toast(t('toast.config.saved'));
   } catch (err) {
     toast(err.message, 'error');
   }
 }
 
 function initConfigTab() {
-  $('form-config').addEventListener('submit', saveConfig);
+  // Prevent accidental submit via Enter key (no submit button present).
+  $('form-config').addEventListener('submit', e => e.preventDefault());
+
   $('btn-add-athlete').addEventListener('click', openAthleteSearchModal);
-  $('btn-add-distance').addEventListener('click', () => addRuleRow($('tbody-distance')));
-  $('btn-add-time').addEventListener('click', () => addRuleRow($('tbody-time')));
-  $('btn-add-name').addEventListener('click', () =>
-    addListItem($('activity-names-list'), '', t('config.activityNames.placeholder')));
-  // "Load all names" now just caches labels from the API; for managed list just refresh labels
+  $('btn-add-distance').addEventListener('click', () => { addRuleRow($('tbody-distance')); debouncedSaveConfig(); });
+  $('btn-add-time').addEventListener('click', () => { addRuleRow($('tbody-time')); debouncedSaveConfig(); });
+  $('btn-add-name').addEventListener('click', () => {
+    addListItem($('activity-names-list'), '', t('config.activityNames.placeholder'));
+    debouncedSaveConfig();
+  });
+
+  // "Load all names" — unchanged, only refreshes UI labels, no config data
   $('btn-load-all-names')?.addEventListener('click', async () => {
     try {
       const labels = await fetchJson('/api/athlete-labels');
       athleteLabels = { ...athleteLabels, ...labels };
-      // Refresh displayed names in the managed list
       $('athlete-manage-list').querySelectorAll('.athlete-manage-row').forEach(li => {
         const id = li.dataset.athleteId;
         if (id && labels[id]) {
@@ -660,6 +682,23 @@ function initConfigTab() {
       toast(t('toast.config.loadError', { msg: '' }), 'error');
     }
   });
+
+  // Auto-save: native form inputs (text, number) and selects
+  $('form-config').addEventListener('input',  debouncedSaveConfig);
+  $('form-config').addEventListener('change', debouncedSaveConfig);
+
+  // Auto-save: Allow/Deny toggle buttons (custom elements, not form inputs)
+  $('athlete-manage-list').addEventListener('click', e => {
+    if (e.target.matches('.athlete-switch-btn')) debouncedSaveConfig();
+  });
+
+  // Auto-save: dynamic list mutations (row add / remove via remove buttons)
+  const observeList = el =>
+    new MutationObserver(debouncedSaveConfig).observe(el, { childList: true });
+  observeList($('athlete-manage-list'));
+  observeList($('tbody-distance'));
+  observeList($('tbody-time'));
+  observeList($('activity-names-list'));
 }
 
 // ── Settings tab ──────────────────────────────────────────────────────────────
@@ -916,8 +955,7 @@ function toggleIntervalVisibility(enabled) {
   $('jitterMinutes').disabled       = !enabled;
 }
 
-async function saveSettings(e) {
-  e.preventDefault();
+async function saveSettings() {
   try {
     const data = {
       schedulerEnabled:      $('schedulerEnabled').checked,
@@ -932,7 +970,6 @@ async function saveSettings(e) {
       kudosScheduleMatrix:   getScheduleMatrix(),
     };
     await putJson('/api/settings', data);
-    toast(t('toast.settings.saved'));
     pollStatus();
   } catch (err) {
     toast(err.message, 'error');
@@ -940,16 +977,27 @@ async function saveSettings(e) {
 }
 
 function initSettingsTab() {
-  $('form-settings').addEventListener('submit', saveSettings);
+  // Prevent accidental submit via Enter key (no submit button present).
+  $('form-settings').addEventListener('submit', e => e.preventDefault());
+
+  // UI side-effects for toggle changes (interval visibility, matrix dim)
   $('schedulerEnabled').addEventListener('change', e =>
     toggleIntervalVisibility(e.target.checked));
   $('kudosScheduleEnabled').addEventListener('change', e =>
     toggleScheduleMatrixEnabled(e.target.checked));
 
-  // Re-render matrix whenever the wrap changes size (viewport resize or tab becoming visible).
-  // getScheduleMatrix() captures current DOM state so unsaved edits are preserved.
+  // Auto-save: native form inputs and checkboxes
+  $('form-settings').addEventListener('input',  debouncedSaveSettings);
+  $('form-settings').addEventListener('change', debouncedSaveSettings);
+
   const wrap = $('schedule-matrix-wrap');
   if (wrap) {
+    // Auto-save: schedule matrix drag-paint and click-toggles (div cells, not form inputs)
+    wrap.addEventListener('mouseup',  debouncedSaveSettings);
+    wrap.addEventListener('touchend', debouncedSaveSettings);
+
+    // Re-render matrix whenever the wrap changes size (viewport resize or tab becoming visible).
+    // getScheduleMatrix() captures current DOM state so unsaved edits are preserved.
     new ResizeObserver(() => {
       const mx = $('schedule-matrix');
       if (mx && mx.children.length) renderScheduleMatrix(getScheduleMatrix());
@@ -1391,6 +1439,7 @@ async function init() {
     loadConfig().catch(err => toast(t('toast.config.loadError', { msg: err.message }), 'error')),
     loadSettings().catch(err => toast(t('toast.settings.loadError', { msg: err.message }), 'error')),
   ]);
+  _autoSaveEnabled = true; // Enable auto-save only after initial data is fully loaded
 
   await pollStatus();
   setInterval(pollStatus, 10000);
