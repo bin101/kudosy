@@ -24,7 +24,14 @@ async def _default_post(url: str, payload: dict[str, Any]) -> None:
     import httpx
 
     async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.post(url, json=payload)
+        if "_body" in payload:
+            # Plain-text body + X-* headers (ntfy headers API).
+            # More robust than JSON publishing — works through any reverse proxy
+            # regardless of Content-Type handling.
+            headers = {k: v for k, v in payload.items() if not k.startswith("_")}
+            resp = await client.post(url, content=payload["_body"].encode("utf-8"), headers=headers)
+        else:
+            resp = await client.post(url, json=payload)
         resp.raise_for_status()
 
 
@@ -54,18 +61,19 @@ def detect_system(url: str) -> str:
 
 
 def _format_ntfy(msg: dict[str, Any]) -> dict[str, Any]:
-    """ntfy JSON API body (POST to https://ntfy.sh/<topic>).
+    """ntfy headers API — plain-text body + X-* metadata headers.
 
-    ntfy reads ``title``, ``message``, ``priority`` (1-5), and ``tags``
-    (list of emoji alias strings) from the JSON body when Content-Type is
-    application/json.  The topic comes from the URL path, so we don't include
-    it here.
+    Using headers instead of JSON body avoids Content-Type stripping by
+    reverse proxies (nginx, Traefik, Caddy), which causes ntfy to show raw
+    JSON as the notification text.  The ``_body`` sentinel triggers
+    ``_default_post`` to send ``content=`` with HTTP headers instead of
+    ``json=``.
     """
     return {
-        "title": msg["title"],
-        "message": msg["message"],
-        "priority": msg.get("priority", 3),
-        "tags": msg.get("tags", []),
+        "_body": msg["message"],
+        "X-Title": msg["title"],
+        "X-Priority": str(msg.get("priority", 3)),
+        "X-Tags": ",".join(msg.get("tags", [])),
     }
 
 

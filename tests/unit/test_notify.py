@@ -140,11 +140,14 @@ async def test_send_ntfy_payload_has_ntfy_fields() -> None:
 
     assert len(calls) == 1
     _url, body = calls[0]
-    assert "title" in body
-    assert "message" in body
-    assert "priority" in body
-    assert "tags" in body
-    assert isinstance(body["tags"], list)
+    # ntfy uses headers API: plain text _body + X-* header keys
+    assert "_body" in body
+    assert body["_body"] == msg["message"]
+    assert "X-Title" in body
+    assert body["X-Title"] == msg["title"]
+    assert "X-Priority" in body
+    assert "X-Tags" in body
+    assert isinstance(body["X-Tags"], str)  # comma-separated, not a list
 
 
 # ── send_notification — slack formatting ─────────────────────────────────────
