@@ -145,6 +145,7 @@ class AppSettings(BaseModel):
     notifyWebhookUrl: str = ""
     notifyOnRun: bool = False
     notifyOnAuthError: bool = True
+    notifySystem: str = "generic"
 
     @field_validator("intervalMinutes", mode="before")
     @classmethod
@@ -168,6 +169,15 @@ class AppSettings(BaseModel):
         if url and not (url.startswith("http://") or url.startswith("https://")):
             raise ValueError(f"notifyWebhookUrl must be an http/https URL or empty, got: {url!r}")
         return url
+
+    @field_validator("notifySystem", mode="before")
+    @classmethod
+    def validate_notify_system(cls, v: Any) -> str:
+        allowed = {"ntfy", "slack", "discord", "gotify", "generic"}
+        s = str(v or "generic")
+        if s not in allowed:
+            raise ValueError(f"notifySystem must be one of {sorted(allowed)}, got {s!r}")
+        return s
 
     @field_validator("kudosScheduleMatrix", mode="before")
     @classmethod

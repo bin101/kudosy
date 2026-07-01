@@ -136,7 +136,7 @@ async def test_send_ntfy_payload_has_ntfy_fields() -> None:
         calls.append((url, payload))
 
     msg = build_run_payload(_result(given=5, total=12))
-    await send_notification("https://ntfy.sh/kudosy", msg, post_fn=fake_post)
+    await send_notification("https://ntfy.sh/kudosy", msg, system="ntfy", post_fn=fake_post)
 
     assert len(calls) == 1
     _url, body = calls[0]
@@ -158,7 +158,9 @@ async def test_send_slack_payload_has_text_field() -> None:
         calls.append((url, payload))
 
     msg = build_run_payload(_result(given=3, total=10))
-    await send_notification("https://hooks.slack.com/services/T00/B00/xxx", msg, post_fn=fake_post)
+    await send_notification(
+        "https://hooks.slack.com/services/T00/B00/xxx", msg, system="slack", post_fn=fake_post
+    )
     body = calls[0][1]
     assert "text" in body
     assert isinstance(body["text"], str)
@@ -176,7 +178,9 @@ async def test_send_discord_payload_has_embeds() -> None:
         calls.append((url, payload))
 
     msg = build_run_payload(_result(given=2, total=8))
-    await send_notification("https://discord.com/api/webhooks/123/token", msg, post_fn=fake_post)
+    await send_notification(
+        "https://discord.com/api/webhooks/123/token", msg, system="discord", post_fn=fake_post
+    )
     body = calls[0][1]
     assert "embeds" in body
     embed = body["embeds"][0]  # type: ignore[index]
@@ -193,7 +197,9 @@ async def test_send_discord_auth_error_uses_red_color() -> None:
         calls.append((url, payload))
 
     msg = build_auth_error_payload(AuthError("expired"))
-    await send_notification("https://discord.com/api/webhooks/123/token", msg, post_fn=fake_post)
+    await send_notification(
+        "https://discord.com/api/webhooks/123/token", msg, system="discord", post_fn=fake_post
+    )
     embed = calls[0][1]["embeds"][0]  # type: ignore[index]
     assert embed["color"] == 0xDC2626  # red
 
@@ -209,7 +215,9 @@ async def test_send_gotify_payload_has_required_fields() -> None:
         calls.append((url, payload))
 
     msg = build_run_payload(_result(given=1, total=5))
-    await send_notification("https://gotify.example.com/message?token=abc", msg, post_fn=fake_post)
+    await send_notification(
+        "https://gotify.example.com/message?token=abc", msg, system="gotify", post_fn=fake_post
+    )
     body = calls[0][1]
     assert "title" in body
     assert "message" in body
@@ -227,7 +235,9 @@ async def test_send_generic_includes_structured_data() -> None:
         calls.append((url, payload))
 
     msg = build_run_payload(_result(given=5, total=12))
-    await send_notification("https://hooks.example.com/kudosy", msg, post_fn=fake_post)
+    await send_notification(
+        "https://hooks.example.com/kudosy", msg, system="generic", post_fn=fake_post
+    )
     body = calls[0][1]
     assert "title" in body
     assert "message" in body
@@ -267,6 +277,20 @@ def test_appsettings_notify_defaults() -> None:
     assert s.notifyWebhookUrl == ""
     assert s.notifyOnRun is False
     assert s.notifyOnAuthError is True
+    assert s.notifySystem == "generic"
+
+
+def test_appsettings_notify_system_valid_values() -> None:
+    for system in ("ntfy", "slack", "discord", "gotify", "generic"):
+        s = AppSettings(notifySystem=system)
+        assert s.notifySystem == system
+
+
+def test_appsettings_notify_system_invalid_raises() -> None:
+    import pydantic
+
+    with pytest.raises(pydantic.ValidationError):
+        AppSettings(notifySystem="telegram")
 
 
 def test_appsettings_notify_url_valid_https() -> None:

@@ -1,7 +1,7 @@
 """Webhook notification helper.
 
-Detects the target system from the URL and formats messages appropriately
-for ntfy, Slack, Discord, Gotify, and generic HTTP webhooks.
+Formats messages for ntfy, Slack, Discord, Gotify, and generic HTTP webhooks.
+The target system is supplied explicitly by the caller (stored in AppSettings).
 
 The HTTP POST callable is injected so unit tests never touch the network.
 Failures are logged but never re-raised — a broken webhook must not crash
@@ -139,18 +139,20 @@ async def send_notification(
     url: str,
     message: dict[str, Any],
     *,
+    system: str = "generic",
     post_fn: PostFn = _default_post,
 ) -> None:
-    """Format *message* for the detected system and POST it to *url*.
+    """Format *message* for *system* and POST it to *url*.
 
+    *system* must be one of ``"ntfy"``, ``"slack"``, ``"discord"``,
+    ``"gotify"``, or ``"generic"`` (the default).
     *message* must contain at least ``"title"`` and ``"message"`` keys.
     Silently does nothing when *url* is empty.  Any exception from *post_fn*
     is caught and logged so callers are never interrupted.
     """
     if not url:
         return
-    system = detect_system(url)
-    formatter = _FORMATTERS[system]
+    formatter = _FORMATTERS.get(system, _format_generic)
     payload = formatter(message)
     try:
         await post_fn(url, payload)
