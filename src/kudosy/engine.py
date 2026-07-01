@@ -194,5 +194,5 @@ async def run_kudos(
         error=error,
         newly_kudoed=newly_kudoed,
         skipped_cached=skipped_cached,
-        activities=[a.model_dump() for a in activities],
+        activities=[a.model_dump(mode="json") for a in activities],
     )

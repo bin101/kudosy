@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+from datetime import UTC, datetime
 from typing import Any
 from unittest.mock import AsyncMock
 
@@ -184,6 +186,44 @@ async def test_failed_send_not_added_to_newly_kudoed() -> None:
 
     assert result.newly_kudoed == []
     assert result.given == 0
+
+
+@pytest.mark.asyncio
+async def test_activities_in_result_are_json_serializable() -> None:
+    """result.activities must be JSON-serialisable even when start_date is set.
+
+    Regression: engine.py used model_dump() (Python mode) which kept datetime
+    objects intact; json.dumps in store._write_json_atomic then raised
+    TypeError.  The fix is model_dump(mode="json") which converts datetime to
+    an ISO string.
+    """
+    act = Activity(
+        activity_id="date-001",
+        athlete_id="20000001",
+        athlete_name="Alex Runner",
+        activity_name="Morning Run",
+        sport_type="Run",
+        has_kudoed=False,
+        start_date=datetime(2026, 7, 1, 6, 0, 0, tzinfo=UTC),
+    )
+    client = make_fake_client(send_kudos_result=True)
+    parser = FakeFeedParser([act])
+
+    result = await run_kudos(
+        user_cfg=_USER_CFG,
+        settings=AppSettings(minKudosDelaySeconds=0, maxKudosDelaySeconds=0),
+        client=client,
+        feed_parser=parser,
+        dry_run=False,
+    )
+
+    # Must not raise TypeError
+    serialised = json.dumps({"activities": result.activities})
+    parsed = json.loads(serialised)
+    start_date_value = parsed["activities"][0]["start_date"]
+    assert isinstance(start_date_value, str), (
+        f"start_date should be an ISO string after model_dump(mode='json'), got {type(start_date_value)}"
+    )
 
 
 @pytest.mark.asyncio
