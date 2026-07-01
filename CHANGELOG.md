@@ -5,6 +5,28 @@ All notable changes to Kudosy will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.0](https://github.com/bin101/kudosy/compare/v1.6.1...v1.7.0) (2026-07-01)
+
+
+### Features
+
+* merge Automation into Configuration tab with category dividers ([5e9b589](https://github.com/bin101/kudosy/commit/5e9b58983c68e32fbcf17c1ab52e7b9017dc9498))
+* paginate Strava following feed for 50–100 activities ([e5056e3](https://github.com/bin101/kudosy/commit/e5056e3b2a476b15d08b598f9d1a8634088e96a9))
+* paginate Strava following feed for 50–100 activities ([e5056e3](https://github.com/bin101/kudosy/commit/e5056e3b2a476b15d08b598f9d1a8634088e96a9))
+* paginate Strava following feed for 50–100 activities ([4841b3e](https://github.com/bin101/kudosy/commit/4841b3e488ecb3a3d389c69f6a22fe1d4ac06b99))
+* reorder tabs and persist active tab via URL hash ([fc7187b](https://github.com/bin101/kudosy/commit/fc7187b9b42308073878654c7c8fa4dcda114359))
+* reorder tabs and persist active tab via URL hash ([aefc32f](https://github.com/bin101/kudosy/commit/aefc32fca56b1aec0e1c637eafe4dd2eb3e3b4c3))
+* reorder tabs, merge Automation into Configuration tab, persist active tab via URL hash ([fc7187b](https://github.com/bin101/kudosy/commit/fc7187b9b42308073878654c7c8fa4dcda114359))
+* replace save buttons with debounced auto-save ([9358b7b](https://github.com/bin101/kudosy/commit/9358b7b8f5d3b08a6255d4f780a7c2c8644a7b53))
+* replace save buttons with debounced auto-save ([9358b7b](https://github.com/bin101/kudosy/commit/9358b7b8f5d3b08a6255d4f780a7c2c8644a7b53))
+* replace save buttons with debounced auto-save ([f5bd846](https://github.com/bin101/kudosy/commit/f5bd846c35d88d103ea2b251ef9e3bdca0270d35))
+* swap Configuration and Automation tab order ([0c834a6](https://github.com/bin101/kudosy/commit/0c834a69743dcfe690e0666b82074d6a330b564b))
+
+
+### Bug Fixes
+
+* add missing config.rules.title i18n key for all 5 languages ([604755b](https://github.com/bin101/kudosy/commit/604755b3c72a62fdf55a94f2ec0785833ba6d859))
+
 ## [1.6.1](https://github.com/bin101/kudosy/compare/v1.6.0...v1.6.1) (2026-07-01)
 
 
