@@ -143,6 +143,8 @@ POST /api/kudos/{activity_id}       — send kudos for a specific activity
 POST /api/run                       — trigger a run (409 if already running)
 GET  /api/status                    — running state, lastRun, nextRunAt, version, authOk
 GET  /api/history?limit=            — last N run-history entries (max 500, newest first)
+GET  /api/export                    — download config+settings as JSON (cookie excluded)
+POST /api/import                    — restore config+settings from backup JSON
 GET  /api/log                       — last-run.log as text/plain
 ```
 

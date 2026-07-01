@@ -162,6 +162,32 @@
 
       </form>
 
+      <!-- ── Backup / Restore ───────────────────────────────────────── -->
+      <div class="section-divider">
+        <span class="section-divider-label" data-i18n="config.backup.title">Backup &amp; Restore</span>
+      </div>
+
+      <div class="card">
+        <p class="hint" data-i18n="config.backup.hint">Exportiere deine Konfiguration (ohne Cookie) und importiere sie auf einem anderen Gerät oder nach einem Neuaufsetzen.</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button type="button" class="btn btn-outline" id="btn-export" data-i18n="config.backup.exportBtn">⬇ Exportieren</button>
+          <button type="button" class="btn btn-outline" id="btn-import-trigger" data-i18n="config.backup.importBtn">⬆ Importieren…</button>
+        </div>
+        <input type="file" id="import-file-input" accept=".json,application/json" style="display:none">
+      </div>
+
+      <!-- Import confirmation dialog -->
+      <dialog id="import-confirm-dialog">
+        <div class="card" style="margin:0;max-width:400px">
+          <h2 data-i18n="config.backup.confirm.title">Backup importieren?</h2>
+          <p data-i18n="config.backup.confirm.body">Die aktuelle Konfiguration und Einstellungen werden überschrieben. Der Strava Session-Cookie bleibt erhalten, sofern er nicht im Backup enthalten ist.</p>
+          <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+            <button type="button" class="btn btn-outline" id="btn-import-cancel" data-i18n="config.backup.confirm.cancel">Abbrechen</button>
+            <button type="button" class="btn btn-primary" id="btn-import-confirm" data-i18n="config.backup.confirm.ok">Importieren</button>
+          </div>
+        </div>
+      </dialog>
+
       <!-- ── Kategorie: Automation ────────────────────────────────── -->
       <div class="section-divider">
         <span class="section-divider-label" data-i18n="tab.settings">Automation</span>

@@ -12,7 +12,8 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, Response
-from fastapi.responses import HTMLResponse, PlainTextResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
+from pydantic import BaseModel
 
 from kudosy import __version__
 from kudosy.decision import decide
@@ -34,6 +35,7 @@ from kudosy.store import (
     read_user_config,
     write_activity_cache,
     write_settings,
+    write_user_config,
     write_user_config_raw,
 )
 from kudosy.strava_client import StravaClient
@@ -67,6 +69,7 @@ async def serve_index() -> HTMLResponse:
         "./feed.js",
         "./status.js",
         "./stats.js",
+        "./backup.js",
         "./tabs.js",
         "./main.js",
     ]
@@ -452,6 +455,81 @@ async def get_history(limit: int = 100) -> list[dict[str, Any]]:
     total, would_give, given, success.
     """
     return read_run_history(limit=max(1, min(limit, 500)))
+
+
+# ── Backup / Restore ─────────────────────────────────────────────────────────
+
+
+@router.get("/api/export")
+async def export_config() -> JSONResponse:
+    """Export config + settings as a downloadable JSON backup.
+
+    The ``stravaSessionCookie`` is intentionally omitted from the export for
+    security — it contains a live browser session token.
+    """
+    import datetime as _dt
+
+    cfg = read_user_config()
+    settings = read_settings()
+
+    cfg_dict = cfg.model_dump(mode="json") if cfg else {}
+    cfg_dict.pop("stravaSessionCookie", None)  # never export the live session cookie
+
+    payload = {
+        "version": 1,
+        "exported_at": _dt.datetime.now(_dt.UTC).isoformat(),
+        "config": cfg_dict,
+        "settings": settings.model_dump(mode="json"),
+        "athleteLabels": read_athlete_labels(),
+        "athleteAvatars": read_athlete_avatars(),
+    }
+    filename = "kudosy-backup.json"
+    return JSONResponse(
+        content=payload,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+class _ImportBody(BaseModel):
+    config: dict[str, Any]
+    settings: dict[str, Any]
+
+
+@router.post("/api/import")
+async def import_config(body: _ImportBody) -> dict[str, Any]:
+    """Restore config + settings from a backup payload.
+
+    The ``stravaSessionCookie`` is only updated when explicitly present and
+    non-empty in the import payload — otherwise the existing cookie is kept.
+    """
+    from kudosy.models import AppSettings, UserConfig
+
+    # Validate imported config (may raise 422 automatically via Pydantic)
+    try:
+        new_cfg = UserConfig.model_validate(body.config)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=422, detail={"code": "INVALID_CONFIG", "message": str(exc)}
+        ) from exc
+
+    try:
+        new_settings = AppSettings.model_validate(body.settings)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=422, detail={"code": "INVALID_SETTINGS", "message": str(exc)}
+        ) from exc
+
+    # Preserve the existing session cookie unless the import explicitly supplies one
+    if not new_cfg.stravaSessionCookie:
+        existing = read_user_config()
+        if existing and existing.stravaSessionCookie:
+            new_cfg = new_cfg.model_copy(
+                update={"stravaSessionCookie": existing.stravaSessionCookie}
+            )
+
+    write_user_config(new_cfg)
+    write_settings(new_settings)
+    return {"ok": True}
 
 
 # ── Log ───────────────────────────────────────────────────────────────────────
