@@ -76,6 +76,14 @@ export async function pollStatus() {
       $('val-interval').textContent  = t('status.schedulerOff');
     }
 
+    // Auth warning banner — shown when the last run returned an auth error
+    const banner = $('auth-error-banner');
+    if (banner) {
+      const authFailed = s.authOk === false;
+      banner.hidden = !authFailed;
+      if (authFailed) banner.querySelector('[data-i18n]').textContent = t('status.authError');
+    }
+
     // Update footer version
     const versionEl = $('footer-version');
     if (versionEl && s.version) versionEl.textContent = `Kudosy v${s.version}`;

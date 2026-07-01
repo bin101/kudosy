@@ -312,6 +312,7 @@ async def get_status(request: Request) -> dict[str, Any]:
     settings = read_settings()
     last_run: RunResult | None = state.get("last_run")
 
+    auth_ok: bool | None = state.get("auth_ok")
     return RunStatus(
         running=scheduler.is_running if scheduler else False,
         lastRun=last_run,
@@ -319,6 +320,7 @@ async def get_status(request: Request) -> dict[str, Any]:
         schedulerEnabled=settings.schedulerEnabled,
         intervalMinutes=settings.intervalMinutes,
         version=__version__,
+        authOk=auth_ok,
     ).model_dump(mode="json")
 
 

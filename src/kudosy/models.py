@@ -141,6 +141,10 @@ class AppSettings(BaseModel):
     timezone: str = "Europe/Berlin"
     kudosScheduleEnabled: bool = False
     kudosScheduleMatrix: list[list[bool]] = Field(default_factory=_default_schedule_matrix)
+    # Webhook notifications
+    notifyWebhookUrl: str = ""
+    notifyOnRun: bool = False
+    notifyOnAuthError: bool = True
 
     @field_validator("intervalMinutes", mode="before")
     @classmethod
@@ -156,6 +160,14 @@ class AppSettings(BaseModel):
         if not is_valid_timezone(name):
             raise ValueError(f"Unknown timezone: {name!r}")
         return name
+
+    @field_validator("notifyWebhookUrl", mode="before")
+    @classmethod
+    def validate_webhook_url(cls, v: Any) -> str:
+        url = str(v or "")
+        if url and not (url.startswith("http://") or url.startswith("https://")):
+            raise ValueError(f"notifyWebhookUrl must be an http/https URL or empty, got: {url!r}")
+        return url
 
     @field_validator("kudosScheduleMatrix", mode="before")
     @classmethod
@@ -304,3 +316,4 @@ class RunStatus(BaseModel):
     schedulerEnabled: bool
     intervalMinutes: int
     version: str
+    authOk: bool | None = None  # None = no run attempted yet
