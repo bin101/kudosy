@@ -5,6 +5,35 @@ All notable changes to Kudosy will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.0](https://github.com/bin101/kudosy/compare/v1.7.0...v1.8.0) (2026-07-02)
+
+
+### Features
+
+* add daily digest notification mode ([d58e242](https://github.com/bin101/kudosy/commit/d58e242e980b3edaa9a96a169a3a93f46ead27eb))
+* add daily digest notification mode ([8222a57](https://github.com/bin101/kudosy/commit/8222a578752ce3a4848909d187c43ad0d5a0f406))
+* add dark mode with system-theme default and user override ([07ce6f8](https://github.com/bin101/kudosy/commit/07ce6f8ab01c4b89d6aa7325bc61305ac14671a5))
+* config backup & restore (export/import) ([85a85fd](https://github.com/bin101/kudosy/commit/85a85fdedde96e6286d8b0afee99f8f29f124d20))
+* config backup & restore (export/import) ([17b6d27](https://github.com/bin101/kudosy/commit/17b6d27c679bc9e87707ab2f45337b2488454dd4))
+* dark mode with system-theme default and user override ([ea583f4](https://github.com/bin101/kudosy/commit/ea583f49ec5ad8e46945287f6cc8251891c0e487))
+* notifications & cookie-health monitoring ([b1599a6](https://github.com/bin101/kudosy/commit/b1599a60d4dda6d3cdc7419b46f2f36c3f515e39))
+* notifications & cookie-health monitoring ([d356dfa](https://github.com/bin101/kudosy/commit/d356dfa0035aeef80a8b6abfb53c3904c3c03341))
+* replace webhook auto-detection with explicit system selector ([badc88a](https://github.com/bin101/kudosy/commit/badc88a9311beea03d575be8115c3c107a92cd10))
+* run history & statistics dashboard ([e91d32a](https://github.com/bin101/kudosy/commit/e91d32a2557a1f1cf7fd121834c3eb464b25e850))
+* run history & statistics dashboard ([5886d96](https://github.com/bin101/kudosy/commit/5886d96ce3dcd1ab504c9f562fc1c451bc86bdd9))
+
+
+### Bug Fixes
+
+* format notification messages for ntfy, Slack, Discord, Gotify ([1284ece](https://github.com/bin101/kudosy/commit/1284ece1a8ec8efc6d9e200b9fd7310cf24b5ade))
+* format notification messages for ntfy, Slack, Discord, Gotify ([1284ece](https://github.com/bin101/kudosy/commit/1284ece1a8ec8efc6d9e200b9fd7310cf24b5ade))
+* format notification messages for ntfy, Slack, Discord, Gotify ([9e1558a](https://github.com/bin101/kudosy/commit/9e1558adfc7c28a95471e52bec449fcda1e53452))
+* make app footer sticky at viewport bottom ([3ebd9cf](https://github.com/bin101/kudosy/commit/3ebd9cf3eb0a025aaf0bce3c986e100a0a22da73))
+* make app footer sticky at viewport bottom ([bad816a](https://github.com/bin101/kudosy/commit/bad816ad27b161e41b516fc1c44d4cc26f450407))
+* send ntfy headers as UTF-8 bytes to preserve non-ASCII characters ([b8e7cdd](https://github.com/bin101/kudosy/commit/b8e7cddfb33dff11c68121e88f8440c2faacf74a))
+* URL-encode X-Title header to avoid ASCII encoding error ([4f8861d](https://github.com/bin101/kudosy/commit/4f8861dc48d07079e4c306d1c1c1570481e0c302))
+* use ntfy headers API instead of JSON body ([b6951ee](https://github.com/bin101/kudosy/commit/b6951ee2073a1c0ceed0d15cbdd4f1e5f96f20cf))
+
 ## [1.7.0](https://github.com/bin101/kudosy/compare/v1.6.1...v1.7.0) (2026-07-01)
 
 
