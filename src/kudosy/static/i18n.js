@@ -206,6 +206,9 @@ const MESSAGES = {
     'stats.noData': 'Noch keine Lauf-Daten vorhanden. Starte einen Lauf, um die Statistik zu befüllen.',
     'stats.loadError': 'Fehler beim Laden der Statistik: {msg}',
     'stats.simulated': 'simuliert',
+    'theme.system': 'System',
+    'theme.light': 'Hell',
+    'theme.dark': 'Dunkel',
   },
 
   en: {
@@ -408,6 +411,9 @@ const MESSAGES = {
     'stats.noData': 'No run data yet. Start a run to populate the statistics.',
     'stats.loadError': 'Error loading statistics: {msg}',
     'stats.simulated': 'simulated',
+    'theme.system': 'System',
+    'theme.light': 'Light',
+    'theme.dark': 'Dark',
   },
 
   fr: {
@@ -595,6 +601,9 @@ const MESSAGES = {
     'error.ENGINE_NOT_READY': 'Le moteur n\'est pas encore prêt.',
     'error.AUTH_INVALID_COOKIE': 'Cookie de session Strava invalide ou expiré. Veuillez saisir un nouveau cookie dans la configuration.',
     'error.AUTH_FAILED': 'Échec de l\'authentification.',
+    'theme.system': 'Système',
+    'theme.light': 'Clair',
+    'theme.dark': 'Sombre',
   },
 
   es: {
@@ -782,6 +791,9 @@ const MESSAGES = {
     'error.ENGINE_NOT_READY': 'El motor aún no está listo.',
     'error.AUTH_INVALID_COOKIE': 'El cookie de sesión de Strava es inválido o ha expirado. Por favor, introduce uno nuevo en la configuración.',
     'error.AUTH_FAILED': 'Error de autenticación.',
+    'theme.system': 'Sistema',
+    'theme.light': 'Claro',
+    'theme.dark': 'Oscuro',
   },
 
   it: {
@@ -969,6 +981,9 @@ const MESSAGES = {
     'error.ENGINE_NOT_READY': 'Il motore non è ancora pronto.',
     'error.AUTH_INVALID_COOKIE': 'Il cookie di sessione Strava non è valido o è scaduto. Inserisci un nuovo cookie nella configurazione.',
     'error.AUTH_FAILED': 'Autenticazione fallita.',
+    'theme.system': 'Sistema',
+    'theme.light': 'Chiaro',
+    'theme.dark': 'Scuro',
   },
 };
 
