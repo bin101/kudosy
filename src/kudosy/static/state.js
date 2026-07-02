@@ -16,6 +16,7 @@ export const state = {
   feedActivities: [],
   feedFetchedAt: null,
   feedLoaded: false,   // true after the first successful feed fetch
+  statsLoaded: false,  // true after the first stats tab visit
   feedFilter: { status: 'all', text: '', sport: '' },
 
   // Log-tab polling timer

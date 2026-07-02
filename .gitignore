@@ -47,3 +47,4 @@ dmypy.json
 
 # Browser network captures (may contain session cookies / PII)
 *.har
+.tokensave

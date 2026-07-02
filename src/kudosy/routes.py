@@ -29,6 +29,7 @@ from kudosy.store import (
     read_athlete_avatars,
     read_athlete_labels,
     read_log,
+    read_run_history,
     read_settings,
     read_user_config,
     write_activity_cache,
@@ -65,6 +66,7 @@ async def serve_index() -> HTMLResponse:
         "./settings.js",
         "./feed.js",
         "./status.js",
+        "./stats.js",
         "./tabs.js",
         "./main.js",
     ]
@@ -435,6 +437,19 @@ async def post_single_kudos(activity_id: str) -> dict[str, Any]:
         raise HTTPException(status_code=401, detail={"code": code, "message": str(exc)}) from exc
     finally:
         await client.aclose()
+
+
+# ── History ───────────────────────────────────────────────────────────────────
+
+
+@router.get("/api/history")
+async def get_history(limit: int = 100) -> list[dict[str, Any]]:
+    """Return the *limit* most-recent run-history entries (newest first).
+
+    Each entry is a compact dict with: started_at, finished_at, dry_run,
+    total, would_give, given, success.
+    """
+    return read_run_history(limit=max(1, min(limit, 500)))
 
 
 # ── Log ───────────────────────────────────────────────────────────────────────

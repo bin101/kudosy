@@ -6,6 +6,7 @@ import { SUPPORTED, LANG_LABELS, t, getLang, setLang } from './i18n.js';
 import { state } from './state.js';
 import { pollStatus, startPolling, stopPolling } from './status.js';
 import { loadFeed, renderFeed } from './feed.js';
+import { loadStats } from './stats.js';
 
 // ── Tab switching ─────────────────────────────────────────────────────────────
 
@@ -27,6 +28,14 @@ export function activateTab(tabName) {
     // Only fetch from Strava on first visit; use cached data on tab switches.
     // The Refresh button is the explicit way to reload from Strava.
     if (state.feedLoaded) renderFeed(); else loadFeed();
+  } else if (tabName === 'stats') {
+    stopPolling();
+    pollStatus();
+    // Load stats on first visit; the Refresh button handles explicit reloads.
+    if (!state.statsLoaded) {
+      state.statsLoaded = true;
+      loadStats();
+    }
   } else {
     stopPolling();
     pollStatus();
@@ -39,7 +48,7 @@ export function initTabs() {
   });
 
   // Restore the last active tab from the URL hash, fall back to 'feed'.
-  const validTabs = new Set(['feed', 'config', 'log']);
+  const validTabs = new Set(['feed', 'config', 'log', 'stats']);
   const hashTab   = location.hash.slice(1);
   activateTab(validTabs.has(hashTab) ? hashTab : 'feed');
 }
