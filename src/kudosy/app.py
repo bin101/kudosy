@@ -17,8 +17,9 @@ from fastapi.staticfiles import StaticFiles
 
 from kudosy import __version__
 from kudosy.engine import run_kudos
-from kudosy.feed import StructuredFeedParser
+from kudosy.feed import AuthError, StructuredFeedParser
 from kudosy.logging_conf import configure_logging, reset_log_handler
+from kudosy.notify import build_auth_error_payload, build_run_payload, send_notification
 from kudosy.routes import router
 from kudosy.scheduler import KudosyScheduler
 from kudosy.settings import get_settings
@@ -104,6 +105,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
                 dry_run=dry_run,
                 kudoed_ids=kudoed_ids,
             )
+            _app_state["auth_ok"] = True
             # Persist newly kudoed activity IDs (dry-run never sends, so list is empty)
             if result and result.newly_kudoed:
                 now_iso = result.finished_at.isoformat()
@@ -142,7 +144,24 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
                         "success": result.success,
                     }
                 )
+                # Send run-complete webhook notification if configured
+                if settings.notifyOnRun and settings.notifyWebhookUrl:
+                    await send_notification(
+                        settings.notifyWebhookUrl,
+                        build_run_payload(result),
+                        system=settings.notifySystem,
+                    )
             return result
+        except AuthError as exc:
+            _app_state["auth_ok"] = False
+            log.error("Strava auth failed (cookie expired?): %s", exc)
+            if settings.notifyOnAuthError and settings.notifyWebhookUrl:
+                await send_notification(
+                    settings.notifyWebhookUrl,
+                    build_auth_error_payload(exc),
+                    system=settings.notifySystem,
+                )
+            return None
         finally:
             await client.aclose()
 

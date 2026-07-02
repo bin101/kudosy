@@ -116,7 +116,8 @@ docker compose up --build   # builds image, starts on :8080
 | `feed.py` | `FeedParser` protocol + `StructuredFeedParser` — parses JSON XHR feed response into `list[Activity]` |
 | `strava_client.py` | httpx async: CSRF, JSON feed fetch (`/dashboard/feed` XHR), kudo POST, athlete lookup, name search, `fetch_current_athlete_id` |
 | `engine.py` | Orchestrator: run-kudos loop with delays, dry-run, RunResult |
-| `store.py` | `/data` file I/O — atomic YAML/JSON writes, bootstrap, one-time migration of legacy `defaults.yaml`; athlete-labels.json + athlete-avatars.json |
+| `notify.py` | Pure: `send_notification(url, payload, *, post_fn)` — HTTP POST injected for tests; `build_run_payload`, `build_auth_error_payload` |
+| `store.py` | `/data` file I/O — atomic YAML/JSON writes, bootstrap, one-time migration of legacy `defaults.yaml`; athlete-labels.json + athlete-avatars.json; `append_run_history` / `read_run_history` |
 | `scheduler.py` | APScheduler wrapper with jitter, reschedule, in-flight guard |
 | `logging_conf.py` | stdout + `/data/last-run.log` handler setup |
 | `app.py` | FastAPI app factory + lifespan |
@@ -140,7 +141,8 @@ GET  /api/athlete-avatars           — all cached athlete avatar URLs  {id → 
 GET  /api/feed                      — current following feed with give_kudos/reason
 POST /api/kudos/{activity_id}       — send kudos for a specific activity
 POST /api/run                       — trigger a run (409 if already running)
-GET  /api/status                    — running state, lastRun, nextRunAt, version
+GET  /api/status                    — running state, lastRun, nextRunAt, version, authOk
+GET  /api/history?limit=            — last N run-history entries (max 500, newest first)
 GET  /api/log                       — last-run.log as text/plain
 ```
 

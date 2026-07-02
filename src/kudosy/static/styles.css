@@ -165,6 +165,19 @@ header {
 .tab:hover  { color: var(--text); }
 .tab.active { color: var(--brand); border-bottom-color: var(--brand); }
 
+/* ── Auth error banner ───────────────────────────────────────────────────────── */
+
+.auth-error-banner {
+  background: var(--error-bg);
+  color: var(--error);
+  border: 1px solid #fca5a5;
+  border-radius: 8px;
+  padding: 10px 16px;
+  margin-bottom: 16px;
+  font-weight: 500;
+  font-size: 14px;
+}
+
 /* ── Main content ────────────────────────────────────────────────────────────── */
 
 .content {

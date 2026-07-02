@@ -40,6 +40,11 @@
 
   <main class="content">
 
+    <!-- ── AUTH WARNING BANNER ──────────────────────────────────────────── -->
+    <div id="auth-error-banner" class="auth-error-banner" hidden>
+      <span data-i18n="status.authError">⚠️ Strava Session abgelaufen — Cookie erneuern</span>
+    </div>
+
     <!-- ── CONFIG (+ Automation merged) ────────────────────────────── -->
     <section id="tab-config" class="tab-pane">
 
@@ -239,6 +244,49 @@
           </div>
           <div class="schedule-matrix-wrap" id="schedule-matrix-wrap">
             <div id="schedule-matrix" class="schedule-matrix"></div>
+          </div>
+        </div>
+
+        <!-- ── Notifications ──────────────────────────────────────────── -->
+        <div class="card">
+          <h2 data-i18n="settings.notify.title">Benachrichtigungen</h2>
+
+          <div class="form-group">
+            <label for="notifySystem" data-i18n="settings.notify.system.label">System</label>
+            <select id="notifySystem">
+              <option value="ntfy">ntfy (ntfy.sh / selbst gehostet)</option>
+              <option value="slack">Slack Webhook</option>
+              <option value="discord">Discord Webhook</option>
+              <option value="gotify">Gotify</option>
+              <option value="generic" selected>Generisch / Custom (JSON)</option>
+            </select>
+            <small data-i18n="settings.notify.system.hint">Bestimmt wie die Nachricht formatiert wird.</small>
+          </div>
+
+          <div class="form-group">
+            <label for="notifyWebhookUrl" data-i18n="settings.notify.webhookUrl.label">Webhook-URL</label>
+            <input type="url" id="notifyWebhookUrl" autocomplete="off"
+                   data-i18n-placeholder="settings.notify.webhookUrl.placeholder"
+                   placeholder="https://ntfy.sh/mein-kanal">
+            <small data-i18n="settings.notify.webhookUrl.hint">HTTP-POST-Endpunkt (ntfy, Telegram-Bot, beliebige API). Leer lassen um Benachrichtigungen zu deaktivieren.</small>
+          </div>
+
+          <div class="form-group">
+            <label class="toggle-row">
+              <input type="checkbox" id="notifyOnRun">
+              <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              <span data-i18n="settings.notify.onRun.label">Nach jedem Lauf benachrichtigen</span>
+            </label>
+            <small data-i18n="settings.notify.onRun.hint">Sendet eine Zusammenfassung (Kudos gegeben, Aktivitäten geprüft).</small>
+          </div>
+
+          <div class="form-group">
+            <label class="toggle-row">
+              <input type="checkbox" id="notifyOnAuthError">
+              <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              <span data-i18n="settings.notify.onAuthError.label">Bei Cookie-Fehler benachrichtigen</span>
+            </label>
+            <small data-i18n="settings.notify.onAuthError.hint">Sofortiger Hinweis wenn der Strava Session-Cookie abgelaufen ist.</small>
           </div>
         </div>
 
