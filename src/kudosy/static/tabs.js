@@ -7,6 +7,7 @@ import { state } from './state.js';
 import { pollStatus, startPolling, stopPolling } from './status.js';
 import { loadFeed, renderFeed } from './feed.js';
 import { loadStats } from './stats.js';
+import { updateThemeSelectLabels } from './theme.js';
 
 // ── Tab switching ─────────────────────────────────────────────────────────────
 
@@ -67,6 +68,7 @@ export function initLangSelect() {
   }
   sel.addEventListener('change', () => {
     setLang(sel.value, () => {
+      updateThemeSelectLabels();
       // Re-render dynamic areas after language change
       pollStatus();
       const activeFeedPane = document.querySelector('#tab-feed.active');

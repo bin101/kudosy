@@ -4,26 +4,32 @@
    ────────────────────────────────────────────────────────────────────────────── */
 
 :root {
-  --brand:        #6366F1;
-  --brand-dark:   #4F46E5;
-  --brand-light:  #EEF2FF;
-  --text:         #1a1a1a;
-  --text-muted:   #6b7280;
-  --border:       #e5e7eb;
-  --bg:           #F8F7FF;
-  --white:        #ffffff;
-  --radius:       8px;
-  --radius-lg:    12px;
-  --shadow:       0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.06);
-  --shadow-md:    0 4px 12px rgba(0,0,0,.10);
-  --success:      #16a34a;
-  --success-bg:   #dcfce7;
-  --error:        #dc2626;
-  --error-bg:     #fee2e2;
-  --warn:         #d97706;
-  --warn-bg:      #fef3c7;
-  --info:         #6366F1;
-  --info-bg:      #EEF2FF;
+  --brand:               #6366F1;
+  --brand-dark:          #4F46E5;
+  --brand-light:         #EEF2FF;
+  --text:                #1a1a1a;
+  --text-muted:          #6b7280;
+  --border:              #e5e7eb;
+  --bg:                  #F8F7FF;
+  --white:               #ffffff;
+  --radius:              8px;
+  --radius-lg:           12px;
+  --shadow:              0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.06);
+  --shadow-md:           0 4px 12px rgba(0,0,0,.10);
+  --success:             #16a34a;
+  --success-bg:          #dcfce7;
+  --success-text:        #14532d;
+  --error:               #dc2626;
+  --error-bg:            #fee2e2;
+  --error-bg-hover:      #fecaca;
+  --error-text:          #7f1d1d;
+  --warn:                #d97706;
+  --warn-bg:             #fef3c7;
+  --info:                #6366F1;
+  --info-bg:             #EEF2FF;
+  --info-text:           #3730a3;
+  --surface-muted:       #f3f4f6;
+  --surface-muted-hover: #e5e7eb;
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -130,7 +136,7 @@ header {
   border-radius: 50%;
   background: currentColor;
 }
-.badge-idle    { background: #f3f4f6; color: var(--text-muted); }
+.badge-idle    { background: var(--surface-muted); color: var(--text-muted); }
 .badge-running { background: var(--warn-bg); color: var(--warn); }
 .badge-ok      { background: var(--success-bg); color: var(--success); }
 .badge-error   { background: var(--error-bg); color: var(--error); }
@@ -348,8 +354,8 @@ small, .hint {
 .btn-primary  { background: var(--brand); color: #fff; }
 .btn-primary:hover:not(:disabled) { background: var(--brand-dark); }
 
-.btn-secondary { background: #f3f4f6; color: var(--text); }
-.btn-secondary:hover:not(:disabled) { background: #e5e7eb; }
+.btn-secondary { background: var(--surface-muted); color: var(--text); }
+.btn-secondary:hover:not(:disabled) { background: var(--surface-muted-hover); }
 
 .btn-outline {
   background: transparent;
@@ -390,7 +396,7 @@ small, .hint {
   height: 28px;
   border-radius: 50%;
   border: none;
-  background: #fee2e2;
+  background: var(--error-bg);
   color: var(--error);
   cursor: pointer;
   font-size: 16px;
@@ -400,7 +406,7 @@ small, .hint {
   justify-content: center;
   transition: background .15s;
 }
-.btn-remove:hover { background: #fecaca; }
+.btn-remove:hover { background: var(--error-bg-hover); }
 
 /* ── Rules table ─────────────────────────────────────────────────────────────── */
 
@@ -418,7 +424,7 @@ small, .hint {
 }
 
 .rules-table thead th {
-  background: #f9fafb;
+  background: var(--surface-muted);
   padding: 8px 12px;
   text-align: left;
   font-weight: 600;
@@ -504,7 +510,7 @@ small, .hint {
 
 .info-box {
   background: var(--info-bg);
-  color: #3730a3;
+  color: var(--info-text);
   border-radius: var(--radius);
   padding: 12px 16px;
   margin-top: 16px;
@@ -601,9 +607,9 @@ small, .hint {
   pointer-events: all;
   max-width: 340px;
 }
-.toast-success { background: var(--success-bg); color: #14532d; }
-.toast-error   { background: var(--error-bg);   color: #7f1d1d; }
-.toast-info    { background: var(--info-bg);     color: #3730a3; }
+.toast-success { background: var(--success-bg); color: var(--success-text); }
+.toast-error   { background: var(--error-bg);   color: var(--error-text); }
+.toast-info    { background: var(--info-bg);     color: var(--info-text); }
 
 @keyframes slideIn {
   from { opacity: 0; transform: translateY(12px); }
@@ -659,7 +665,7 @@ small, .hint {
 
 /* ── code ────────────────────────────────────────────────────────────────────── */
 code {
-  background: #f3f4f6;
+  background: var(--surface-muted);
   padding: 1px 5px;
   border-radius: 4px;
   font-family: monospace;
@@ -1364,4 +1370,60 @@ select:focus {
 
   /* Athleten-ID-Feld leicht schmaler */
   .athlete-id { width: 90px; }
+}
+
+/* ── Dark mode ───────────────────────────────────────────────────────────────── */
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --brand-dark:          #818cf8;
+    --brand-light:         #1e1b4b;
+    --text:                #f1f5f9;
+    --text-muted:          #94a3b8;
+    --border:              #334155;
+    --bg:                  #0f172a;
+    --white:               #1e293b;
+    --shadow:              0 1px 3px rgba(0,0,0,.4), 0 1px 2px rgba(0,0,0,.3);
+    --shadow-md:           0 4px 12px rgba(0,0,0,.5);
+    --success:             #4ade80;
+    --success-bg:          #14532d;
+    --success-text:        #86efac;
+    --error:               #f87171;
+    --error-bg:            #450a0a;
+    --error-bg-hover:      #7f1d1d;
+    --error-text:          #fca5a5;
+    --warn:                #fbbf24;
+    --warn-bg:             #451a03;
+    --info:                #818cf8;
+    --info-bg:             #1e1b4b;
+    --info-text:           #c7d2fe;
+    --surface-muted:       #334155;
+    --surface-muted-hover: #475569;
+  }
+}
+
+:root[data-theme="dark"] {
+  --brand-dark:          #818cf8;
+  --brand-light:         #1e1b4b;
+  --text:                #f1f5f9;
+  --text-muted:          #94a3b8;
+  --border:              #334155;
+  --bg:                  #0f172a;
+  --white:               #1e293b;
+  --shadow:              0 1px 3px rgba(0,0,0,.4), 0 1px 2px rgba(0,0,0,.3);
+  --shadow-md:           0 4px 12px rgba(0,0,0,.5);
+  --success:             #4ade80;
+  --success-bg:          #14532d;
+  --success-text:        #86efac;
+  --error:               #f87171;
+  --error-bg:            #450a0a;
+  --error-bg-hover:      #7f1d1d;
+  --error-text:          #fca5a5;
+  --warn:                #fbbf24;
+  --warn-bg:             #451a03;
+  --info:                #818cf8;
+  --info-bg:             #1e1b4b;
+  --info-text:           #c7d2fe;
+  --surface-muted:       #334155;
+  --surface-muted-hover: #475569;
 }

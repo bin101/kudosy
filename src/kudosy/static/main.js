@@ -7,6 +7,7 @@ import { state } from './state.js';
 import { toast, initRevealButtons } from './dom.js';
 import { t } from './i18n.js';
 import { initTabs, initLangSelect } from './tabs.js';
+import { initThemeSelect, applyTheme, getTheme } from './theme.js';
 import { loadConfig, initConfigTab } from './config.js';
 import { loadSettings, initSettingsTab } from './settings.js';
 import { initFeedTab } from './feed.js';
@@ -30,6 +31,8 @@ async function init() {
   // Apply static translations for the initial language before any tab renders
   applyStaticTranslations();
 
+  applyTheme(getTheme());
+  initThemeSelect();
   initLangSelect();
   initTabs();
   initConfigTab();

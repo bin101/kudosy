@@ -8,6 +8,12 @@
   <link rel="manifest" href="/assets/site.webmanifest">
   <meta name="theme-color" content="#6366F1">
   <link rel="stylesheet" href="styles.css">
+  <script>
+    (function () {
+      var m = localStorage.getItem('kudosy.theme');
+      if (m === 'light' || m === 'dark') document.documentElement.dataset.theme = m;
+    })();
+  </script>
 </head>
 <body>
   <div class="sticky-top">
@@ -22,6 +28,7 @@
           <span id="status-badge" class="badge badge-idle" data-i18n="badge.loading">Lade…</span>
         </div>
         <div class="header-actions">
+          <select id="theme-select" class="lang-select" aria-label="Theme"></select>
           <select id="lang-select" class="lang-select" aria-label="Language"></select>
           <button id="btn-run" class="btn btn-primary">
             <span>▶</span> <span data-i18n="btn.runNow">Jetzt ausführen</span>
