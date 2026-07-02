@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import datetime
-from urllib.parse import quote
 
 import pytest
 
@@ -145,7 +144,7 @@ async def test_send_ntfy_payload_has_ntfy_fields() -> None:
     assert "_body" in body
     assert body["_body"] == msg["message"]
     assert "X-Title" in body
-    assert body["X-Title"] == quote(msg["title"])  # ntfy URL-decodes header values
+    assert body["X-Title"] == msg["title"]
     assert "X-Priority" in body
     assert "X-Tags" in body
     assert isinstance(body["X-Tags"], str)  # comma-separated, not a list

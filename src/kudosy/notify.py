@@ -14,7 +14,6 @@ import logging
 import re
 from collections.abc import Awaitable, Callable
 from typing import Any
-from urllib.parse import quote
 
 log = logging.getLogger(__name__)
 
@@ -27,9 +26,13 @@ async def _default_post(url: str, payload: dict[str, Any]) -> None:
     async with httpx.AsyncClient(timeout=10) as client:
         if "_body" in payload:
             # Plain-text body + X-* headers (ntfy headers API).
-            # More robust than JSON publishing — works through any reverse proxy
-            # regardless of Content-Type handling.
-            headers = {k: v for k, v in payload.items() if not k.startswith("_")}
+            # Values are (bytes, bytes) tuples so httpx skips ASCII validation;
+            # ntfy receives and decodes UTF-8 bytes directly (handles em-dashes etc.).
+            headers = [
+                (k.encode("ascii"), v.encode("utf-8"))
+                for k, v in payload.items()
+                if not k.startswith("_")
+            ]
             resp = await client.post(url, content=payload["_body"].encode("utf-8"), headers=headers)
         else:
             resp = await client.post(url, json=payload)
@@ -70,10 +73,9 @@ def _format_ntfy(msg: dict[str, Any]) -> dict[str, Any]:
     ``_default_post`` to send ``content=`` with HTTP headers instead of
     ``json=``.
     """
-    # X-Title must be ASCII; ntfy URL-decodes header values so quote() is safe.
     return {
         "_body": msg["message"],
-        "X-Title": quote(msg["title"]),
+        "X-Title": msg["title"],
         "X-Priority": str(msg.get("priority", 3)),
         "X-Tags": ",".join(msg.get("tags", [])),
     }
