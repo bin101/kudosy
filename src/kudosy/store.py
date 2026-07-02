@@ -96,6 +96,7 @@ _AVATARS_FILE = "athlete-avatars.json"
 _KUDOED_FILE = "kudoed-activities.json"
 _ACTIVITY_CACHE_FILE = "activity-cache.json"
 _HISTORY_FILE = "run-history.json"
+_DIGEST_STATE_FILE = "last-digest.json"
 _LOG_FILE = "last-run.log"
 
 # Maximum number of history entries kept on disk — oldest are pruned.
@@ -274,6 +275,27 @@ def append_run_history(entry: dict[str, Any]) -> None:
     if len(history) > _MAX_HISTORY:
         history = history[:_MAX_HISTORY]
     _write_json_atomic(_path(_HISTORY_FILE), history)
+
+
+# ── Daily digest marker ───────────────────────────────────────────────────────
+
+
+def read_last_digest_at() -> str | None:
+    """Return the ISO-timestamp of the last sent daily digest, or None.
+
+    Returns None when the file does not exist, is corrupt, or lacks the key.
+    None means 'first ever digest — include all available history'.
+    """
+    raw = _read_json(_path(_DIGEST_STATE_FILE))
+    if not isinstance(raw, dict):
+        return None
+    value = raw.get("last_digest_at")
+    return value if isinstance(value, str) else None
+
+
+def write_last_digest_at(ts_iso: str) -> None:
+    """Persist the timestamp of the most-recently sent daily digest."""
+    _write_json_atomic(_path(_DIGEST_STATE_FILE), {"last_digest_at": ts_iso})
 
 
 def log_path() -> Path:

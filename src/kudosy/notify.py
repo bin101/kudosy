@@ -13,6 +13,7 @@ from __future__ import annotations
 import logging
 import re
 from collections.abc import Awaitable, Callable
+from datetime import datetime
 from typing import Any
 
 log = logging.getLogger(__name__)
@@ -129,6 +130,11 @@ def _format_generic(msg: dict[str, Any]) -> dict[str, Any]:
         "error",
         "started_at",
         "finished_at",
+        # daily_digest fields
+        "runs",
+        "failed",
+        "since",
+        "until",
     ):
         if key in msg:
             out[key] = msg[key]
@@ -227,4 +233,52 @@ def build_auth_error_payload(exc: Exception) -> dict[str, Any]:
         "message": f"⚠️ Der Strava Session-Cookie ist abgelaufen.\n{exc}",
         "tags": ["warning"],
         "priority": 4,
+    }
+
+
+def build_digest_payload(
+    entries: list[dict[str, Any]],
+    *,
+    since: datetime | None,
+    until: datetime,
+) -> dict[str, Any]:
+    """Build a system-agnostic daily-digest notification message.
+
+    *entries* is the list of run-history dicts (each with keys: dry_run, total,
+    would_give, given, success) covering the period since the last digest.
+    *since* is None for the very first digest (all available history was used).
+    """
+    runs = len(entries)
+    total = sum(int(e.get("total", 0)) for e in entries)
+    given = sum(int(e.get("given", 0)) for e in entries)
+    would_give = sum(int(e.get("would_give", 0)) for e in entries)
+    failed = sum(1 for e in entries if not e.get("success", True))
+
+    if runs == 0:
+        message_text = "📊 Keine Läufe seit der letzten Zusammenfassung."
+    else:
+        live_runs = sum(1 for e in entries if not e.get("dry_run", False))
+        dry_runs = runs - live_runs
+        parts: list[str] = [f"📊 {runs} Lauf/Läufe · {total} Aktivitäten geprüft"]
+        if live_runs:
+            parts.append(f"{given} Kudos vergeben")
+        if dry_runs:
+            parts.append(f"{would_give} Kudos simuliert")
+        if failed:
+            parts.append(f"{failed} fehlgeschlagen")
+        message_text = " · ".join(parts)
+
+    return {
+        "event": "daily_digest",
+        "title": "Kudosy — Tägliche Zusammenfassung",
+        "message": message_text,
+        "tags": ["bar_chart"],
+        "priority": 3,
+        "runs": runs,
+        "total": total,
+        "given": given,
+        "would_give": would_give,
+        "failed": failed,
+        "since": since.isoformat() if since is not None else None,
+        "until": until.isoformat(),
     }

@@ -10,6 +10,7 @@ from kudosy.feed import AuthError
 from kudosy.models import AppSettings, RunResult
 from kudosy.notify import (
     build_auth_error_payload,
+    build_digest_payload,
     build_run_payload,
     detect_system,
     send_notification,
@@ -316,3 +317,122 @@ def test_appsettings_notify_url_invalid_raises() -> None:
 
     with pytest.raises(pydantic.ValidationError):
         AppSettings(notifyWebhookUrl="not-a-url")
+
+
+# ── build_digest_payload ──────────────────────────────────────────────────────
+
+_NOW = datetime.datetime(2026, 7, 2, 20, 0, tzinfo=datetime.UTC)
+_SINCE = datetime.datetime(2026, 7, 1, 20, 0, tzinfo=datetime.UTC)
+
+
+def _entry(**overrides: object) -> dict[str, object]:
+    base: dict[str, object] = {
+        "started_at": "2026-07-02T10:00:00+00:00",
+        "finished_at": "2026-07-02T10:01:00+00:00",
+        "dry_run": False,
+        "total": 5,
+        "would_give": 2,
+        "given": 2,
+        "success": True,
+    }
+    base.update(overrides)
+    return base
+
+
+def test_build_digest_payload_has_required_keys() -> None:
+    payload = build_digest_payload([_entry()], since=_SINCE, until=_NOW)
+    for key in ("event", "title", "message", "tags", "priority"):
+        assert key in payload, f"missing key: {key}"
+
+
+def test_build_digest_payload_event_type() -> None:
+    payload = build_digest_payload([_entry()], since=_SINCE, until=_NOW)
+    assert payload["event"] == "daily_digest"
+
+
+def test_build_digest_payload_aggregates_live_given() -> None:
+    entries = [_entry(given=3, total=10), _entry(given=5, total=8)]
+    payload = build_digest_payload(entries, since=_SINCE, until=_NOW)
+    assert payload["given"] == 8
+    assert payload["total"] == 18
+    assert payload["runs"] == 2
+
+
+def test_build_digest_payload_aggregates_dry_run_would_give() -> None:
+    entries = [
+        _entry(dry_run=True, would_give=4, given=0, total=10),
+        _entry(dry_run=True, would_give=6, given=0, total=12),
+    ]
+    payload = build_digest_payload(entries, since=_SINCE, until=_NOW)
+    assert payload["would_give"] == 10
+    assert payload["given"] == 0
+
+
+def test_build_digest_payload_counts_failed_runs() -> None:
+    entries = [_entry(success=True), _entry(success=False), _entry(success=False)]
+    payload = build_digest_payload(entries, since=_SINCE, until=_NOW)
+    assert payload["failed"] == 2
+
+
+def test_build_digest_payload_zero_entries_sends_empty_message() -> None:
+    payload = build_digest_payload([], since=_SINCE, until=_NOW)
+    assert payload["runs"] == 0
+    assert payload["given"] == 0
+    assert "message" in payload
+    assert len(payload["message"]) > 0  # non-empty string
+
+
+def test_build_digest_payload_includes_since_until() -> None:
+    payload = build_digest_payload([_entry()], since=_SINCE, until=_NOW)
+    assert payload["since"] == _SINCE.isoformat()
+    assert payload["until"] == _NOW.isoformat()
+
+
+def test_build_digest_payload_since_none_allowed() -> None:
+    """since=None means 'first ever digest — include everything'."""
+    payload = build_digest_payload([_entry()], since=None, until=_NOW)
+    assert payload["since"] is None
+
+
+def test_build_digest_payload_generic_formatter_passes_extra_keys() -> None:
+    """_format_generic must include digest-specific keys (runs, failed, since, until)."""
+    from kudosy.notify import _format_generic
+
+    payload = build_digest_payload([_entry()], since=_SINCE, until=_NOW)
+    formatted = _format_generic(payload)
+    for key in ("runs", "failed", "since", "until"):
+        assert key in formatted, f"_format_generic must pass through '{key}'"
+
+
+# ── AppSettings daily digest fields ──────────────────────────────────────────
+
+
+def test_appsettings_daily_digest_defaults() -> None:
+    s = AppSettings()
+    assert s.notifyDailyDigest is False
+    assert s.notifyDailyDigestTime == "20:00"
+
+
+def test_appsettings_daily_digest_time_valid() -> None:
+    for t in ("00:00", "08:30", "23:59"):
+        s = AppSettings(notifyDailyDigestTime=t)
+        assert s.notifyDailyDigestTime == t
+
+
+def test_appsettings_daily_digest_time_invalid_hour_raises() -> None:
+    import pydantic
+
+    with pytest.raises(pydantic.ValidationError):
+        AppSettings(notifyDailyDigestTime="25:00")
+
+
+def test_appsettings_daily_digest_time_invalid_format_raises() -> None:
+    import pydantic
+
+    with pytest.raises(pydantic.ValidationError):
+        AppSettings(notifyDailyDigestTime="abc")
+
+
+def test_appsettings_daily_digest_time_empty_uses_default() -> None:
+    s = AppSettings(notifyDailyDigestTime="")
+    assert s.notifyDailyDigestTime == "20:00"

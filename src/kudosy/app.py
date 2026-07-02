@@ -19,7 +19,12 @@ from kudosy import __version__
 from kudosy.engine import run_kudos
 from kudosy.feed import AuthError, StructuredFeedParser
 from kudosy.logging_conf import configure_logging, reset_log_handler
-from kudosy.notify import build_auth_error_payload, build_run_payload, send_notification
+from kudosy.notify import (
+    build_auth_error_payload,
+    build_digest_payload,
+    build_run_payload,
+    send_notification,
+)
 from kudosy.routes import router
 from kudosy.scheduler import KudosyScheduler
 from kudosy.settings import get_settings
@@ -31,9 +36,12 @@ from kudosy.store import (
     mark_kudoed,
     prune_kudoed,
     read_kudoed_ids,
+    read_last_digest_at,
+    read_run_history,
     read_settings,
     read_user_config,
     write_activity_cache,
+    write_last_digest_at,
 )
 
 log = logging.getLogger(__name__)
@@ -171,12 +179,50 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         if result:
             _app_state["last_run"] = result
 
+    async def _digest_job() -> None:
+        from datetime import UTC, datetime
+
+        settings = read_settings()
+        if not settings.notifyWebhookUrl:
+            log.debug("[digest] No webhook URL configured — skipping digest")
+            return
+
+        since_iso = read_last_digest_at()
+        now = datetime.now(UTC)
+
+        # Collect all history entries since the last digest.
+        # since_iso=None means first ever digest — use all available history.
+        history = read_run_history(limit=500)
+        if since_iso is not None:
+            entries = [e for e in history if e.get("started_at", "") > since_iso]
+        else:
+            entries = history
+
+        since_dt = None
+        if since_iso is not None:
+            from datetime import datetime as _dt
+
+            try:
+                since_dt = _dt.fromisoformat(since_iso)
+            except (ValueError, TypeError):
+                since_dt = None
+
+        await send_notification(
+            settings.notifyWebhookUrl,
+            build_digest_payload(entries, since=since_dt, until=now),
+            system=settings.notifySystem,
+        )
+        write_last_digest_at(now.isoformat())
+        log.info("[digest] Daily digest sent (%d entries)", len(entries))
+
     _app_state["job_fn"] = _scheduled_job
+    _app_state["digest_fn"] = _digest_job
     _app_state["run_job_fn"] = _run_job
     _app_state["last_run"] = None
 
     settings = read_settings()
     scheduler.reschedule(settings, _scheduled_job)
+    scheduler.reschedule_digest(settings, _digest_job)
 
     log.info("Kudosy ready on port %d", env.port)
 

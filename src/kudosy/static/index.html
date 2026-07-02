@@ -282,6 +282,20 @@
 
           <div class="form-group">
             <label class="toggle-row">
+              <input type="checkbox" id="notifyDailyDigest">
+              <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              <span data-i18n="settings.notify.dailyDigest.label">Tägliche Zusammenfassung</span>
+            </label>
+            <small data-i18n="settings.notify.dailyDigest.hint">Sendet einmal täglich eine Übersicht aller Läufe seit der letzten Zusammenfassung.</small>
+          </div>
+
+          <div class="form-group" id="daily-digest-time-group">
+            <label for="notifyDailyDigestTime" data-i18n="settings.notify.dailyDigestTime.label">Uhrzeit (HH:MM)</label>
+            <input type="time" id="notifyDailyDigestTime" value="20:00">
+          </div>
+
+          <div class="form-group">
+            <label class="toggle-row">
               <input type="checkbox" id="notifyOnAuthError">
               <span class="toggle-track"><span class="toggle-thumb"></span></span>
               <span data-i18n="settings.notify.onAuthError.label">Bei Cookie-Fehler benachrichtigen</span>

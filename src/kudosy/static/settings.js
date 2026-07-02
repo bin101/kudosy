@@ -38,6 +38,8 @@ export async function loadSettings() {
   $('notifySystem').value            = s.notifySystem ?? 'generic';
   $('notifyWebhookUrl').value        = s.notifyWebhookUrl ?? '';
   $('notifyOnRun').checked           = s.notifyOnRun ?? false;
+  $('notifyDailyDigest').checked     = s.notifyDailyDigest ?? false;
+  $('notifyDailyDigestTime').value   = s.notifyDailyDigestTime ?? '20:00';
   $('notifyOnAuthError').checked     = s.notifyOnAuthError ?? true;
   toggleIntervalVisibility(s.schedulerEnabled);
   toggleScheduleMatrixEnabled(s.kudosScheduleEnabled ?? false);
@@ -71,6 +73,8 @@ export async function saveSettings() {
       notifySystem:          $('notifySystem').value,
       notifyWebhookUrl:      $('notifyWebhookUrl').value.trim(),
       notifyOnRun:           $('notifyOnRun').checked,
+      notifyDailyDigest:     $('notifyDailyDigest').checked,
+      notifyDailyDigestTime: $('notifyDailyDigestTime').value || '20:00',
       notifyOnAuthError:     $('notifyOnAuthError').checked,
     };
     await putJson('/api/settings', data);

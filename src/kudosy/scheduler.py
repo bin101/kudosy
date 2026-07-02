@@ -7,8 +7,10 @@ import random
 from collections.abc import Callable, Coroutine
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 
 from kudosy.humanizer import compute_jitter
 from kudosy.models import AppSettings
@@ -17,6 +19,7 @@ from kudosy.quiet_hours import next_allowed_run
 log = logging.getLogger(__name__)
 
 _JOB_ID = "kudos_job"
+_DIGEST_JOB_ID = "digest_job"
 
 
 class KudosyScheduler:
@@ -104,6 +107,43 @@ class KudosyScheduler:
             "[scheduler] Next run at %s (interval %.1f min)",
             run_at.isoformat(),
             interval_min,
+        )
+
+    def reschedule_digest(
+        self,
+        settings: AppSettings,
+        digest_fn: Callable[[], Coroutine[Any, Any, None]],
+    ) -> None:
+        """Cancel any existing digest job and schedule the daily digest cron job.
+
+        Only schedules when *notifyDailyDigest* is True and a webhook URL is set.
+        Uses a CronTrigger so APScheduler repeats it automatically every day
+        without manual reschedule-after-completion.
+        """
+        # Always remove the previous job first so disabling takes effect immediately.
+        if self._scheduler.get_job(_DIGEST_JOB_ID):
+            self._scheduler.remove_job(_DIGEST_JOB_ID)
+
+        if not (settings.notifyDailyDigest and settings.notifyWebhookUrl):
+            log.info("[scheduler] Daily digest disabled — no job scheduled")
+            return
+
+        hour, minute = (int(x) for x in settings.notifyDailyDigestTime.split(":"))
+        trigger = CronTrigger(
+            hour=hour,
+            minute=minute,
+            timezone=ZoneInfo(settings.timezone),
+        )
+        self._scheduler.add_job(
+            digest_fn,
+            trigger=trigger,
+            id=_DIGEST_JOB_ID,
+            replace_existing=True,
+        )
+        log.info(
+            "[scheduler] Daily digest scheduled at %s %s",
+            settings.notifyDailyDigestTime,
+            settings.timezone,
         )
 
     async def trigger_now(

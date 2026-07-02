@@ -146,6 +146,9 @@ class AppSettings(BaseModel):
     notifyOnRun: bool = False
     notifyOnAuthError: bool = True
     notifySystem: str = "generic"
+    # Daily digest notification
+    notifyDailyDigest: bool = False
+    notifyDailyDigestTime: str = "20:00"  # HH:MM in settings.timezone
 
     @field_validator("intervalMinutes", mode="before")
     @classmethod
@@ -177,6 +180,19 @@ class AppSettings(BaseModel):
         s = str(v or "generic")
         if s not in allowed:
             raise ValueError(f"notifySystem must be one of {sorted(allowed)}, got {s!r}")
+        return s
+
+    @field_validator("notifyDailyDigestTime", mode="before")
+    @classmethod
+    def validate_digest_time(cls, v: Any) -> str:
+        """Accept 'HH:MM' (00:00-23:59); empty string falls back to '20:00'."""
+        import re
+
+        s = str(v or "").strip()
+        if not s:
+            return "20:00"
+        if not re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", s):
+            raise ValueError(f"notifyDailyDigestTime must be HH:MM (00:00-23:59), got {s!r}")
         return s
 
     @field_validator("kudosScheduleMatrix", mode="before")
