@@ -133,6 +133,9 @@ async def put_settings(request: Request) -> dict[str, Any]:
         job_fn = state.get("job_fn")
         if job_fn:
             scheduler.reschedule(new_settings, job_fn)
+        digest_fn = state.get("digest_fn")
+        if digest_fn:
+            scheduler.reschedule_digest(new_settings, digest_fn)
 
     return {"ok": True}
 
