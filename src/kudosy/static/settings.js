@@ -35,6 +35,7 @@ export async function loadSettings() {
   $('shuffleOrder').checked          = s.shuffleOrder ?? true;
   $('kudosScheduleEnabled').checked  = s.kudosScheduleEnabled ?? false;
   $('timezone').value                = s.timezone ?? 'Europe/Berlin';
+  $('notifySystem').value            = s.notifySystem ?? 'generic';
   $('notifyWebhookUrl').value        = s.notifyWebhookUrl ?? '';
   $('notifyOnRun').checked           = s.notifyOnRun ?? false;
   $('notifyOnAuthError').checked     = s.notifyOnAuthError ?? true;
@@ -67,6 +68,7 @@ export async function saveSettings() {
       kudosScheduleEnabled:  $('kudosScheduleEnabled').checked,
       timezone:              $('timezone').value.trim() || 'Europe/Berlin',
       kudosScheduleMatrix:   getScheduleMatrix(),
+      notifySystem:          $('notifySystem').value,
       notifyWebhookUrl:      $('notifyWebhookUrl').value.trim(),
       notifyOnRun:           $('notifyOnRun').checked,
       notifyOnAuthError:     $('notifyOnAuthError').checked,

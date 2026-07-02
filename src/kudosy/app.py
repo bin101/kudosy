@@ -146,13 +146,21 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
                 )
                 # Send run-complete webhook notification if configured
                 if settings.notifyOnRun and settings.notifyWebhookUrl:
-                    await send_notification(settings.notifyWebhookUrl, build_run_payload(result))
+                    await send_notification(
+                        settings.notifyWebhookUrl,
+                        build_run_payload(result),
+                        system=settings.notifySystem,
+                    )
             return result
         except AuthError as exc:
             _app_state["auth_ok"] = False
             log.error("Strava auth failed (cookie expired?): %s", exc)
             if settings.notifyOnAuthError and settings.notifyWebhookUrl:
-                await send_notification(settings.notifyWebhookUrl, build_auth_error_payload(exc))
+                await send_notification(
+                    settings.notifyWebhookUrl,
+                    build_auth_error_payload(exc),
+                    system=settings.notifySystem,
+                )
             return None
         finally:
             await client.aclose()
