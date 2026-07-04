@@ -34,7 +34,8 @@ def app_client(data_dir: Path) -> TestClient:
             athleteId="20000001",
         )
     )
-    store.write_settings(AppSettings())
+    # updateCheckEnabled=False: tests must never call out to GitHub
+    store.write_settings(AppSettings(updateCheckEnabled=False))
 
     app = create_app()
 
@@ -336,6 +337,28 @@ def test_get_status_with_last_run(app_client: TestClient, data_dir: Path) -> Non
     data = resp.json()
     assert data["lastRun"] is not None
     assert data["lastRun"]["total"] == 5
+
+
+def test_get_status_update_available(app_client: TestClient) -> None:
+    """A cached newer release version is surfaced as updateAvailable=true."""
+    from kudosy.app import get_app_state
+
+    get_app_state()["latest_version"] = "99.0.0"
+
+    data = app_client.get("/api/status").json()
+    assert data["latestVersion"] == "99.0.0"
+    assert data["updateAvailable"] is True
+
+
+def test_get_status_no_update_info(app_client: TestClient) -> None:
+    """Without cached release info the status degrades gracefully."""
+    from kudosy.app import get_app_state
+
+    get_app_state().pop("latest_version", None)
+
+    data = app_client.get("/api/status").json()
+    assert data["latestVersion"] is None
+    assert data["updateAvailable"] is False
 
 
 # ── /api/log ──────────────────────────────────────────────────────────────────

@@ -41,6 +41,7 @@ export async function loadSettings() {
   $('notifyDailyDigest').checked     = s.notifyDailyDigest ?? false;
   $('notifyDailyDigestTime').value   = s.notifyDailyDigestTime ?? '20:00';
   $('notifyOnAuthError').checked     = s.notifyOnAuthError ?? true;
+  $('updateCheckEnabled').checked    = s.updateCheckEnabled ?? true;
   toggleIntervalVisibility(s.schedulerEnabled);
   toggleScheduleMatrixEnabled(s.kudosScheduleEnabled ?? false);
 
@@ -76,6 +77,7 @@ export async function saveSettings() {
       notifyDailyDigest:     $('notifyDailyDigest').checked,
       notifyDailyDigestTime: $('notifyDailyDigestTime').value || '20:00',
       notifyOnAuthError:     $('notifyOnAuthError').checked,
+      updateCheckEnabled:    $('updateCheckEnabled').checked,
     };
     await putJson('/api/settings', data);
     pollStatus();
