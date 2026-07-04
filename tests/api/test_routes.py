@@ -379,6 +379,41 @@ def test_get_log_with_content(app_client: TestClient, data_dir: Path) -> None:
     assert "Lauf" in resp.text
 
 
+@pytest.mark.asyncio
+async def test_log_stream_sends_snapshot_then_lines(data_dir: Path) -> None:
+    """The SSE generator yields a snapshot first, then broadcast lines and resets.
+
+    The generator is exercised directly (not through TestClient) because the
+    sync TestClient blocks on infinite streaming responses.
+    """
+    from kudosy import store
+    from kudosy.logging_conf import get_broadcast_handler
+    from kudosy.routes import stream_log
+
+    store.bootstrap()
+    log_file = data_dir / "last-run.log"
+    log_file.write_text("=== Lauf: 2026-01-01T12:00:00 ===\nzeile zwei\n", encoding="utf-8")
+
+    resp = await stream_log()
+    assert resp.media_type == "text/event-stream"
+    gen = resp.body_iterator
+    try:
+        snapshot = await gen.__anext__()  # type: ignore[union-attr]
+        assert snapshot == (
+            "event: snapshot\ndata: === Lauf: 2026-01-01T12:00:00 ===\ndata: zeile zwei\ndata: \n\n"
+        )
+
+        # A broadcast line arrives as a "line" event
+        get_broadcast_handler()._put_all("neue zeile")
+        assert await gen.__anext__() == "event: line\ndata: neue zeile\n\n"  # type: ignore[union-attr]
+
+        # A reset sentinel arrives as a "reset" event
+        get_broadcast_handler().broadcast_reset()
+        assert await gen.__anext__() == "event: reset\ndata: \n\n"  # type: ignore[union-attr]
+    finally:
+        await gen.aclose()  # type: ignore[union-attr]
+
+
 # ── /api/run ──────────────────────────────────────────────────────────────────
 
 
