@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING
 
 from kudosy.decision import decide
 from kudosy.effective_config import build_effective_config
+from kudosy.feed import AuthError
 from kudosy.humanizer import compute_delay
 from kudosy.models import Activity, AppSettings, DecisionReason, RunResult, UserConfig
 
@@ -169,6 +170,10 @@ async def run_kudos(
                         "✗ Kudos fehlgeschlagen: %s — %s", act.athlete_name, act.activity_name
                     )
 
+    except AuthError:
+        # Auth failures must reach the caller (app.py) so it can flip
+        # auth_ok=False and fire the notifyOnAuthError webhook.
+        raise
     except Exception as exc:
         error = str(exc)
         log.error("Kudos run failed: %s", error, exc_info=True)
