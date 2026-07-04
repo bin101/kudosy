@@ -4,9 +4,9 @@
 import { fetchJson } from './api.js';
 import { applyStaticTranslations } from './i18n.js';
 import { state } from './state.js';
-import { toast, initRevealButtons } from './dom.js';
+import { $, toast, initRevealButtons } from './dom.js';
 import { t } from './i18n.js';
-import { initTabs, initLangSelect } from './tabs.js';
+import { initTabs, initLangSelect, activateTab } from './tabs.js';
 import { initThemeSelect, applyTheme, getTheme } from './theme.js';
 import { loadConfig, initConfigTab } from './config.js';
 import { loadSettings, initSettingsTab } from './settings.js';
@@ -43,6 +43,16 @@ async function init() {
   initRunButtons();
   initRevealButtons();
   initAthleteSearchModal();
+
+  // Auth banner → jump to the config tab and focus the cookie field
+  const authBanner = $('auth-error-banner');
+  if (authBanner) {
+    const goToCookie = () => { activateTab('config'); $('cookieInput')?.focus(); };
+    authBanner.addEventListener('click', goToCookie);
+    authBanner.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); goToCookie(); }
+    });
+  }
 
   // Load config and settings in parallel, disable auto-save until both are done
   // so that DOM mutations during population don't trigger premature API calls.
