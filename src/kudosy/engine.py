@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING
 
 from kudosy.decision import decide
 from kudosy.effective_config import build_effective_config
-from kudosy.feed import AuthError
+from kudosy.feed import AuthError, RateLimitError
 from kudosy.humanizer import compute_delay
 from kudosy.models import Activity, AppSettings, DecisionReason, RunResult, UserConfig
 
@@ -28,6 +28,8 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 _RUN_HEADER = "=== Lauf: {ts}  dryRun={dry} ==="
+# Abort the send loop after this many failed kudos in a row (network/5xx).
+_MAX_CONSECUTIVE_FAILURES = 3
 _RUN_FOOTER = "=== Beendet: {ts}  Exit-Code: {code}  Kudos: {kudos} ==="
 
 _GIVE_MARKER = "+++ Would give kudos" if True else None  # used in dry-run log
@@ -82,6 +84,7 @@ async def run_kudos(
     skipped_cached = 0
     given = 0
     error: str | None = None
+    aborted_reason: str | None = None
 
     try:
         # 1. Authenticate & get CSRF token
@@ -150,6 +153,7 @@ async def run_kudos(
             # 6. Send kudos with human-like delays
             if rng is None:
                 rng = random.Random()
+            consecutive_failures = 0
             for i, act in enumerate(to_give):
                 if i > 0:
                     delay = compute_delay(
@@ -160,15 +164,34 @@ async def run_kudos(
                     log.debug("Waiting %.1fs before next kudo…", delay)
                     await asyncio.sleep(delay)
 
-                success = await client.send_kudos(act.activity_id, csrf_token)
+                try:
+                    success = await client.send_kudos(act.activity_id, csrf_token)
+                except RateLimitError:
+                    aborted_reason = "rate_limited"
+                    log.warning(
+                        "Rate-Limit erreicht — %d verbleibende Kudos übersprungen",
+                        len(to_give) - i,
+                    )
+                    break
                 if success:
                     given += 1
+                    consecutive_failures = 0
                     newly_kudoed.append(act.activity_id)
                     log.info("✓ Kudos gesendet: %s — %s", act.athlete_name, act.activity_name)
                 else:
+                    consecutive_failures += 1
                     log.warning(
                         "✗ Kudos fehlgeschlagen: %s — %s", act.athlete_name, act.activity_name
                     )
+                    if consecutive_failures >= _MAX_CONSECUTIVE_FAILURES:
+                        aborted_reason = "consecutive_failures"
+                        log.warning(
+                            "%d Kudos in Folge fehlgeschlagen — Lauf abgebrochen, "
+                            "%d verbleibende Kudos übersprungen",
+                            consecutive_failures,
+                            len(to_give) - i - 1,
+                        )
+                        break
 
     except AuthError:
         # Auth failures must reach the caller (app.py) so it can flip
@@ -199,5 +222,6 @@ async def run_kudos(
         error=error,
         newly_kudoed=newly_kudoed,
         skipped_cached=skipped_cached,
+        aborted_reason=aborted_reason,
         activities=[a.model_dump(mode="json") for a in activities],
     )
