@@ -87,6 +87,15 @@ export async function pollStatus() {
     // Update footer version
     const versionEl = $('footer-version');
     if (versionEl && s.version) versionEl.textContent = `Kudosy v${s.version}`;
+
+    // Update-available hint (links to the GitHub releases page)
+    const updateEl = $('footer-update');
+    if (updateEl) {
+      updateEl.hidden = !s.updateAvailable;
+      if (s.updateAvailable) {
+        updateEl.textContent = t('status.updateAvailable', { v: s.latestVersion });
+      }
+    }
   } catch { /* ignore polling errors */ }
 }
 

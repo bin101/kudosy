@@ -149,6 +149,8 @@ class AppSettings(BaseModel):
     # Daily digest notification
     notifyDailyDigest: bool = False
     notifyDailyDigestTime: str = "20:00"  # HH:MM in settings.timezone
+    # Check GitHub releases for a newer Kudosy version (at most every 12 h)
+    updateCheckEnabled: bool = True
 
     @field_validator("intervalMinutes", mode="before")
     @classmethod
@@ -343,3 +345,5 @@ class RunStatus(BaseModel):
     intervalMinutes: int
     version: str
     authOk: bool | None = None  # None = no run attempted yet
+    latestVersion: str | None = None  # newest GitHub release, None = unknown
+    updateAvailable: bool = False

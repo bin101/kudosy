@@ -258,6 +258,14 @@
             </label>
             <small style="margin-top:6px" data-i18n="settings.shuffle.hint">Kudos werden in zufälliger Reihenfolge vergeben (nur im Nicht-Dry-Run).</small>
           </div>
+          <div class="form-group">
+            <label class="toggle-row">
+              <input type="checkbox" id="updateCheckEnabled">
+              <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              <span data-i18n="settings.updateCheck.label">Auf neue Version prüfen</span>
+            </label>
+            <small style="margin-top:6px" data-i18n="settings.updateCheck.hint">Fragt max. alle 12 Stunden die GitHub-Releases ab und zeigt verfügbare Updates im Footer an.</small>
+          </div>
         </div>
 
         <div class="card" id="schedule-card">
@@ -458,6 +466,8 @@
     <span id="footer-version">Kudosy</span>
     <span>·</span>
     <a href="https://github.com/bin101/kudosy" target="_blank" rel="noopener">GitHub</a>
+    <a id="footer-update" href="https://github.com/bin101/kudosy/releases" target="_blank"
+       rel="noopener" class="footer-update" hidden></a>
   </footer>
 
   <div id="toast-container"></div>

@@ -39,6 +39,7 @@ from kudosy.store import (
     write_user_config_raw,
 )
 from kudosy.strava_client import StravaClient
+from kudosy.update_check import is_newer, maybe_schedule_update_check
 
 log = logging.getLogger(__name__)
 
@@ -319,6 +320,11 @@ async def get_status(request: Request) -> dict[str, Any]:
     last_run: RunResult | None = state.get("last_run")
 
     auth_ok: bool | None = state.get("auth_ok")
+
+    # Lazily refresh the latest-release info in the background (max once per 12 h)
+    maybe_schedule_update_check(state, settings.updateCheckEnabled)
+    latest_version: str | None = state.get("latest_version")
+
     return RunStatus(
         running=scheduler.is_running if scheduler else False,
         lastRun=last_run,
@@ -327,6 +333,8 @@ async def get_status(request: Request) -> dict[str, Any]:
         intervalMinutes=settings.intervalMinutes,
         version=__version__,
         authOk=auth_ok,
+        latestVersion=latest_version,
+        updateAvailable=bool(latest_version) and is_newer(__version__, latest_version or ""),
     ).model_dump(mode="json")
 
 
