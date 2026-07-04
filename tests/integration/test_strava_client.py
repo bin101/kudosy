@@ -10,7 +10,7 @@ import httpx
 import pytest
 import respx
 
-from kudosy.feed import AuthError
+from kudosy.feed import AuthError, RateLimitError
 from kudosy.strava_client import StravaClient, _next_cursor_params
 
 # Fixtures directory
@@ -175,16 +175,15 @@ async def test_send_kudos_success() -> None:
 
 @pytest.mark.asyncio
 @respx.mock
-async def test_send_kudos_rate_limit_returns_false() -> None:
+async def test_send_kudos_rate_limit_raises() -> None:
     respx.post("https://www.strava.com/feed/activity/10000000002/kudo").mock(
         return_value=httpx.Response(429, text="Rate limited")
     )
 
     client = StravaClient("test-cookie-value")
-    result = await client.send_kudos("10000000002", "csrf")
+    with pytest.raises(RateLimitError):
+        await client.send_kudos("10000000002", "csrf")
     await client.aclose()
-
-    assert result is False
 
 
 @pytest.mark.asyncio

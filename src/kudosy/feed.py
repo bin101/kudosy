@@ -303,3 +303,13 @@ class AuthError(Exception):
     """
 
     code: str = "AUTH_FAILED"
+
+
+class RateLimitError(Exception):
+    """Raised when Strava answers with HTTP 429 (rate limited).
+
+    The engine aborts the remaining kudos of the current run; the next
+    scheduled run retries naturally.
+    """
+
+    code: str = "RATE_LIMITED"

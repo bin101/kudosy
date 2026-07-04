@@ -46,7 +46,7 @@ from typing import Any
 
 import httpx
 
-from kudosy.feed import AuthError
+from kudosy.feed import AuthError, RateLimitError
 from kudosy.parsers import parse_athlete_name
 
 log = logging.getLogger(__name__)
@@ -291,7 +291,7 @@ class StravaClient:
                 log.warning(
                     "Strava Rate-Limit (429) beim Senden der Kudos für Activity %s", activity_id
                 )
-                return False
+                raise RateLimitError(f"HTTP 429 für Activity {activity_id}")
             log.warning("Unexpected status %d sending kudos to %s", resp.status_code, activity_id)
             return False
         except httpx.RequestError as exc:

@@ -328,6 +328,8 @@ class RunResult(BaseModel):
     error: str | None = None
     newly_kudoed: list[str] = []  # activity_ids successfully kudoed this run
     skipped_cached: int = 0  # activities skipped because already in cache
+    # Set when the send loop stopped early: "rate_limited" | "consecutive_failures"
+    aborted_reason: str | None = None
     # Parsed feed snapshot — not included in API responses (see exclude=True).
     # Populated by the engine so _run_job can persist the activity cache.
     activities: list[dict[str, Any]] = Field(default=[], exclude=True)
