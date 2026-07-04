@@ -5,6 +5,30 @@ All notable changes to Kudosy will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.0](https://github.com/bin101/kudosy/compare/v1.8.0...v1.9.0) (2026-07-04)
+
+
+### Features
+
+* check GitHub releases for a newer Kudosy version ([6abf22a](https://github.com/bin101/kudosy/commit/6abf22a55539c53d5918a20cfd9e8f314f17f5d5))
+* check GitHub releases for a newer Kudosy version ([527d4d0](https://github.com/bin101/kudosy/commit/527d4d01a6be46be522ec025af3f887ab70f3279))
+* stream the run log live via Server-Sent Events ([27332a6](https://github.com/bin101/kudosy/commit/27332a68839da21ed05bdd19cb7a90975a4a2def))
+* stream the run log live via Server-Sent Events ([c5be261](https://github.com/bin101/kudosy/commit/c5be2618810664797d0102511bffdd48df954a70))
+
+
+### Bug Fixes
+
+* back off on Strava rate limit and repeated kudo failures ([6523c9a](https://github.com/bin101/kudosy/commit/6523c9a9e8dfc9449dcbb5e2aa48d25718900f38))
+* back off on Strava rate limit and repeated kudo failures ([f6e3117](https://github.com/bin101/kudosy/commit/f6e3117fd7b86fa3e56aeb1d1469577dd33cbaee))
+* propagate AuthError from engine so auth banner and webhook fire ([ec80b35](https://github.com/bin101/kudosy/commit/ec80b35b843d7c3bd64834c323741a2e4f8a29d7))
+* propagate AuthError from engine so auth banner and webhook fire ([063da14](https://github.com/bin101/kudosy/commit/063da14304c31f5828e3659a8ceaef3b1f2a9af7))
+
+
+### Documentation
+
+* refresh README to match the current feature set ([4c9dae0](https://github.com/bin101/kudosy/commit/4c9dae0d073b1d86545efea8425f83e5686818a0))
+* refresh README to match the current feature set ([116f1a9](https://github.com/bin101/kudosy/commit/116f1a936afe4fc168215fcf1079e341a1b546f0))
+
 ## [1.8.0](https://github.com/bin101/kudosy/compare/v1.7.0...v1.8.0) (2026-07-02)
 
 
