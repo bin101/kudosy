@@ -90,15 +90,52 @@ export async function pollStatus() {
   } catch { /* ignore polling errors */ }
 }
 
-// ── Log polling ───────────────────────────────────────────────────────────────
+// ── Log rendering helpers ─────────────────────────────────────────────────────
+
+/** Replace the log view, keeping the stick-to-bottom scroll behavior. */
+function setLogText(text) {
+  const el = $('log-output');
+  const atBottom = el.scrollHeight - el.clientHeight <= el.scrollTop + 10;
+  el.textContent = text;
+  if (atBottom) el.scrollTop = el.scrollHeight;
+}
+
+/** Append one line to the log view, keeping the stick-to-bottom behavior. */
+function appendLogLine(line) {
+  const el = $('log-output');
+  const atBottom = el.scrollHeight - el.clientHeight <= el.scrollTop + 10;
+  const sep = el.textContent && !el.textContent.endsWith('\n') ? '\n' : '';
+  el.textContent += `${sep}${line}\n`;
+  if (atBottom) el.scrollTop = el.scrollHeight;
+}
+
+// ── Live log via SSE (with polling fallback) ──────────────────────────────────
+
+/**
+ * (Re-)connect the live-log EventSource.  On any error the stream is torn
+ * down and state.logStream stays null — the 3-second interval then falls
+ * back to pollLog() and retries the stream on its next tick.
+ */
+function ensureLogStream() {
+  if (state.logStream || typeof EventSource === 'undefined') return;
+  const es = new EventSource('/api/log/stream');
+  state.logStream = es;
+  es.addEventListener('snapshot', e => setLogText(e.data));
+  es.addEventListener('line',     e => appendLogLine(e.data));
+  es.addEventListener('reset',    () => setLogText(''));
+  es.onerror = () => closeLogStream();
+}
+
+function closeLogStream() {
+  if (state.logStream) { state.logStream.close(); state.logStream = null; }
+}
+
+// ── Log polling (fallback + initial fill) ─────────────────────────────────────
 
 export async function pollLog() {
   try {
-    const text    = await fetch('/api/log').then(r => r.text());
-    const el      = $('log-output');
-    const atBottom = el.scrollHeight - el.clientHeight <= el.scrollTop + 10;
-    el.textContent = text;
-    if (atBottom) el.scrollTop = el.scrollHeight;
+    const text = await fetch('/api/log').then(r => r.text());
+    setLogText(text);
   } catch { /* ignore */ }
   await pollStatus();
 }
@@ -106,14 +143,23 @@ export async function pollLog() {
 export function startPolling() {
   stopPolling();
   pollLog();
+  if ($('auto-refresh').checked) ensureLogStream();
   state.pollTimer = setInterval(() => {
-    if ($('auto-refresh').checked) pollLog();
-    else pollStatus();
+    if ($('auto-refresh').checked) {
+      ensureLogStream();
+      // SSE delivers log lines; only the status still needs polling.
+      if (state.logStream) pollStatus();
+      else pollLog();
+    } else {
+      closeLogStream();
+      pollStatus();
+    }
   }, 3000);
 }
 
 export function stopPolling() {
   if (state.pollTimer) { clearInterval(state.pollTimer); state.pollTimer = null; }
+  closeLogStream();
 }
 
 // ── Run buttons ───────────────────────────────────────────────────────────────

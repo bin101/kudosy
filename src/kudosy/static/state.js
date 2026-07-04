@@ -21,6 +21,8 @@ export const state = {
 
   // Log-tab polling timer
   pollTimer: null,
+  // Live-log EventSource (null = not connected → fall back to polling)
+  logStream: null,
 
   // Run-button spinner state
   // The button whose spinner is currently active (null when idle).

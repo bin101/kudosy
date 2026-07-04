@@ -8,11 +8,17 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import AsyncGenerator
 from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, Response
-from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
+from fastapi.responses import (
+    HTMLResponse,
+    JSONResponse,
+    PlainTextResponse,
+    StreamingResponse,
+)
 from pydantic import BaseModel
 
 from kudosy import __version__
@@ -541,3 +547,50 @@ async def import_config(body: _ImportBody) -> dict[str, Any]:
 @router.get("/api/log")
 async def get_log() -> Response:
     return PlainTextResponse(read_log())
+
+
+def _sse_event(event: str, data: str) -> str:
+    """Format one SSE event; multi-line data needs one ``data:`` line per line."""
+    lines = "".join(f"data: {line}\n" for line in data.split("\n")) or "data: \n"
+    return f"event: {event}\n{lines}\n"
+
+
+_SSE_HEARTBEAT_S = 15.0
+
+
+@router.get("/api/log/stream")
+async def stream_log() -> StreamingResponse:
+    """Live log via Server-Sent Events.
+
+    Events: ``snapshot`` (current file content, sent once on connect),
+    ``line`` (one new log line), ``reset`` (new run started — clear the view).
+    A comment heartbeat is sent every 15 s so proxies keep the socket open.
+    """
+    import asyncio
+
+    from kudosy.logging_conf import RESET, get_broadcast_handler
+
+    handler = get_broadcast_handler()
+    queue = handler.subscribe()
+
+    async def gen() -> AsyncGenerator[str]:
+        try:
+            yield _sse_event("snapshot", read_log())
+            while True:
+                try:
+                    item = await asyncio.wait_for(queue.get(), timeout=_SSE_HEARTBEAT_S)
+                except TimeoutError:
+                    yield ": heartbeat\n\n"
+                    continue
+                if item is RESET:
+                    yield _sse_event("reset", "")
+                else:
+                    yield _sse_event("line", str(item))
+        finally:
+            handler.unsubscribe(queue)
+
+    return StreamingResponse(
+        gen(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+    )
