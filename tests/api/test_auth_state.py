@@ -44,7 +44,11 @@ def real_job_client(data_dir: Path, monkeypatch: pytest.MonkeyPatch) -> Generato
 
     store.bootstrap()
     store.write_user_config(UserConfig(stravaSessionCookie="expired-cookie", athleteId="20000001"))
-    store.write_settings(AppSettings(schedulerEnabled=False))
+    # updateCheckEnabled=False keeps /api/status from calling out to GitHub
+    # (ignored until the update-check feature lands — pydantic drops extras).
+    store.write_settings(
+        AppSettings.model_validate({"schedulerEnabled": False, "updateCheckEnabled": False})
+    )
 
     # No network during lifespan startup
     monkeypatch.setattr("kudosy.app.fetch_sport_types", AsyncMock(return_value=[]))
