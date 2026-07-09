@@ -221,6 +221,8 @@ async def run_kudos(
         given=given if not dry_run else 0,
         error=error,
         newly_kudoed=newly_kudoed,
+        would_give_ids=[act.activity_id for act in to_give],
+        activity_ids=[act.activity_id for act in activities],
         skipped_cached=skipped_cached,
         aborted_reason=aborted_reason,
         activities=[a.model_dump(mode="json") for a in activities],

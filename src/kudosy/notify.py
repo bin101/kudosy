@@ -236,6 +236,26 @@ def build_auth_error_payload(exc: Exception) -> dict[str, Any]:
     }
 
 
+def _unique_count(entries: list[dict[str, Any]], id_key: str, fallback_key: str) -> int:
+    """Count activities across *entries* by *id_key*, deduplicated by activity ID.
+
+    The same activity is frequently re-scanned across consecutive runs (e.g. it
+    stays in the Strava feed until it scrolls off), so summing per-run counts
+    would count it once per run instead of once overall. Entries carrying an
+    ``id_key`` list are deduplicated via a set; older entries that predate this
+    field (no ``id_key``) fall back to their raw *fallback_key* count.
+    """
+    seen: set[str] = set()
+    legacy_total = 0
+    for e in entries:
+        ids = e.get(id_key)
+        if ids:
+            seen.update(ids)
+        else:
+            legacy_total += int(e.get(fallback_key, 0))
+    return len(seen) + legacy_total
+
+
 def build_digest_payload(
     entries: list[dict[str, Any]],
     *,
@@ -247,11 +267,15 @@ def build_digest_payload(
     *entries* is the list of run-history dicts (each with keys: dry_run, total,
     would_give, given, success) covering the period since the last digest.
     *since* is None for the very first digest (all available history was used).
+
+    Activities that appear in more than one run (e.g. still in the feed on the
+    next scheduled run) are counted once, not once per run — see
+    :func:`_unique_count`.
     """
     runs = len(entries)
-    total = sum(int(e.get("total", 0)) for e in entries)
-    given = sum(int(e.get("given", 0)) for e in entries)
-    would_give = sum(int(e.get("would_give", 0)) for e in entries)
+    total = _unique_count(entries, "activity_ids", "total")
+    given = _unique_count(entries, "given_ids", "given")
+    would_give = _unique_count(entries, "would_give_ids", "would_give")
     failed = sum(1 for e in entries if not e.get("success", True))
 
     if runs == 0:
