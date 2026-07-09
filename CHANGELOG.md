@@ -5,6 +5,14 @@ All notable changes to Kudosy will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.1](https://github.com/bin101/kudosy/compare/v1.9.0...v1.9.1) (2026-07-09)
+
+
+### Bug Fixes
+
+* dedupe activities in daily digest instead of summing per run ([b72728d](https://github.com/bin101/kudosy/commit/b72728d480791508652611c0670308503b472766))
+* dedupe activities in daily digest instead of summing per run ([c8be8c7](https://github.com/bin101/kudosy/commit/c8be8c736c6273661b1c001441a6d573f9405383))
+
 ## [1.9.0](https://github.com/bin101/kudosy/compare/v1.8.0...v1.9.0) (2026-07-04)
 
 
