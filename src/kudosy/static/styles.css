@@ -34,6 +34,10 @@
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* Re-assert the [hidden] attribute over any later `display` rule (e.g. `.hint`)
+   that would otherwise win on specificity and make the element visible again. */
+[hidden] { display: none !important; }
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   font-size: 14px;
@@ -861,10 +865,6 @@ select:focus {
   justify-content: center;
   z-index: 1000;
   padding: 16px;
-}
-
-.modal-overlay[hidden] {
-  display: none;
 }
 
 .modal-box {
