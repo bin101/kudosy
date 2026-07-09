@@ -5,6 +5,18 @@ All notable changes to Kudosy will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.2](https://github.com/bin101/kudosy/compare/v1.9.1...v1.9.2) (2026-07-09)
+
+
+### Bug Fixes
+
+* keep [hidden] elements hidden regardless of later display rules ([#55](https://github.com/bin101/kudosy/issues/55)) ([a11c022](https://github.com/bin101/kudosy/commit/a11c022d46cf9acb2204a8f67e1d94f4feefd5a1))
+
+
+### Documentation
+
+* never drive the user's live browser for UI verification ([#56](https://github.com/bin101/kudosy/issues/56)) ([d6dd401](https://github.com/bin101/kudosy/commit/d6dd40184cb9f3e2df4150a268f992d98b6e1e0c))
+
 ## [1.9.1](https://github.com/bin101/kudosy/compare/v1.9.0...v1.9.1) (2026-07-09)
 
 
