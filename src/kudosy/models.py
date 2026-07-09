@@ -329,6 +329,8 @@ class RunResult(BaseModel):
     given: int  # actually sent (0 in dry-run)
     error: str | None = None
     newly_kudoed: list[str] = []  # activity_ids successfully kudoed this run
+    would_give_ids: list[str] = []  # activity_ids eligible for kudos this run
+    activity_ids: list[str] = []  # all activity_ids scanned this run
     skipped_cached: int = 0  # activities skipped because already in cache
     # Set when the send loop stopped early: "rate_limited" | "consecutive_failures"
     aborted_reason: str | None = None

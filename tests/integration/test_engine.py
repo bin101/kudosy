@@ -118,6 +118,8 @@ async def test_dry_run_returns_result() -> None:
     assert result.given == 0  # no real kudos in dry-run
     assert result.success is True
     assert result.error is None
+    assert result.activity_ids == ["10000000001"]
+    assert result.would_give_ids == ["10000000001"]
 
 
 @pytest.mark.asyncio
@@ -201,6 +203,8 @@ async def test_empty_feed_is_ok() -> None:
     assert result.total == 0
     assert result.would_give == 0
     assert result.success is True
+    assert result.activity_ids == []
+    assert result.would_give_ids == []
 
 
 @pytest.mark.asyncio

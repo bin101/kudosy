@@ -150,6 +150,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
                         "would_give": result.would_give,
                         "given": result.given,
                         "success": result.success,
+                        # activity-id lists let the daily digest deduplicate
+                        # activities seen across multiple runs (see build_digest_payload)
+                        "activity_ids": result.activity_ids,
+                        "would_give_ids": result.would_give_ids,
+                        "given_ids": result.newly_kudoed,
                     }
                 )
                 # Send run-complete webhook notification if configured

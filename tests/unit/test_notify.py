@@ -368,6 +368,43 @@ def test_build_digest_payload_aggregates_dry_run_would_give() -> None:
     assert payload["given"] == 0
 
 
+def test_build_digest_payload_dedupes_activities_scanned_across_runs() -> None:
+    """Same activity stays in the feed across two runs — must count once, not twice."""
+    entries = [
+        _entry(activity_ids=["a1", "a2", "a3"], total=3),
+        _entry(activity_ids=["a2", "a3", "a4"], total=3),
+    ]
+    payload = build_digest_payload(entries, since=_SINCE, until=_NOW)
+    assert payload["total"] == 4  # a1, a2, a3, a4 — not 6
+
+
+def test_build_digest_payload_dedupes_would_give_across_dry_runs() -> None:
+    """A still-eligible activity reappears in every dry run until it's given kudos."""
+    entries = [
+        _entry(dry_run=True, would_give_ids=["a1", "a2"], would_give=2, given=0),
+        _entry(dry_run=True, would_give_ids=["a2"], would_give=1, given=0),
+    ]
+    payload = build_digest_payload(entries, since=_SINCE, until=_NOW)
+    assert payload["would_give"] == 2  # a1, a2 — not 3
+
+
+def test_build_digest_payload_dedupes_given_ids() -> None:
+    entries = [
+        _entry(given_ids=["a1"], given=1),
+        _entry(given_ids=["a1", "a2"], given=2),
+    ]
+    payload = build_digest_payload(entries, since=_SINCE, until=_NOW)
+    assert payload["given"] == 2  # a1, a2 — not 3
+
+
+def test_build_digest_payload_falls_back_to_raw_count_without_id_lists() -> None:
+    """Entries written before the *_ids fields existed still aggregate correctly."""
+    entries = [_entry(total=10, given=3), _entry(total=8, given=5)]
+    payload = build_digest_payload(entries, since=_SINCE, until=_NOW)
+    assert payload["total"] == 18
+    assert payload["given"] == 8
+
+
 def test_build_digest_payload_counts_failed_runs() -> None:
     entries = [_entry(success=True), _entry(success=False), _entry(success=False)]
     payload = build_digest_payload(entries, since=_SINCE, until=_NOW)
