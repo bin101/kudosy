@@ -96,6 +96,18 @@ Known unavoidable external warnings must be added to the `filterwarnings` ignore
 > step, or quality requirement, update this file in the same PR. CLAUDE.md is the single source
 > of truth for how this project is built and maintained.
 
+### Browser-based UI verification
+
+When verifying frontend/UI changes visually, always use an isolated, dedicated browser
+automation tool (e.g. a headless/dedicated Playwright or browser-agent instance) —
+**never** drive the user's currently-running personal browser (Safari, Chrome, etc.) via
+AppleScript/UI automation or by opening new windows/tabs in it. Doing so interferes with the
+user's actual, in-progress work (open tabs, unsaved state).
+
+If no such isolated browser tool is available in the environment, say so explicitly and
+report verification as blocked/skipped rather than falling back to automating the user's
+live browser session.
+
 ### Docker
 
 ```bash
