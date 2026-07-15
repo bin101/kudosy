@@ -431,6 +431,60 @@ def test_build_digest_payload_since_none_allowed() -> None:
     assert payload["since"] is None
 
 
+def test_build_digest_payload_excludes_activities_seen_before_window() -> None:
+    """An activity already counted in an earlier digest must not be counted again."""
+    previous = [_entry(started_at="2026-07-01T10:00:00+00:00", activity_ids=["a1", "a2"], total=2)]
+    entries = [_entry(activity_ids=["a2", "a3"], total=2)]
+    payload = build_digest_payload(entries, since=_SINCE, until=_NOW, previous_entries=previous)
+    assert payload["total"] == 1  # only a3 is new
+
+
+def test_build_digest_payload_excludes_would_give_seen_before_window() -> None:
+    """A still-eligible dry-run activity from before the window is not re-counted."""
+    previous = [
+        _entry(
+            started_at="2026-07-01T10:00:00+00:00",
+            dry_run=True,
+            would_give_ids=["a1"],
+            would_give=1,
+            given=0,
+        )
+    ]
+    entries = [_entry(dry_run=True, would_give_ids=["a1", "a2"], would_give=2, given=0)]
+    payload = build_digest_payload(entries, since=_SINCE, until=_NOW, previous_entries=previous)
+    assert payload["would_give"] == 1  # only a2 is new
+
+
+def test_build_digest_payload_excludes_given_seen_before_window() -> None:
+    previous = [_entry(started_at="2026-07-01T10:00:00+00:00", given_ids=["a1"], given=1)]
+    entries = [_entry(given_ids=["a1", "a2"], given=2)]
+    payload = build_digest_payload(entries, since=_SINCE, until=_NOW, previous_entries=previous)
+    assert payload["given"] == 1  # only a2 is new
+
+
+def test_build_digest_payload_previous_entries_default_empty() -> None:
+    """Without previous_entries the behaviour is unchanged (backwards compatible)."""
+    entries = [_entry(activity_ids=["a1", "a2"], total=2)]
+    payload = build_digest_payload(entries, since=_SINCE, until=_NOW)
+    assert payload["total"] == 2
+
+
+def test_build_digest_payload_legacy_entries_unaffected_by_previous() -> None:
+    """Entries without id lists keep their raw counts — no exclusion possible."""
+    previous = [_entry(started_at="2026-07-01T10:00:00+00:00", activity_ids=["a1"], total=1)]
+    entries = [_entry(total=5)]  # legacy entry, no activity_ids
+    payload = build_digest_payload(entries, since=_SINCE, until=_NOW, previous_entries=previous)
+    assert payload["total"] == 5
+
+
+def test_build_digest_payload_previous_legacy_entries_exclude_nothing() -> None:
+    """Previous entries without id lists cannot exclude anything."""
+    previous = [_entry(started_at="2026-07-01T10:00:00+00:00", total=3)]  # legacy, no ids
+    entries = [_entry(activity_ids=["a1", "a2"], total=2)]
+    payload = build_digest_payload(entries, since=_SINCE, until=_NOW, previous_entries=previous)
+    assert payload["total"] == 2
+
+
 def test_build_digest_payload_generic_formatter_passes_extra_keys() -> None:
     """_format_generic must include digest-specific keys (runs, failed, since, until)."""
     from kudosy.notify import _format_generic

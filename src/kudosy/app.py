@@ -197,11 +197,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
         # Collect all history entries since the last digest.
         # since_iso=None means first ever digest — use all available history.
+        # Entries from before the window are passed along so the digest can
+        # exclude activities it already reported (feed items linger for days).
         history = read_run_history(limit=500)
         if since_iso is not None:
             entries = [e for e in history if e.get("started_at", "") > since_iso]
+            previous = [e for e in history if e.get("started_at", "") <= since_iso]
         else:
             entries = history
+            previous = []
 
         since_dt = None
         if since_iso is not None:
@@ -214,7 +218,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
         await send_notification(
             settings.notifyWebhookUrl,
-            build_digest_payload(entries, since=since_dt, until=now),
+            build_digest_payload(entries, since=since_dt, until=now, previous_entries=previous),
             system=settings.notifySystem,
         )
         write_last_digest_at(now.isoformat())
