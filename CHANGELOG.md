@@ -5,6 +5,13 @@ All notable changes to Kudosy will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.3](https://github.com/bin101/kudosy/compare/v1.9.2...v1.9.3) (2026-07-15)
+
+
+### Bug Fixes
+
+* **digest:** count only newly appeared activities in daily digest ([#58](https://github.com/bin101/kudosy/issues/58)) ([8b9e6db](https://github.com/bin101/kudosy/commit/8b9e6db99345cc5b0c60011f0e129729e73d7359))
+
 ## [1.9.2](https://github.com/bin101/kudosy/compare/v1.9.1...v1.9.2) (2026-07-09)
 
 
