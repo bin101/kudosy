@@ -236,7 +236,23 @@ def build_auth_error_payload(exc: Exception) -> dict[str, Any]:
     }
 
 
-def _unique_count(entries: list[dict[str, Any]], id_key: str, fallback_key: str) -> int:
+def _collect_ids(entries: list[dict[str, Any]], id_key: str) -> set[str]:
+    """Union of all *id_key* lists across *entries* (entries without the key are skipped)."""
+    ids: set[str] = set()
+    for e in entries:
+        entry_ids = e.get(id_key)
+        if entry_ids:
+            ids.update(entry_ids)
+    return ids
+
+
+def _unique_count(
+    entries: list[dict[str, Any]],
+    id_key: str,
+    fallback_key: str,
+    *,
+    exclude: set[str] | frozenset[str] = frozenset(),
+) -> int:
     """Count activities across *entries* by *id_key*, deduplicated by activity ID.
 
     The same activity is frequently re-scanned across consecutive runs (e.g. it
@@ -244,13 +260,16 @@ def _unique_count(entries: list[dict[str, Any]], id_key: str, fallback_key: str)
     would count it once per run instead of once overall. Entries carrying an
     ``id_key`` list are deduplicated via a set; older entries that predate this
     field (no ``id_key``) fall back to their raw *fallback_key* count.
+
+    IDs in *exclude* (activities already counted in an earlier digest) are
+    ignored entirely — legacy fallback counts cannot be excluded.
     """
     seen: set[str] = set()
     legacy_total = 0
     for e in entries:
         ids = e.get(id_key)
         if ids:
-            seen.update(ids)
+            seen.update(i for i in ids if i not in exclude)
         else:
             legacy_total += int(e.get(fallback_key, 0))
     return len(seen) + legacy_total
@@ -261,6 +280,7 @@ def build_digest_payload(
     *,
     since: datetime | None,
     until: datetime,
+    previous_entries: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Build a system-agnostic daily-digest notification message.
 
@@ -271,11 +291,24 @@ def build_digest_payload(
     Activities that appear in more than one run (e.g. still in the feed on the
     next scheduled run) are counted once, not once per run — see
     :func:`_unique_count`.
+
+    *previous_entries* are run-history dicts from before the digest window
+    (i.e. already covered by earlier digests). Activity IDs seen there are
+    excluded from all counts, so each digest only reports newly appeared
+    activities instead of re-counting ones that linger in the Strava feed
+    for days.
     """
+    previous = previous_entries or []
     runs = len(entries)
-    total = _unique_count(entries, "activity_ids", "total")
-    given = _unique_count(entries, "given_ids", "given")
-    would_give = _unique_count(entries, "would_give_ids", "would_give")
+    total = _unique_count(
+        entries, "activity_ids", "total", exclude=_collect_ids(previous, "activity_ids")
+    )
+    given = _unique_count(
+        entries, "given_ids", "given", exclude=_collect_ids(previous, "given_ids")
+    )
+    would_give = _unique_count(
+        entries, "would_give_ids", "would_give", exclude=_collect_ids(previous, "would_give_ids")
+    )
     failed = sum(1 for e in entries if not e.get("success", True))
 
     if runs == 0:
@@ -283,7 +316,7 @@ def build_digest_payload(
     else:
         live_runs = sum(1 for e in entries if not e.get("dry_run", False))
         dry_runs = runs - live_runs
-        parts: list[str] = [f"📊 {runs} Lauf/Läufe · {total} Aktivitäten geprüft"]
+        parts: list[str] = [f"📊 {runs} Lauf/Läufe · {total} neue Aktivitäten"]
         if live_runs:
             parts.append(f"{given} Kudos vergeben")
         if dry_runs:
