@@ -176,7 +176,7 @@ If Strava changes their response format, only these two modules need updating.
 
 **Auth note:** all `/api/*` routes except `/api/auth-status`, `/api/login`, and `/api/logout`
 (plus `GET /`, serving the frontend shell) go through `auth.require_auth` — a no-op unless
-`KUDOSY_AUTH_PASSWORD` is set (see README "Zugriffsschutz"). Enforced via two `APIRouter`s in
+`KUDOSY_AUTH_PASSWORD` is set (see README "Access Control"). Enforced via two `APIRouter`s in
 `routes.py`: `public_router` (no dependency) and `router` (`dependencies=[Depends(require_auth)]`).
 
 ## Security Notes
@@ -187,7 +187,7 @@ If Strava changes their response format, only these two modules need updating.
   never returns the raw cookie (only `hasCookie`/`cookiePreview`).
 - **ToS grey area**: Kudosy uses the Strava web session (not the official API). Use it for personal,
   non-commercial purposes only. Keep the interval generous and dry-run frequently.
-- **No auth by default**: see README "Zugriffsschutz" — set `KUDOSY_AUTH_PASSWORD` before exposing
+- **No auth by default**: see README "Access Control" — set `KUDOSY_AUTH_PASSWORD` before exposing
   Kudosy beyond your local machine.
 
 ## Git Conventions

@@ -33,7 +33,7 @@ class KudosySettings(BaseSettings):
     # ── Optional login screen ──────────────────────────────────────────────
     # Unset by default → no auth, exactly today's behavior. Set
     # KUDOSY_AUTH_PASSWORD to require a login before any /api/* call works
-    # (see auth.py and README "Zugriffsschutz").
+    # (see auth.py and README "Access Control").
     auth_password: str | None = None
     # How long a successful login stays valid before requiring a fresh one.
     session_ttl_hours: int = 720  # 30 days

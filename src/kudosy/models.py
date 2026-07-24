@@ -176,7 +176,7 @@ class AppSettings(BaseModel):
         # would break that. This *is* SSRF-shaped (the server will POST to
         # whatever URL is configured) — the mitigation is that only an
         # authenticated user can set it; see the optional login (README
-        # "Zugriffsschutz") if this instance is reachable by untrusted users.
+        # "Access Control") if this instance is reachable by untrusted users.
         url = str(v or "")
         if url and not (url.startswith("http://") or url.startswith("https://")):
             raise ValueError(f"notifyWebhookUrl must be an http/https URL or empty, got: {url!r}")

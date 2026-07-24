@@ -85,7 +85,7 @@ on first boot and renamed to `defaults.yaml.migrated`.
 
 See `data/config.example.yaml` for a fully annotated example.
 
-## Zugriffsschutz (Access Control)
+## Access Control
 
 By default, Kudosy's web UI and API have **no authentication** — anyone who can reach the
 port can read/change your config (including whether a Strava cookie is set) and trigger runs.
