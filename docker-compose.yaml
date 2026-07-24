@@ -6,8 +6,13 @@ services:
     build: .
     container_name: kudosy
     restart: unless-stopped
+    # Bound to the host's loopback interface only: there is no authentication
+    # in front of the API/UI unless KUDOSY_AUTH_PASSWORD is set below, and it
+    # exposes your Strava session cookie and full control of the app. Change
+    # to "8080:8080" (all interfaces) only if you need LAN access and either
+    # trust your network or have set KUDOSY_AUTH_PASSWORD.
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     volumes:
       - ./data:/data
     environment:
@@ -15,3 +20,9 @@ services:
       KUDOSY_LOG_LEVEL: INFO
       # Override port if needed:
       # KUDOSY_PORT: "8080"
+      # Set a password to enable the login screen (see README "Zugriffsschutz"):
+      # KUDOSY_AUTH_PASSWORD: "change-me"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
