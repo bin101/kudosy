@@ -1,7 +1,7 @@
 // ── Kudosy UI — feed.js ──────────────────────────────────────────────────────
 // Feed tab: load, render, filter and per-card kudos button.
 
-import { $, toast, setButtonLoading } from './dom.js';
+import { $, toast, setButtonLoading, escapeHtml } from './dom.js';
 import { fetchJson } from './api.js';
 import { formatSportLabel, formatRelative } from './format.js';
 import { t } from './i18n.js';
@@ -140,8 +140,9 @@ export function renderFeed() {
     const statsParts   = displayStats
       .map(s => {
         const labelKey = `stat.${s.key}`;
-        const label    = t(labelKey) !== labelKey ? t(labelKey) : s.label;
-        return `<span class="feed-stat"><strong>${label}:</strong> ${s.raw}</span>`;
+        // t() translations are trusted; s.label/s.raw come from the Strava feed and must be escaped.
+        const label    = t(labelKey) !== labelKey ? t(labelKey) : escapeHtml(s.label);
+        return `<span class="feed-stat"><strong>${label}:</strong> ${escapeHtml(s.raw)}</span>`;
       })
       .join('');
     const statsHtml  = statsParts ? `<div class="feed-stats">${statsParts}</div>` : '';
@@ -158,8 +159,8 @@ export function renderFeed() {
         ${kudosBadge}
       </div>
       <div class="feed-card-body">
-        <div class="feed-activity-name">${act.activity_name || t('feed.noName')}</div>
-        <div class="feed-athlete-name">${act.athlete_name}</div>
+        <div class="feed-activity-name">${act.activity_name ? escapeHtml(act.activity_name) : t('feed.noName')}</div>
+        <div class="feed-athlete-name">${escapeHtml(act.athlete_name)}</div>
         ${statsHtml}
       </div>
       <div class="feed-card-footer">
