@@ -6,11 +6,32 @@ import { t } from './i18n.js';
 // Shorthand for document.getElementById
 export const $ = id => document.getElementById(id);
 
+/**
+ * Escape a string for safe interpolation into innerHTML.
+ * Use this for any value that originates outside our own code — e.g. Strava
+ * activity/athlete names or stat labels — before building HTML via template
+ * literals. Prefer createElement/textContent where practical instead.
+ */
+export function escapeHtml(str) {
+  return String(str ?? '').replace(/[&<>"']/g, ch => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  })[ch]);
+}
+
 export function toast(msg, type = 'success') {
   const el = document.createElement('div');
   el.className = `toast toast-${type}`;
   const icon = type === 'success' ? '✓' : type === 'error' ? '✕' : 'ℹ';
-  el.innerHTML = `<span>${icon}</span><span>${msg}</span>`;
+  const iconEl = document.createElement('span');
+  iconEl.textContent = icon;
+  const msgEl = document.createElement('span');
+  msgEl.textContent = msg;
+  el.appendChild(iconEl);
+  el.appendChild(msgEl);
   $('toast-container').appendChild(el);
   setTimeout(() => {
     el.classList.add('fade-out');
