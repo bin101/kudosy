@@ -5,6 +5,21 @@ All notable changes to Kudosy will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.4](https://github.com/bin101/kudosy/compare/v1.9.3...v1.9.4) (2026-07-24)
+
+
+### Bug Fixes
+
+* **auth:** apply static translations before the login-overlay gate ([42f56e8](https://github.com/bin101/kudosy/commit/42f56e8dee79eb83910b8d13fdeff16a6c9bc37a))
+* harden backend security/robustness and add optional login screen ([36a5d5b](https://github.com/bin101/kudosy/commit/36a5d5b99c9cd1b50dc730f73ca1a577b3ebfc76))
+* **security:** escape Strava-derived strings before HTML interpolation ([17c2b4c](https://github.com/bin101/kudosy/commit/17c2b4c3e51381c352c9552b81829782840755a5))
+
+
+### Documentation
+
+* document agent-browser as the isolated UI-verification tool ([076d6a4](https://github.com/bin101/kudosy/commit/076d6a42584a8afeea8cbc0a029919447930eccf))
+* **i18n:** use English section heading (docs must be English, not German), fill missing STRAVA_UNREACHABLE translation ([9413a0a](https://github.com/bin101/kudosy/commit/9413a0aa2f44422ef691c15b63d9ab63c0a65f36))
+
 ## [1.9.3](https://github.com/bin101/kudosy/compare/v1.9.2...v1.9.3) (2026-07-15)
 
 

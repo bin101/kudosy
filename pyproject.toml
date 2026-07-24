@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "kudosy"
-version = "1.9.3"
+version = "1.9.4"
 description = "Automatically give kudos on Strava, with human-like timing"
 readme = "README.md"
 license = { file = "LICENSE" }
