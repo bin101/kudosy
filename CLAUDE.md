@@ -101,10 +101,30 @@ Known unavoidable external warnings must be added to the `filterwarnings` ignore
 ### Browser-based UI verification
 
 When verifying frontend/UI changes visually, always use an isolated, dedicated browser
-automation tool (e.g. a headless/dedicated Playwright or browser-agent instance) —
-**never** drive the user's currently-running personal browser (Safari, Chrome, etc.) via
-AppleScript/UI automation or by opening new windows/tabs in it. Doing so interferes with the
-user's actual, in-progress work (open tabs, unsaved state).
+automation tool — **never** drive the user's currently-running personal browser (Safari,
+Chrome, etc.) via AppleScript/UI automation or by opening new windows/tabs in it. Doing so
+interferes with the user's actual, in-progress work (open tabs, unsaved state).
+
+**Use the `agent-browser` CLI** (`brew install agent-browser` or `npm i -g agent-browser`;
+run `agent-browser skills get core --full` once for the full command reference). It launches
+its own isolated Chrome instance via CDP — no Playwright/Puppeteer dependency, no interaction
+with the user's browser session. Typical flow:
+
+```bash
+agent-browser open http://127.0.0.1:8080/
+agent-browser snapshot -i          # accessibility tree with @eN refs for interactive elements
+agent-browser screenshot out.png   # visual check — Read the PNG to actually look at it
+agent-browser fill @e13 "value"
+agent-browser click @e14
+agent-browser console              # check for JS errors / CSP violations
+agent-browser close --all          # clean up when done
+```
+
+Gotcha: `serve_index()` in `routes.py` serves JS/CSS with `?v={version}` and
+`Cache-Control: max-age=31536000, immutable`. If you edit a static file and re-test in the
+*same* browser session without bumping the package version, the browser serves the stale
+cached copy under that identical URL — `agent-browser reload` is not enough to see your edit.
+Run `agent-browser close --all` and re-`open` (a fresh session has no disk cache) instead.
 
 If no such isolated browser tool is available in the environment, say so explicitly and
 report verification as blocked/skipped rather than falling back to automating the user's
