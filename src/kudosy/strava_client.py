@@ -92,6 +92,13 @@ def _mask_cookie(cookie: str) -> str:
     return cookie[:8] + "…" if len(cookie) > 8 else "***"
 
 
+# A transient network hiccup (DNS blip, reset connection, momentary timeout)
+# shouldn't turn into a hard failure for idempotent GETs — retry a couple of
+# times with a short backoff before giving up.
+_GET_RETRY_ATTEMPTS = 3
+_GET_RETRY_BACKOFF_BASE_S = 0.5
+
+
 class StravaClient:
     """Async Strava HTTP client."""
 
@@ -126,11 +133,41 @@ class StravaClient:
         if self._client and not self._client.is_closed:
             await self._client.aclose()
 
+    async def _get_with_retry(
+        self, client: httpx.AsyncClient, url: str, **kwargs: Any
+    ) -> httpx.Response:
+        """GET with a short retry/backoff on transient network errors.
+
+        Only retries ``httpx.RequestError`` (connection/DNS/timeout failures
+        that never reached Strava) — HTTP error *status codes* are returned
+        as-is so callers' own handling (``_check_auth``, ``is_success``
+        checks) still applies; those aren't necessarily transient.
+        """
+        last_exc: httpx.RequestError | None = None
+        for attempt in range(_GET_RETRY_ATTEMPTS):
+            try:
+                return await client.get(url, **kwargs)
+            except httpx.RequestError as exc:
+                last_exc = exc
+                if attempt < _GET_RETRY_ATTEMPTS - 1:
+                    delay = _GET_RETRY_BACKOFF_BASE_S * (2**attempt)
+                    log.warning(
+                        "GET %s failed (%s) — retrying in %.1fs (attempt %d/%d)",
+                        url,
+                        exc,
+                        delay,
+                        attempt + 1,
+                        _GET_RETRY_ATTEMPTS,
+                    )
+                    await self._sleep(delay)
+        assert last_exc is not None  # loop always returns or sets this
+        raise last_exc
+
     async def get_csrf_token(self) -> str:
         """Fetch the dashboard page and extract the CSRF token."""
         log.debug("Fetching CSRF token (cookie: %s)", _mask_cookie(self._cookie))
         client = self._get_client()
-        resp = await client.get(_DASHBOARD_URL, timeout=10.0)
+        resp = await self._get_with_retry(client, _DASHBOARD_URL, timeout=10.0)
         self._check_auth(resp)
         m = _CSRF_RE.search(resp.text)
         if not m:
@@ -147,7 +184,8 @@ class StravaClient:
         """
         client = self._get_client()
         try:
-            resp = await client.get(
+            resp = await self._get_with_retry(
+                client,
                 _CURRENT_ATHLETE_URL,
                 headers={"Accept": "application/json"},
                 timeout=10.0,
@@ -160,6 +198,11 @@ class StravaClient:
                 or None
             )
             return id_str or None
+        except AuthError:
+            # An expired/invalid cookie must reach the caller, not be
+            # swallowed into a silent None — the feed fetch that follows would
+            # otherwise fail with a much less clear error.
+            raise
         except Exception:
             log.debug("Could not resolve current athlete ID", exc_info=True)
             return None
@@ -209,7 +252,9 @@ class StravaClient:
         last_pagination: dict[str, Any] = {}
 
         for page_num in range(_FEED_MAX_PAGES):
-            resp = await client.get(_FEED_URL, params=params, headers=feed_headers, timeout=15.0)
+            resp = await self._get_with_retry(
+                client, _FEED_URL, params=params, headers=feed_headers, timeout=15.0
+            )
             self._check_auth(resp)
             payload: dict[str, Any] = resp.json()
             entries: list[Any] = payload.get("entries") or []
@@ -380,7 +425,13 @@ def _next_cursor_params(entries: list[Any]) -> dict[str, int] | None:
     rank = cd.get("rank")
     if updated_at is None or rank is None:
         return None
-    return {"before": int(updated_at), "cursor": int(rank)}
+    try:
+        return {"before": int(updated_at), "cursor": int(rank)}
+    except (TypeError, ValueError):
+        # cursorData shape drifted (e.g. non-numeric strings) — abort
+        # pagination gracefully instead of raising out of fetch_following_feed.
+        log.warning("cursorData present but non-numeric (updated_at=%r, rank=%r)", updated_at, rank)
+        return None
 
 
 def _extract_search_results(html: str) -> list[Any]:

@@ -88,6 +88,96 @@ async def test_check_auth_raises_on_401() -> None:
         client._check_auth(resp)
 
 
+# ── fetch_current_athlete_id ──────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_fetch_current_athlete_id_success() -> None:
+    respx.get("https://www.strava.com/frontend/athletes/current").mock(
+        return_value=httpx.Response(200, json={"currentAthlete": {"id_str": "20000001"}})
+    )
+    client = StravaClient("test-cookie-value")
+    athlete_id = await client.fetch_current_athlete_id()
+    await client.aclose()
+    assert athlete_id == "20000001"
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_fetch_current_athlete_id_falls_back_to_numeric_id() -> None:
+    """id_str absent → falls back to the numeric `id` field, stringified."""
+    respx.get("https://www.strava.com/frontend/athletes/current").mock(
+        return_value=httpx.Response(200, json={"currentAthlete": {"id": 20000002}})
+    )
+    client = StravaClient("test-cookie-value")
+    athlete_id = await client.fetch_current_athlete_id()
+    await client.aclose()
+    assert athlete_id == "20000002"
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_fetch_current_athlete_id_auth_error_propagates() -> None:
+    """An expired cookie must raise AuthError, not be swallowed into None —
+    the caller (run_kudos / GET /api/feed) needs it to report auth failure."""
+    respx.get("https://www.strava.com/frontend/athletes/current").mock(
+        return_value=httpx.Response(401, text="Unauthorized")
+    )
+    client = StravaClient("expired-cookie")
+    with pytest.raises(AuthError):
+        await client.fetch_current_athlete_id()
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_fetch_current_athlete_id_malformed_json_returns_none() -> None:
+    """Any non-auth error (e.g. malformed response) is swallowed → None."""
+    respx.get("https://www.strava.com/frontend/athletes/current").mock(
+        return_value=httpx.Response(200, text="not json")
+    )
+    client = StravaClient("test-cookie-value")
+    athlete_id = await client.fetch_current_athlete_id()
+    await client.aclose()
+    assert athlete_id is None
+
+
+# ── _get_with_retry ───────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_get_with_retry_recovers_after_transient_network_error() -> None:
+    """A ConnectError on the first attempt is retried and can still succeed."""
+    respx.get("https://www.strava.com/frontend/athletes/current").mock(
+        side_effect=[
+            httpx.ConnectError("boom"),
+            httpx.Response(200, json={"currentAthlete": {"id_str": "20000003"}}),
+        ]
+    )
+    client = StravaClient("test-cookie-value", sleep=AsyncMock())
+    athlete_id = await client.fetch_current_athlete_id()
+    await client.aclose()
+    assert athlete_id == "20000003"
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_get_with_retry_gives_up_after_max_attempts() -> None:
+    """Persistent network failure exhausts retries — the caller still sees a
+    clean outcome (fetch_current_athlete_id swallows it into None)."""
+    respx.get("https://www.strava.com/frontend/athletes/current").mock(
+        side_effect=httpx.ConnectError("boom")
+    )
+    client = StravaClient("test-cookie-value", sleep=AsyncMock())
+    athlete_id = await client.fetch_current_athlete_id()
+    await client.aclose()
+    assert athlete_id is None
+    # 3 attempts total (see _GET_RETRY_ATTEMPTS), not an unbounded retry loop.
+    assert respx.calls.call_count == 3
+
+
 # ── fetch_following_feed ───────────────────────────────────────────────────────
 
 
@@ -232,6 +322,80 @@ async def test_lookup_athlete_not_found_returns_none() -> None:
     assert name is None
 
 
+@pytest.mark.asyncio
+@respx.mock
+async def test_lookup_athlete_network_error_returns_none() -> None:
+    """A transient network failure must degrade to None, not raise — the
+    caller (GET /api/athletes/{id}) has no other fallback for this lookup."""
+    respx.get("https://www.strava.com/athletes/20000001").mock(
+        side_effect=httpx.ConnectError("boom")
+    )
+
+    client = StravaClient("test-cookie-value")
+    name = await client.lookup_athlete("20000001")
+    await client.aclose()
+
+    assert name is None
+
+
+# ── search_athletes ────────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_search_athletes_success_from_fixture() -> None:
+    html = _load("athlete_search.html")
+    respx.get("https://www.strava.com/athletes/search").mock(
+        return_value=httpx.Response(200, text=html)
+    )
+
+    client = StravaClient("test-cookie-value")
+    results = await client.search_athletes("Alex")
+    await client.aclose()
+
+    assert len(results) > 0
+    assert all({"id", "name", "avatarUrl"} <= result.keys() for result in results)
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_search_athletes_auth_error_propagates() -> None:
+    respx.get("https://www.strava.com/athletes/search").mock(
+        return_value=httpx.Response(401, text="Unauthorized")
+    )
+
+    client = StravaClient("expired-cookie")
+    with pytest.raises(AuthError):
+        await client.search_athletes("Alex")
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_search_athletes_non_success_status_returns_empty_list() -> None:
+    respx.get("https://www.strava.com/athletes/search").mock(
+        return_value=httpx.Response(500, text="Internal Server Error")
+    )
+
+    client = StravaClient("test-cookie-value")
+    results = await client.search_athletes("Alex")
+    await client.aclose()
+
+    assert results == []
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_search_athletes_network_error_returns_empty_list() -> None:
+    respx.get("https://www.strava.com/athletes/search").mock(side_effect=httpx.ConnectError("boom"))
+
+    client = StravaClient("test-cookie-value")
+    results = await client.search_athletes("Alex")
+    await client.aclose()
+
+    assert results == []
+
+
 # ── _mask_cookie ──────────────────────────────────────────────────────────────
 
 
@@ -271,6 +435,13 @@ def test_next_cursor_params_missing_cursor_data_returns_none() -> None:
 
 def test_next_cursor_params_partial_cursor_data_returns_none() -> None:
     entries = [{"entity": "Activity", "cursorData": {"updated_at": 1000}}]
+    assert _next_cursor_params(entries) is None
+
+
+def test_next_cursor_params_non_numeric_values_returns_none() -> None:
+    """A Strava format drift (non-numeric cursorData) must abort pagination
+    gracefully rather than raising ValueError out of fetch_following_feed."""
+    entries = [{"entity": "Activity", "cursorData": {"updated_at": "not-a-number", "rank": 5000.9}}]
     assert _next_cursor_params(entries) is None
 
 

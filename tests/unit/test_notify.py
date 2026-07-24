@@ -105,6 +105,26 @@ def test_build_run_payload_dry_run_lower_priority_than_live() -> None:
     assert dry["priority"] < live["priority"]
 
 
+def test_build_run_payload_aborted_run_is_not_reported_as_success() -> None:
+    """A rate-limit/consecutive-failure abort must not read as "Lauf abgeschlossen"."""
+    result = _result(success=False, aborted_reason="rate_limited", given=1, total=4, would_give=4)
+    payload = build_run_payload(result)
+    assert payload["success"] is False
+    assert payload["aborted_reason"] == "rate_limited"
+    assert "abgebrochen" in payload["title"]
+    assert "abgeschlossen" not in payload["title"]
+    assert "fehlgeschlagen" not in payload["title"]  # distinct from a hard failure
+
+
+def test_build_run_payload_aborted_run_distinct_from_hard_failure() -> None:
+    aborted = build_run_payload(
+        _result(success=False, aborted_reason="consecutive_failures", error=None)
+    )
+    failed = build_run_payload(_result(success=False, error="boom", aborted_reason=None))
+    assert aborted["title"] != failed["title"]
+    assert "fehlgeschlagen" in failed["title"]
+
+
 # ── build_auth_error_payload ──────────────────────────────────────────────────
 
 

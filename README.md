@@ -85,6 +85,43 @@ on first boot and renamed to `defaults.yaml.migrated`.
 
 See `data/config.example.yaml` for a fully annotated example.
 
+## Zugriffsschutz (Access Control)
+
+By default, Kudosy's web UI and API have **no authentication** — anyone who can reach the
+port can read/change your config (including whether a Strava cookie is set) and trigger runs.
+The Docker image binds to all interfaces inside the container (required for Docker's port
+publishing to work), and the `docker-compose.yaml` shipped here maps that to `127.0.0.1` on
+the host by default, so it isn't reachable from your LAN out of the box.
+
+If you do expose Kudosy beyond your local machine (LAN access, a reverse proxy, etc.), set a
+password to require a login before any `/api/*` call works:
+
+```bash
+# docker-compose.yaml
+environment:
+  KUDOSY_AUTH_PASSWORD: "choose-a-strong-password"
+```
+
+or for a non-Docker run:
+
+```bash
+KUDOSY_AUTH_PASSWORD=choose-a-strong-password KUDOSY_HOST=0.0.0.0 python -m kudosy
+```
+
+This shows a login screen in the UI; a signed session cookie (HMAC-SHA256, `HttpOnly`,
+`SameSite=Lax`) keeps you logged in for `session_ttl_hours` (default 30 days). A few related
+environment variables:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `KUDOSY_AUTH_PASSWORD` | unset (no login) | Setting this enables the login screen |
+| `KUDOSY_SESSION_TTL_HOURS` | `720` (30 days) | How long a login stays valid |
+| `KUDOSY_SECRET_KEY` | auto-generated, persisted to `/data/session-secret` | HMAC key signing session cookies; set explicitly to invalidate all sessions on demand |
+| `KUDOSY_COOKIE_SECURE` | `false` | Send the session cookie with `Secure` — only enable this behind HTTPS (a TLS-terminating reverse proxy), otherwise the browser silently drops the cookie |
+
+Leaving `KUDOSY_AUTH_PASSWORD` unset keeps today's behavior (no login) — this is opt-in and
+does not affect existing installs.
+
 ## Human-Like Timing
 
 Kudosy has several layers of randomness and restraint to avoid a detectable machine pattern:

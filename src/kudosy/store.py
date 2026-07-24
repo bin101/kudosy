@@ -98,6 +98,7 @@ _ACTIVITY_CACHE_FILE = "activity-cache.json"
 _HISTORY_FILE = "run-history.json"
 _DIGEST_STATE_FILE = "last-digest.json"
 _LOG_FILE = "last-run.log"
+_SESSION_SECRET_FILE = "session-secret"
 
 # Maximum number of history entries kept on disk — oldest are pruned.
 _MAX_HISTORY = 500
@@ -191,6 +192,22 @@ def mark_kudoed(activity_id: str, ts_iso: str) -> None:
     """Add a single kudoed activity_id to the persistent cache."""
     data = read_kudoed()
     data[activity_id] = ts_iso
+    write_kudoed(data)
+
+
+def mark_kudoed_many(activity_ids: list[str], ts_iso: str) -> None:
+    """Add multiple kudoed activity_ids in a single read+write.
+
+    Prefer this over calling :func:`mark_kudoed` in a loop when persisting a
+    whole run's worth of activities — each call to ``mark_kudoed`` does a full
+    synchronous read+write of the cache file, which would otherwise block the
+    event loop once per kudo sent instead of once per run.
+    """
+    if not activity_ids:
+        return
+    data = read_kudoed()
+    for activity_id in activity_ids:
+        data[activity_id] = ts_iso
     write_kudoed(data)
 
 
@@ -307,6 +324,41 @@ def read_log() -> str:
         return log_path().read_text(encoding="utf-8")
     except FileNotFoundError:
         return "Noch keine Logs vorhanden."
+
+
+# ── Login session secret ─────────────────────────────────────────────────────
+
+
+def read_or_create_session_secret() -> bytes:
+    """Return the persistent HMAC key used to sign login session cookies.
+
+    Generated once (32 random bytes) and persisted to
+    KUDOSY_DATA_DIR/session-secret so sessions survive restarts — otherwise
+    every restart would silently log everyone out. Written via the same
+    temp-file + os.replace atomic pattern as the JSON/YAML helpers above,
+    which means the file inherits ``tempfile.mkstemp``'s default mode 0600
+    (owner read/write only), same as config.yaml.
+
+    Only used when KUDOSY_SECRET_KEY is not set (see auth.py) — an explicit
+    env var always takes precedence and is never persisted here.
+    """
+    path = _path(_SESSION_SECRET_FILE)
+    try:
+        return path.read_bytes()
+    except FileNotFoundError:
+        pass
+    secret = os.urandom(32)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(secret)
+        os.replace(tmp, path)
+    except Exception:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp)
+        raise
+    return secret
 
 
 # ── Bootstrap / Migration ──────────────────────────────────────────────────────

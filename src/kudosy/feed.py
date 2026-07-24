@@ -167,6 +167,17 @@ class StructuredFeedParser:
         device_name: str | None = data.get("deviceName") or None
 
         stats = self._parse_stats(data.get("stats") or [], elapsed_time_s=elapsed_time_s)
+        if stats.display and all(sv.key == "unknown" for sv in stats.display):
+            # Every stat item was present but none matched a known label — a
+            # strong signal that Strava changed its label format (localisation,
+            # rename) rather than this particular activity being unusual.
+            log.warning(
+                "Activity %s (%s): %d stat(s) present but none classified — "
+                "Strava's stat label format may have changed",
+                activity_id,
+                sport_type or "unknown sport",
+                len(stats.display),
+            )
 
         return Activity(
             activity_id=activity_id,

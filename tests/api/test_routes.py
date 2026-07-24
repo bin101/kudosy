@@ -110,11 +110,14 @@ def test_versioned_asset_gets_immutable_cache_header(
 
 
 def test_get_config(app_client: TestClient) -> None:
+    """GET /api/config never leaks the raw cookie — only hasCookie + a masked preview."""
     resp = app_client.get("/api/config")
     assert resp.status_code == 200
     data = resp.json()
     assert data["athleteId"] == "20000001"
-    assert data["stravaSessionCookie"] == "test-session-cookie"
+    assert "stravaSessionCookie" not in data
+    assert data["hasCookie"] is True
+    assert data["cookiePreview"] == "test-s…"
 
 
 def test_put_config_ok(app_client: TestClient) -> None:
@@ -132,10 +135,40 @@ def test_put_config_ok(app_client: TestClient) -> None:
     resp2 = app_client.get("/api/config")
     assert resp2.json()["athleteId"] == "20000002"
 
+    from kudosy import store
 
-def test_put_config_empty_cookie_is_400(app_client: TestClient) -> None:
+    assert store.read_user_config().stravaSessionCookie == "new-cookie"  # type: ignore[union-attr]
+
+
+def test_put_config_empty_cookie_keeps_existing(app_client: TestClient) -> None:
+    """An empty/absent cookie in the payload keeps the existing one (frontend never re-sends it)."""
+    resp = app_client.put("/api/config", json={"stravaSessionCookie": "", "athleteId": "20000002"})
+    assert resp.status_code == 200
+
+    from kudosy import store
+
+    assert store.read_user_config().stravaSessionCookie == "test-session-cookie"  # type: ignore[union-attr]
+
+
+def test_put_config_empty_cookie_without_existing_is_400(
+    app_client: TestClient, data_dir: Path
+) -> None:
+    """An empty cookie is only rejected when there is no existing cookie to fall back to."""
+    from kudosy import store
+
+    store.write_user_config_raw({"stravaSessionCookie": "", "athleteId": ""})
+
     resp = app_client.put("/api/config", json={"stravaSessionCookie": ""})
     assert resp.status_code == 400
+
+
+def test_put_config_invalid_schema_is_422(app_client: TestClient) -> None:
+    """A malformed payload is rejected with 422 instead of being written silently."""
+    resp = app_client.put(
+        "/api/config",
+        json={"stravaSessionCookie": "keep-me", "kudoRules": "not-an-object"},
+    )
+    assert resp.status_code == 422
 
 
 # ── /api/defaults removed ────────────────────────────────────────────────────
@@ -295,6 +328,121 @@ def test_get_athlete_avatars_with_cached_entries(app_client: TestClient, data_di
     data = resp.json()
     assert data["99990001"] == "https://example.com/1.jpg"
     assert data["99990002"] == "https://example.com/2.jpg"
+
+
+# ── /api/athletes/{athlete_id} — path param validation ───────────────────────
+
+
+def test_get_athlete_non_numeric_id_is_422(app_client: TestClient) -> None:
+    """athlete_id must be numeric — it's interpolated into a Strava URL via str.format."""
+    resp = app_client.get("/api/athletes/not-a-number")
+    assert resp.status_code == 422
+
+
+def test_get_athlete_cached_label_returns_without_calling_strava(
+    app_client: TestClient, data_dir: Path
+) -> None:
+    from kudosy import store
+
+    store.write_athlete_labels({"20000005": "Cached Athlete"})
+    resp = app_client.get("/api/athletes/20000005")
+    assert resp.status_code == 200
+    assert resp.json() == {"id": "20000005", "name": "Cached Athlete"}
+
+
+def test_get_athlete_no_cookie_returns_400(app_client: TestClient, data_dir: Path) -> None:
+    from kudosy import store
+
+    store.write_user_config_raw({"stravaSessionCookie": "", "athleteId": ""})
+    resp = app_client.get("/api/athletes/20000006")
+    assert resp.status_code == 400
+    assert resp.json()["detail"]["code"] == "NO_COOKIE"
+
+
+def test_get_athlete_auth_error_returns_401(app_client: TestClient, data_dir: Path) -> None:
+    """AuthError from StravaClient.lookup_athlete propagates as HTTP 401."""
+    from unittest.mock import AsyncMock, patch
+
+    from kudosy.feed import AuthError
+
+    mock_instance = AsyncMock()
+    mock_instance.lookup_athlete.side_effect = AuthError("Cookie abgelaufen")
+    mock_instance.aclose = AsyncMock()
+
+    with patch("kudosy.routes.StravaClient", return_value=mock_instance):
+        resp = app_client.get("/api/athletes/20000007")
+
+    assert resp.status_code == 401
+    assert resp.json()["detail"].get("code") in ("AUTH_INVALID_COOKIE", "AUTH_FAILED")
+
+
+def test_get_athlete_not_found_returns_none_name(app_client: TestClient, data_dir: Path) -> None:
+    from unittest.mock import AsyncMock, patch
+
+    mock_instance = AsyncMock()
+    mock_instance.lookup_athlete.return_value = None
+    mock_instance.aclose = AsyncMock()
+
+    with patch("kudosy.routes.StravaClient", return_value=mock_instance):
+        resp = app_client.get("/api/athletes/99999999")
+
+    assert resp.status_code == 200
+    assert resp.json() == {"id": "99999999", "name": None}
+
+
+# ── /api/athletes/search ──────────────────────────────────────────────────────
+
+
+def test_search_athletes_empty_query_returns_empty_list(app_client: TestClient) -> None:
+    resp = app_client.get("/api/athletes/search?q=")
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+def test_search_athletes_no_cookie_returns_400(app_client: TestClient, data_dir: Path) -> None:
+    from kudosy import store
+
+    store.write_user_config_raw({"stravaSessionCookie": "", "athleteId": ""})
+    resp = app_client.get("/api/athletes/search?q=Alex")
+    assert resp.status_code == 400
+    assert resp.json()["detail"]["code"] == "NO_COOKIE"
+
+
+def test_search_athletes_caches_labels_and_avatars(app_client: TestClient, data_dir: Path) -> None:
+    from unittest.mock import AsyncMock, patch
+
+    from kudosy import store
+
+    mock_instance = AsyncMock()
+    mock_instance.search_athletes.return_value = [
+        {"id": "30000001", "name": "Found Athlete", "avatarUrl": "https://example.com/a.jpg"},
+    ]
+    mock_instance.aclose = AsyncMock()
+
+    with patch("kudosy.routes.StravaClient", return_value=mock_instance):
+        resp = app_client.get("/api/athletes/search?q=Found")
+
+    assert resp.status_code == 200
+    assert resp.json() == [
+        {"id": "30000001", "name": "Found Athlete", "avatarUrl": "https://example.com/a.jpg"}
+    ]
+    assert store.read_athlete_labels()["30000001"] == "Found Athlete"
+    assert store.read_athlete_avatars()["30000001"] == "https://example.com/a.jpg"
+
+
+def test_search_athletes_auth_error_returns_401(app_client: TestClient, data_dir: Path) -> None:
+    from unittest.mock import AsyncMock, patch
+
+    from kudosy.feed import AuthError
+
+    mock_instance = AsyncMock()
+    mock_instance.search_athletes.side_effect = AuthError("Cookie abgelaufen")
+    mock_instance.aclose = AsyncMock()
+
+    with patch("kudosy.routes.StravaClient", return_value=mock_instance):
+        resp = app_client.get("/api/athletes/search?q=Alex")
+
+    assert resp.status_code == 401
 
 
 # ── /api/status ───────────────────────────────────────────────────────────────
@@ -580,6 +728,50 @@ def test_get_feed_auth_error_returns_401(app_client: TestClient, data_dir: Path)
     assert "Cookie" in detail.get("message", "")
 
 
+def test_get_feed_network_error_returns_502_not_500(app_client: TestClient, data_dir: Path) -> None:
+    """A transient network failure reaching Strava must not surface as a raw 500."""
+    from unittest.mock import AsyncMock, patch
+
+    import httpx
+
+    from kudosy import store
+
+    store.write_user_config_raw({"stravaSessionCookie": "valid-cookie", "athleteId": "20000001"})
+
+    mock_instance = AsyncMock()
+    mock_instance.fetch_following_feed.side_effect = httpx.ConnectError("boom")
+    mock_instance.aclose = AsyncMock()
+
+    with patch("kudosy.routes.StravaClient", return_value=mock_instance):
+        resp = app_client.get("/api/feed?refresh=true")
+
+    assert resp.status_code == 502
+    assert resp.json()["detail"]["code"] == "STRAVA_UNREACHABLE"
+
+
+def test_get_feed_refresh_does_not_dump_raw_feed_by_default(
+    app_client: TestClient, data_dir: Path
+) -> None:
+    """last-feed-raw.json can contain third-party athletes' PII — it must only
+    be written when actively debugging (KUDOSY_LOG_LEVEL=DEBUG), not by default."""
+    from unittest.mock import AsyncMock, patch
+
+    from kudosy import store
+
+    store.write_user_config_raw({"stravaSessionCookie": "valid-cookie", "athleteId": "20000001"})
+
+    mock_instance = AsyncMock()
+    mock_instance.fetch_following_feed.return_value = {"entries": [], "pagination": {}}
+    mock_instance.aclose = AsyncMock()
+
+    with patch("kudosy.routes.StravaClient", return_value=mock_instance):
+        resp = app_client.get("/api/feed?refresh=true")
+
+    assert resp.status_code == 200
+    assert not (data_dir / "last-feed-raw.json").exists()
+    assert mock_instance.fetch_following_feed.call_args.kwargs["dump_raw"] is None
+
+
 def test_get_feed_empty_feed_returns_empty_list(app_client: TestClient, data_dir: Path) -> None:
     """Empty feed returns an empty list (not an error)."""
     from unittest.mock import AsyncMock, patch
@@ -806,3 +998,98 @@ def test_post_kudos_flips_has_kudoed_in_cache(app_client: TestClient, data_dir: 
 
     cached_acts, _ = store.read_activity_cache()
     assert cached_acts[0]["has_kudoed"] is True
+
+
+def test_post_kudos_non_numeric_id_is_422(app_client: TestClient) -> None:
+    """activity_id must be numeric — it's interpolated into a Strava URL via str.format."""
+    resp = app_client.post("/api/kudos/not-a-number")
+    assert resp.status_code == 422
+
+
+# ── Optional login gate (KUDOSY_AUTH_PASSWORD) ────────────────────────────────
+
+
+def _enable_auth_password(monkeypatch: pytest.MonkeyPatch, password: str = "secret123") -> None:
+    """Set KUDOSY_AUTH_PASSWORD and force a fresh settings read.
+
+    require_auth() calls get_settings() at request time (not cached), so this
+    can run *after* app_client has already built the app/TestClient — the
+    next HTTP request still picks up the change.
+    """
+    monkeypatch.setenv("KUDOSY_AUTH_PASSWORD", password)
+    import kudosy.settings as settings_mod
+
+    settings_mod._settings = None  # type: ignore[attr-defined]
+
+
+def test_auth_disabled_by_default_all_endpoints_open(app_client: TestClient) -> None:
+    """No KUDOSY_AUTH_PASSWORD → require_auth is a no-op (today's behavior)."""
+    resp = app_client.get("/api/auth-status")
+    assert resp.status_code == 200
+    assert resp.json() == {"authRequired": False, "authenticated": True}
+    assert app_client.get("/api/status").status_code == 200
+
+
+def test_protected_endpoint_401s_without_session_when_auth_enabled(
+    app_client: TestClient, data_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _enable_auth_password(monkeypatch)
+    resp = app_client.get("/api/status")
+    assert resp.status_code == 401
+    assert resp.json()["detail"]["code"] == "AUTH_REQUIRED"
+
+
+def test_index_page_stays_reachable_without_login_when_auth_enabled(
+    app_client: TestClient, data_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """GET / (the frontend shell itself) is on public_router — it must load
+    so the login overlay's own JS/HTML can be served before any session exists."""
+    _enable_auth_password(monkeypatch)
+    resp = app_client.get("/")
+    assert resp.status_code == 200
+
+
+def test_login_wrong_password_is_401(
+    app_client: TestClient, data_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _enable_auth_password(monkeypatch)
+    resp = app_client.post("/api/login", json={"password": "wrong"})
+    assert resp.status_code == 401
+    assert resp.json()["detail"]["code"] == "INVALID_PASSWORD"
+
+
+def test_login_then_access_then_logout_round_trip(
+    app_client: TestClient, data_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _enable_auth_password(monkeypatch)
+
+    assert app_client.get("/api/status").status_code == 401
+
+    resp = app_client.post("/api/login", json={"password": "secret123"})
+    assert resp.status_code == 200
+    assert "kudosy_session" in resp.cookies
+
+    # The TestClient keeps cookies across requests on the same instance.
+    assert app_client.get("/api/status").status_code == 200
+
+    status_check = app_client.get("/api/auth-status")
+    assert status_check.json() == {"authRequired": True, "authenticated": True}
+
+    app_client.post("/api/logout")
+    assert app_client.get("/api/status").status_code == 401
+
+
+def test_login_locks_out_after_repeated_failures(
+    app_client: TestClient, data_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _enable_auth_password(monkeypatch)
+
+    from kudosy.auth import _LOGIN_LOCKOUT_MAX_FAILURES
+
+    for _ in range(_LOGIN_LOCKOUT_MAX_FAILURES):
+        app_client.post("/api/login", json={"password": "wrong"})
+
+    # Even the *correct* password is rejected while locked out.
+    resp = app_client.post("/api/login", json={"password": "secret123"})
+    assert resp.status_code == 429
+    assert resp.json()["detail"]["code"] == "TOO_MANY_ATTEMPTS"

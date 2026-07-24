@@ -170,6 +170,13 @@ class AppSettings(BaseModel):
     @field_validator("notifyWebhookUrl", mode="before")
     @classmethod
     def validate_webhook_url(cls, v: Any) -> str:
+        # Intentionally not blocking private/link-local hosts here: pointing
+        # this at a self-hosted ntfy/Gotify instance on your own LAN is a
+        # supported, documented use case (see README), so an IP allowlist
+        # would break that. This *is* SSRF-shaped (the server will POST to
+        # whatever URL is configured) — the mitigation is that only an
+        # authenticated user can set it; see the optional login (README
+        # "Zugriffsschutz") if this instance is reachable by untrusted users.
         url = str(v or "")
         if url and not (url.startswith("http://") or url.startswith("https://")):
             raise ValueError(f"notifyWebhookUrl must be an http/https URL or empty, got: {url!r}")

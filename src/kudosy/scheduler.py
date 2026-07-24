@@ -15,6 +15,7 @@ from apscheduler.triggers.cron import CronTrigger
 from kudosy.humanizer import compute_jitter
 from kudosy.models import AppSettings
 from kudosy.quiet_hours import next_allowed_run
+from kudosy.store import read_settings
 
 log = logging.getLogger(__name__)
 
@@ -85,16 +86,26 @@ class KudosyScheduler:
         self._next_run_at = run_at
 
         async def _guarded_job() -> None:
+            # Re-read settings on every tick (rather than closing over the
+            # `settings` this job was scheduled with) so that a PUT
+            # /api/settings change made while a run is in flight isn't
+            # clobbered by this job's own end-of-run reschedule below.
             if self._is_running:
-                log.warning("[scheduler] Job already running — skipping this tick")
+                log.warning(
+                    "[scheduler] Job already running — skipping this tick, "
+                    "scheduling the next one so the chain doesn't stall"
+                )
+                self.reschedule(read_settings(), job_fn)
                 return
             self._is_running = True
             try:
                 await job_fn()
             finally:
                 self._is_running = False
-            # Reschedule next run (with fresh jitter) after completion
-            self.reschedule(settings, job_fn)
+                # Reschedule next run (fresh jitter + settings) even if job_fn
+                # raised — otherwise a single failed run would permanently
+                # stall the scheduler until the next manual settings change.
+                self.reschedule(read_settings(), job_fn)
 
         self._scheduler.add_job(
             _guarded_job,

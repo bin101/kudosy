@@ -12,7 +12,9 @@ from collections.abc import AsyncGenerator
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, Response
+import httpx
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response
+from fastapi import Path as ApiPath
 from fastapi.responses import (
     HTMLResponse,
     JSONResponse,
@@ -22,10 +24,21 @@ from fastapi.responses import (
 from pydantic import BaseModel
 
 from kudosy import __version__
+from kudosy.auth import (
+    SESSION_COOKIE_NAME,
+    auth_enabled,
+    create_session_token,
+    is_login_locked_out,
+    record_login_failure,
+    record_login_success,
+    require_auth,
+    verify_password,
+)
 from kudosy.decision import decide
 from kudosy.effective_config import build_effective_config
 from kudosy.feed import AuthError, StructuredFeedParser
 from kudosy.models import Activity, RunResult, RunStatus
+from kudosy.settings import get_settings
 from kudosy.sport_types import categorize_sport_types
 from kudosy.store import (
     cache_athlete_avatar,
@@ -42,14 +55,19 @@ from kudosy.store import (
     write_activity_cache,
     write_settings,
     write_user_config,
-    write_user_config_raw,
 )
 from kudosy.strava_client import StravaClient
 from kudosy.update_check import is_newer, maybe_schedule_update_check
 
 log = logging.getLogger(__name__)
 
-router = APIRouter()
+# `router` carries the require_auth dependency on every route — a no-op when
+# no KUDOSY_AUTH_PASSWORD is configured (see auth.py). `public_router` holds
+# the handful of endpoints that must stay reachable *without* a session:
+# the frontend shell itself, and the login/logout/status endpoints a client
+# needs before it can even have a session. Both are mounted in app.py.
+router = APIRouter(dependencies=[Depends(require_auth)])
+public_router = APIRouter()
 
 _STATIC_DIR = Path(__file__).parent / "static"
 
@@ -57,9 +75,13 @@ _STATIC_DIR = Path(__file__).parent / "static"
 # ── Frontend ──────────────────────────────────────────────────────────────────
 
 
-@router.get("/", response_class=HTMLResponse, include_in_schema=False)
+@public_router.get("/", response_class=HTMLResponse, include_in_schema=False)
 async def serve_index() -> HTMLResponse:
     """Serve index.html with versioned asset URLs for cache busting."""
+    import secrets
+
+    from kudosy.app import build_csp  # avoid circular import
+
     v = __version__
     # All local ES modules are mapped to their cache-busted ?v= variant so that
     # a new release immediately invalidates every module in every browser.
@@ -68,6 +90,7 @@ async def serve_index() -> HTMLResponse:
         "./state.js",
         "./dom.js",
         "./api.js",
+        "./auth.js",
         "./format.js",
         "./schedule-matrix.js",
         "./athletes.js",
@@ -83,33 +106,147 @@ async def serve_index() -> HTMLResponse:
     importmap = json.dumps({"imports": {m: f"{m}?v={v}" for m in _MODULES}})
     content = (_STATIC_DIR / "index.html").read_text()
     content = content.replace('href="styles.css"', f'href="styles.css?v={v}"')
+    # The importmap is inline (no src=), so it needs a per-request nonce to
+    # satisfy the strict `script-src 'self'` CSP set below (see app.build_csp).
+    nonce = secrets.token_urlsafe(16)
     content = content.replace(
         '<script src="main.js" type="module"></script>',
-        f'<script type="importmap">{importmap}</script>\n  '
+        f'<script type="importmap" nonce="{nonce}">{importmap}</script>\n  '
         f'<script src="main.js?v={v}" type="module"></script>',
     )
-    return HTMLResponse(content=content, headers={"Cache-Control": "no-store"})
+    return HTMLResponse(
+        content=content,
+        headers={
+            "Cache-Control": "no-store",
+            "Content-Security-Policy": build_csp(script_nonce=nonce),
+        },
+    )
+
+
+# ── Login / session ───────────────────────────────────────────────────────────
+
+
+class _LoginBody(BaseModel):
+    password: str
+
+
+@public_router.get("/api/auth-status")
+async def get_auth_status(request: Request) -> dict[str, Any]:
+    """Always reachable — tells the frontend whether to show the login overlay."""
+    from kudosy.auth import verify_session_token
+
+    required = auth_enabled()
+    authenticated = (not required) or verify_session_token(request.cookies.get(SESSION_COOKIE_NAME))
+    return {"authRequired": required, "authenticated": authenticated}
+
+
+@public_router.post("/api/login")
+async def post_login(body: _LoginBody, response: Response) -> dict[str, Any]:
+    if not auth_enabled():
+        # Nothing to log into — treat as already authenticated rather than
+        # exposing whether a password happens to be configured.
+        return {"ok": True}
+
+    if is_login_locked_out():
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "code": "TOO_MANY_ATTEMPTS",
+                "message": "Zu viele Fehlversuche — bitte kurz warten.",
+            },
+        )
+
+    if not verify_password(body.password):
+        record_login_failure()
+        raise HTTPException(
+            status_code=401,
+            detail={"code": "INVALID_PASSWORD", "message": "Falsches Passwort"},
+        )
+
+    record_login_success()
+    settings = get_settings()
+    response.set_cookie(
+        key=SESSION_COOKIE_NAME,
+        value=create_session_token(),
+        max_age=settings.session_ttl_hours * 3600,
+        httponly=True,
+        samesite="lax",
+        secure=settings.cookie_secure,
+        path="/",
+    )
+    return {"ok": True}
+
+
+@public_router.post("/api/logout")
+async def post_logout(response: Response) -> dict[str, Any]:
+    response.delete_cookie(key=SESSION_COOKIE_NAME, path="/")
+    return {"ok": True}
 
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
 
+def _mask_cookie_preview(cookie: str) -> str:
+    """Return a short, non-sensitive preview of a session cookie for display only."""
+    return cookie[:6] + "…" if len(cookie) > 6 else "***"
+
+
 @router.get("/api/config")
 async def get_config() -> dict[str, Any]:
+    """Return the user config with the live session cookie redacted.
+
+    The raw ``stravaSessionCookie`` is never sent to the client — only whether
+    one is set (``hasCookie``) and a short, non-sensitive preview
+    (``cookiePreview``). This prevents session-hijacking via a leaked/XSS'd
+    response (see PUT /api/config for how a cookie is set/kept).
+    """
     cfg = read_user_config()
-    return cfg.model_dump() if cfg else {}
+    if not cfg:
+        return {"hasCookie": False, "cookiePreview": ""}
+    data = cfg.model_dump()
+    cookie = data.pop("stravaSessionCookie", "")
+    data["hasCookie"] = bool(cookie)
+    data["cookiePreview"] = _mask_cookie_preview(cookie) if cookie else ""
+    return data
 
 
 @router.put("/api/config")
 async def put_config(request: Request) -> dict[str, Any]:
+    """Merge incoming config with the stored one, then validate before writing.
+
+    ``stravaSessionCookie`` is only replaced when the request supplies a
+    non-empty value — an absent or empty cookie keeps the existing one (the
+    frontend never has the raw cookie to send back, see GET /api/config).
+    An empty cookie is rejected only when there is no existing cookie to fall
+    back to (i.e. this would leave the config without any cookie at all).
+    """
+    from kudosy.models import UserConfig
+
     data = await request.json()
-    cookie = data.get("stravaSessionCookie")
-    if cookie is not None and not cookie:
+    existing = read_user_config()
+
+    new_cookie = data.get("stravaSessionCookie")
+    if not new_cookie:
+        existing_cookie = existing.stravaSessionCookie if existing else ""
+        if not existing_cookie:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "EMPTY_COOKIE",
+                    "message": "stravaSessionCookie darf nicht leer sein",
+                },
+            )
+        data["stravaSessionCookie"] = existing_cookie
+
+    merged = {**(existing.model_dump() if existing else {}), **data}
+    try:
+        new_cfg = UserConfig.model_validate(merged)
+    except Exception as exc:
         raise HTTPException(
-            status_code=400,
-            detail={"code": "EMPTY_COOKIE", "message": "stravaSessionCookie darf nicht leer sein"},
-        )
-    write_user_config_raw(data)
+            status_code=422, detail={"code": "INVALID_CONFIG", "message": str(exc)}
+        ) from exc
+
+    write_user_config(new_cfg)
     return {"ok": True}
 
 
@@ -212,7 +349,9 @@ async def search_athletes_route(q: str = "") -> list[dict[str, Any]]:
 
 
 @router.get("/api/athletes/{athlete_id}")
-async def get_athlete(athlete_id: str) -> dict[str, Any]:
+async def get_athlete(
+    athlete_id: str = ApiPath(pattern=r"^\d+$"),
+) -> dict[str, Any]:
     cfg = read_user_config()
     if not cfg or not cfg.stravaSessionCookie:
         raise HTTPException(
@@ -399,16 +538,19 @@ async def get_feed(request: Request) -> dict[str, Any]:
     import datetime as _dt
     from pathlib import Path
 
-    from kudosy.settings import get_settings
-
     client = StravaClient(cfg.stravaSessionCookie)
     try:
         # Resolve athlete ID (from config or live lookup).
         athlete_id = cfg.athleteId or await client.fetch_current_athlete_id() or ""
         # Optional raw feed dump for debugging (written to DATA_DIR/last-feed-raw.json).
+        # Gated on KUDOSY_LOG_LEVEL=DEBUG: this writes third-party athletes'
+        # full feed data (names, locations, device info) to disk on every
+        # live refresh — only worth that PII-on-disk tradeoff when actively
+        # debugging a Strava format change, not on every default-config refresh.
         dump_path: Path | None = None
-        with contextlib.suppress(Exception):
-            dump_path = Path(get_settings().data_dir) / "last-feed-raw.json"
+        if get_settings().log_level.upper() == "DEBUG":
+            with contextlib.suppress(Exception):
+                dump_path = Path(get_settings().data_dir) / "last-feed-raw.json"
         raw_feed = await client.fetch_following_feed(athlete_id, dump_raw=dump_path)
         activities = StructuredFeedParser().parse(raw_feed)
         # Cache avatar URLs from the live feed.
@@ -423,6 +565,17 @@ async def get_feed(request: Request) -> dict[str, Any]:
     except AuthError as exc:
         code = getattr(exc, "code", "AUTH_FAILED")
         raise HTTPException(status_code=401, detail={"code": code, "message": str(exc)}) from exc
+    except httpx.RequestError as exc:
+        # A network-level failure reaching Strava (already retried inside
+        # StravaClient) — report it cleanly instead of an unhandled 500.
+        log.warning("Live feed fetch failed (network error): %s", exc)
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "code": "STRAVA_UNREACHABLE",
+                "message": "Strava war nicht erreichbar. Bitte später erneut versuchen.",
+            },
+        ) from exc
     finally:
         await client.aclose()
 
@@ -431,7 +584,9 @@ async def get_feed(request: Request) -> dict[str, Any]:
 
 
 @router.post("/api/kudos/{activity_id}")
-async def post_single_kudos(activity_id: str) -> dict[str, Any]:
+async def post_single_kudos(
+    activity_id: str = ApiPath(pattern=r"^\d+$"),
+) -> dict[str, Any]:
     """Give kudos to a single activity from the feed UI.
 
     Fetches a fresh CSRF token, sends the kudo, and caches the activity_id so

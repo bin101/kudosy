@@ -128,6 +128,7 @@ def _format_generic(msg: dict[str, Any]) -> dict[str, Any]:
         "would_give",
         "given",
         "error",
+        "aborted_reason",
         "started_at",
         "finished_at",
         # daily_digest fields
@@ -188,6 +189,12 @@ def _run_summary(result: Any, *, lang: str = "de") -> str:
     return f"{result.total} Aktivitäten geprüft · {result.given} Kudos vergeben"
 
 
+_ABORTED_REASON_LABELS = {
+    "rate_limited": "Rate-Limit erreicht",
+    "consecutive_failures": "zu viele Fehler in Folge",
+}
+
+
 def build_run_payload(result: Any) -> dict[str, Any]:
     """Build a system-agnostic notification message for a completed run."""
     if result.success:
@@ -199,6 +206,15 @@ def build_run_payload(result: Any) -> dict[str, Any]:
             icon, title = "✅", "Kudosy — Lauf abgeschlossen"
             tags = ["white_check_mark"]
             priority = 3
+    elif result.aborted_reason:
+        # The send loop stopped itself early (rate limit / repeated failures)
+        # rather than crashing — distinct from a hard failure below so the
+        # notification doesn't read as "everything is broken".
+        icon = "⚠️"
+        reason_label = _ABORTED_REASON_LABELS.get(result.aborted_reason, result.aborted_reason)
+        title = f"Kudosy — Lauf abgebrochen ({reason_label})"
+        tags = ["warning"]
+        priority = 4
     else:
         icon, title = "❌", "Kudosy — Lauf fehlgeschlagen"
         tags = ["x"]
@@ -222,6 +238,7 @@ def build_run_payload(result: Any) -> dict[str, Any]:
         "would_give": result.would_give,
         "given": result.given,
         "error": result.error,
+        "aborted_reason": result.aborted_reason,
     }
 
 

@@ -6,6 +6,7 @@ import { applyStaticTranslations } from './i18n.js';
 import { state } from './state.js';
 import { $, toast, initRevealButtons } from './dom.js';
 import { t } from './i18n.js';
+import { ensureAuthenticated, initLogoutButton } from './auth.js';
 import { initTabs, initLangSelect, activateTab } from './tabs.js';
 import { initThemeSelect, applyTheme, getTheme } from './theme.js';
 import { loadConfig, initConfigTab } from './config.js';
@@ -17,6 +18,12 @@ import { initStatsTab } from './stats.js';
 import { initBackup } from './backup.js';
 
 async function init() {
+  // Blocks here (showing a login overlay) until authenticated, if the server
+  // has a login configured at all — a no-op otherwise. Must run before any
+  // other /api/* call so the app never flashes real data before the gate.
+  await ensureAuthenticated();
+  initLogoutButton();
+
   // Fetch sport-type lists before wiring the config tab (rules selects need them)
   try {
     [state.sportTypes, state.sportCategories] = await Promise.all([
