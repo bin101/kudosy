@@ -25,7 +25,7 @@ from kudosy.notify import (
     build_run_payload,
     send_notification,
 )
-from kudosy.routes import router
+from kudosy.routes import public_router, router
 from kudosy.scheduler import KudosyScheduler
 from kudosy.settings import get_settings
 from kudosy.sport_types import ALL_SPORT_TYPES, fetch_sport_types, merge_sport_types
@@ -33,7 +33,7 @@ from kudosy.store import (
     append_run_history,
     bootstrap,
     log_path,
-    mark_kudoed,
+    mark_kudoed_many,
     prune_kudoed,
     read_kudoed_ids,
     read_last_digest_at,
@@ -48,6 +48,37 @@ log = logging.getLogger(__name__)
 
 # Shared mutable application state (set during lifespan, read from routes)
 _app_state: dict[str, Any] = {}
+
+# ── Security headers ──────────────────────────────────────────────────────────
+
+_SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+}
+
+
+def build_csp(script_nonce: str | None = None) -> str:
+    """Build the Content-Security-Policy header value.
+
+    Every directive is locked to same-origin. ``script-src`` only allows a
+    per-request nonce for the one page (index.html) that embeds an inline
+    ``<script type="importmap">`` for cache-busted module URLs — every other
+    script is loaded from a same-origin ``src=`` file, so no 'unsafe-inline'
+    is needed there. ``style-src`` allows 'unsafe-inline' because a handful of
+    static layout tweaks in index.html use inline ``style="..."`` attributes;
+    inline CSS cannot execute script (unlike inline JS), so this doesn't
+    weaken the XSS mitigation this header exists for. ``img-src`` allows any
+    https origin because Strava athlete avatar URLs are pass-through values
+    from Strava's own API and are not restricted to a fixed CDN domain.
+    """
+    script_src = "'self'" if script_nonce is None else f"'self' 'nonce-{script_nonce}'"
+    return (
+        f"default-src 'self'; script-src {script_src}; "
+        "style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; "
+        "connect-src 'self'; base-uri 'self'; form-action 'self'; "
+        "frame-ancestors 'none'"
+    )
 
 
 def get_app_state() -> dict[str, Any]:
@@ -114,11 +145,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
                 kudoed_ids=kudoed_ids,
             )
             _app_state["auth_ok"] = True
-            # Persist newly kudoed activity IDs (dry-run never sends, so list is empty)
+            # Persist newly kudoed activity IDs (dry-run never sends, so list is empty).
+            # One batched read+write for the whole run rather than one per
+            # activity — keeps this off the event loop's critical path when a
+            # run gives many kudos.
             if result and result.newly_kudoed:
                 now_iso = result.finished_at.isoformat()
-                for activity_id in result.newly_kudoed:
-                    mark_kudoed(activity_id, now_iso)
+                mark_kudoed_many(result.newly_kudoed, now_iso)
                 prune_kudoed()
                 if result.skipped_cached:
                     log.info(
@@ -128,7 +161,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
                     )
             # Persist activity feed snapshot (survives restarts; never overwrite with
             # a failed or empty run to protect the last valid cache).
-            if result and result.success and result.activities:
+            # Intentionally keyed on `error` rather than `success`: a run that
+            # stopped early (rate limit / consecutive failures) still fetched
+            # a valid feed and is `success=False`, but that feed snapshot is
+            # still worth caching — only a genuine exception should skip this.
+            if result and result.error is None and result.activities:
                 acts = result.activities
                 if not dry_run and result.newly_kudoed:
                     # Reconcile: the snapshot was captured before kudos were sent,
@@ -248,17 +285,28 @@ def create_app() -> FastAPI:
         title="Kudosy",
         version=__version__,
         lifespan=lifespan,
+        # No public API consumers beyond our own frontend; disabling the
+        # auto-generated docs avoids the CSP above breaking their CDN assets
+        # and trims a bit of unauthenticated info-disclosure surface.
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None,
     )
 
     @app.middleware("http")
-    async def cache_control(
+    async def security_headers(
         request: Request, call_next: Callable[[Request], Awaitable[Response]]
     ) -> Response:
         response = await call_next(request)
+        for name, value in _SECURITY_HEADERS.items():
+            response.headers.setdefault(name, value)
+        # serve_index() sets its own nonce-based CSP; don't clobber it.
+        response.headers.setdefault("Content-Security-Policy", build_csp())
         if "v=" in request.url.query:
             response.headers["Cache-Control"] = "max-age=31536000, immutable"
         return response
 
+    app.include_router(public_router)
     app.include_router(router)
 
     # Serve frontend static files; index.html is handled by GET / in routes.py

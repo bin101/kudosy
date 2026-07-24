@@ -43,6 +43,35 @@ def test_mark_kudoed_adds_entry(data_dir: Path) -> None:
     assert len(data) == 2
 
 
+def test_mark_kudoed_many_adds_all_entries_in_one_write(data_dir: Path) -> None:
+    """mark_kudoed_many() persists every ID from a single read+write cycle."""
+    from kudosy.store import mark_kudoed_many, read_kudoed
+
+    mark_kudoed_many(["a1", "a2", "a3"], "2026-01-01T00:00:00+00:00")
+    data = read_kudoed()
+    assert set(data.keys()) == {"a1", "a2", "a3"}
+    assert all(v == "2026-01-01T00:00:00+00:00" for v in data.values())
+
+
+def test_mark_kudoed_many_merges_with_existing_entries(data_dir: Path) -> None:
+    """mark_kudoed_many() doesn't clobber IDs cached by a previous run."""
+    from kudosy.store import mark_kudoed, mark_kudoed_many, read_kudoed
+
+    mark_kudoed("existing", "2026-01-01T00:00:00+00:00")
+    mark_kudoed_many(["new-1", "new-2"], "2026-01-02T00:00:00+00:00")
+    data = read_kudoed()
+    assert set(data.keys()) == {"existing", "new-1", "new-2"}
+
+
+def test_mark_kudoed_many_empty_list_is_a_no_op(data_dir: Path) -> None:
+    """mark_kudoed_many([]) does not create the cache file / touch existing data."""
+    from kudosy.store import mark_kudoed, mark_kudoed_many, read_kudoed
+
+    mark_kudoed("existing", "2026-01-01T00:00:00+00:00")
+    mark_kudoed_many([], "2026-01-02T00:00:00+00:00")
+    assert read_kudoed() == {"existing": "2026-01-01T00:00:00+00:00"}
+
+
 def test_read_kudoed_ids_returns_keys(data_dir: Path) -> None:
     """read_kudoed_ids() returns just the keys as a set."""
     from kudosy.store import mark_kudoed, read_kudoed_ids

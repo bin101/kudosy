@@ -33,6 +33,8 @@
           <button id="btn-run" class="btn btn-primary">
             <span>▶</span> <span data-i18n="btn.runNow">Jetzt ausführen</span>
           </button>
+          <button id="btn-logout" class="btn-icon" data-i18n-title="login.logout.title"
+                  title="Abmelden" hidden>🔒</button>
         </div>
       </div>
     </header>
@@ -473,6 +475,26 @@
   </footer>
 
   <div id="toast-container"></div>
+
+  <!-- ── Login overlay (only shown when KUDOSY_AUTH_PASSWORD is set) ───── -->
+  <div id="login-overlay" class="modal-overlay" hidden>
+    <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="login-title" style="max-width:360px">
+      <div class="modal-header">
+        <h3 id="login-title" data-i18n="login.title">Anmeldung erforderlich</h3>
+      </div>
+      <div class="modal-body">
+        <form id="login-form">
+          <div class="form-group">
+            <label for="login-password" data-i18n="login.password.label">Passwort</label>
+            <input type="password" id="login-password" autocomplete="current-password" autofocus required>
+          </div>
+          <p id="login-error" class="hint feed-error" hidden></p>
+          <button type="submit" class="btn btn-primary" style="width:100%"
+                  data-i18n="login.submit">Anmelden</button>
+        </form>
+      </div>
+    </div>
+  </div>
 
   <!-- ── Athlete search modal ─────────────────────────────────────────── -->
   <div id="athlete-search-modal" class="modal-overlay" hidden>

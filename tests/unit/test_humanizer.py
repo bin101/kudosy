@@ -43,6 +43,11 @@ class TestComputeJitter:
             r = compute_jitter(5, 5, rng)
             assert r >= 5.0
 
+    def test_defaults_to_global_random_when_rng_omitted(self) -> None:
+        """No rng passed → falls back to the `random` module globals."""
+        r = compute_jitter(60, 15)
+        assert 45.0 <= r <= 75.0
+
 
 class TestComputeDelay:
     """compute_delay(min_s, max_s, rng) → delay in seconds."""
@@ -74,3 +79,8 @@ class TestComputeDelay:
         d1 = compute_delay(1.0, 100.0, random.Random(42))
         d2 = compute_delay(1.0, 100.0, random.Random(42))
         assert d1 == pytest.approx(d2)
+
+    def test_defaults_to_global_random_when_rng_omitted(self) -> None:
+        """No rng passed → falls back to the `random` module globals."""
+        d = compute_delay(3.0, 25.0)
+        assert 3.0 <= d <= 25.0

@@ -184,7 +184,13 @@ export async function loadConfig() {
   state.athleteLabels  = labels;
   state.athleteAvatars = avatars;
 
-  $('cookieInput').value    = cfg.stravaSessionCookie || '';
+  // The server never sends back the raw session cookie (see GET /api/config).
+  // Leave the field empty and show a placeholder hint when one is already saved;
+  // an empty field on save means "keep the existing cookie" (see saveConfig()).
+  $('cookieInput').value = '';
+  $('cookieInput').placeholder = cfg.hasCookie
+    ? t('config.cookie.placeholder.set', { preview: cfg.cookiePreview || '' })
+    : t('config.cookie.placeholder');
   $('athleteIdInput').value = cfg.athleteId || '';
 
   // Catch-all thresholds

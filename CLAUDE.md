@@ -67,7 +67,9 @@ pytest --cov=kudosy --cov-report=term-missing   # with coverage
 ```
 
 Coverage targets: ≥85% overall, ≥90% for pure modules (`parsers`, `effective_config`,
-`decision`, `humanizer`).
+`decision`, `humanizer`). Both are enforced in CI — the overall gate via `pytest
+--cov-fail-under=85`, the per-module one via `.github/scripts/check_module_coverage.py`
+(reads `coverage.json`, since coverage.py has no built-in per-file threshold).
 
 ### Lint & type-check
 
@@ -133,31 +135,37 @@ docker compose up --build   # builds image, starts on :8080
 | `scheduler.py` | APScheduler wrapper with jitter, reschedule, in-flight guard |
 | `logging_conf.py` | stdout + `/data/last-run.log` handler setup |
 | `app.py` | FastAPI app factory + lifespan |
-| `routes.py` | All `/api/*` endpoints |
-| `settings.py` | `pydantic-settings` env config (`KUDOSY_DATA_DIR`, `KUDOSY_PORT`, …) |
+| `routes.py` | All `/api/*` endpoints (split into `public_router` + auth-gated `router`) |
+| `settings.py` | `pydantic-settings` env config (`KUDOSY_DATA_DIR`, `KUDOSY_PORT`, `KUDOSY_AUTH_PASSWORD`, …) |
+| `auth.py` | Optional login gate: `require_auth` dependency, signed session-cookie tokens (HMAC-SHA256), login lockout — no-op unless `KUDOSY_AUTH_PASSWORD` is set |
 
 ## API Endpoints
 
 All endpoints match the legacy Node.js wrapper exactly (so the frontend works unchanged):
 
 ```
-GET  /api/config                    — read user config (includes catchAll)
-PUT  /api/config                    — write user config (empty cookie → 400)
+GET  /api/config                    — read user config (cookie redacted — see hasCookie/cookiePreview)
+PUT  /api/config                    — merge+validate user config (empty cookie keeps existing; 422 on invalid)
 GET  /api/settings                  — read scheduler/delay settings
 PUT  /api/settings                  — write settings + reschedule
 GET  /api/sport-types               — list of Strava sport types
+GET  /api/sport-categories          — active sport types grouped into the 5 Strava categories
 GET  /api/athletes/search?q=<name>  — search athletes by name (requires cookie)
-GET  /api/athletes/{id}             — lookup athlete name by ID (requires cookie)
+GET  /api/athletes/{id}             — lookup athlete name by ID (requires cookie; id must be numeric)
 GET  /api/athlete-labels            — all cached athlete names  {id → name}
 GET  /api/athlete-avatars           — all cached athlete avatar URLs  {id → url}
 GET  /api/feed                      — current following feed with give_kudos/reason
-POST /api/kudos/{activity_id}       — send kudos for a specific activity
+POST /api/kudos/{activity_id}       — send kudos for a specific activity (activity_id must be numeric)
 POST /api/run                       — trigger a run (409 if already running)
 GET  /api/status                    — running state, lastRun, nextRunAt, version, authOk
 GET  /api/history?limit=            — last N run-history entries (max 500, newest first)
 GET  /api/export                    — download config+settings as JSON (cookie excluded)
 POST /api/import                    — restore config+settings from backup JSON
 GET  /api/log                       — last-run.log as text/plain
+GET  /api/log/stream                — live log via Server-Sent Events
+GET  /api/auth-status               — {authRequired, authenticated} — always reachable, no session needed
+POST /api/login                     — {password} → sets session cookie (401 wrong password, 429 lockout)
+POST /api/logout                    — clears the session cookie
 ```
 
 **Brittleness note:** `GET /api/athletes/search` and `GET /api/feed` depend on Strava's
@@ -166,15 +174,31 @@ is isolated in `feed.py` (`StructuredFeedParser`) and `strava_client.py`.
 `GET /api/athletes/search` HTML parsing is isolated in `strava_client.py` (`_extract_search_results`).
 If Strava changes their response format, only these two modules need updating.
 
+**Auth note:** all `/api/*` routes except `/api/auth-status`, `/api/login`, and `/api/logout`
+(plus `GET /`, serving the frontend shell) go through `auth.require_auth` — a no-op unless
+`KUDOSY_AUTH_PASSWORD` is set (see README "Zugriffsschutz"). Enforced via two `APIRouter`s in
+`routes.py`: `public_router` (no dependency) and `router` (`dependencies=[Depends(require_auth)]`).
+
 ## Security Notes
 
-- **Never commit `/data/`**: it contains the real `_strava4_session` cookie and real athlete names.
-  `.gitignore` and `.dockerignore` both exclude it.
-- **Cookie masking**: logs show only the first ~8 characters (e.g., `r2i8rfkf…`).
+- **Never commit `/data/`**: it contains the real `_strava4_session` cookie, the session-signing
+  secret, and real athlete names. `.gitignore` and `.dockerignore` both exclude it.
+- **Cookie masking**: logs show only the first ~8 characters (e.g., `r2i8rfkf…`); `GET /api/config`
+  never returns the raw cookie (only `hasCookie`/`cookiePreview`).
 - **ToS grey area**: Kudosy uses the Strava web session (not the official API). Use it for personal,
   non-commercial purposes only. Keep the interval generous and dry-run frequently.
+- **No auth by default**: see README "Zugriffsschutz" — set `KUDOSY_AUTH_PASSWORD` before exposing
+  Kudosy beyond your local machine.
 
 ## Git Conventions
+
+> **GPG signing gotcha:** this repo's commits are GPG-signed (`commit.gpgsign=true`
+> locally). Never wrap `git commit` in `timeout ...`, `bash -c "..."`, or other
+> subshell/process-wrapping constructs — pinentry loses its controlling TTY in that
+> case and `gpg-agent` hangs indefinitely waiting for a passphrase prompt that can
+> never appear, instead of failing fast. Invoke `git commit` as a direct, top-level
+> command. If it still hangs, the fix is restarting the agent (`gpgconf --kill
+> gpg-agent`) outside the hung command, not adding `--no-gpg-sign`.
 
 Conventional Commits: `feat:`, `fix:`, `chore:`, `docs:`, `test:`, `refactor:`.
 Branch: `main`. Releases: `release-please` creates a PR on each push to `main`, cutting a

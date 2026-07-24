@@ -26,7 +26,14 @@ def data_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Generator[Path]
 
     settings_mod._settings = None  # type: ignore[attr-defined]
 
+    # Clear auth.py's process-level session-secret cache and failed-login
+    # tracker so they don't leak across tests using different data dirs.
+    from kudosy.auth import reset_auth_state_for_tests
+
+    reset_auth_state_for_tests()
+
     yield d
 
-    # Teardown: clear singleton again
+    # Teardown: clear singletons again
     settings_mod._settings = None  # type: ignore[attr-defined]
+    reset_auth_state_for_tests()

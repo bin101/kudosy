@@ -26,6 +26,7 @@ env/
 .coverage.*
 htmlcov/
 coverage.xml
+coverage.json
 
 # mypy
 .mypy_cache/
@@ -48,3 +49,6 @@ dmypy.json
 # Browser network captures (may contain session cookies / PII)
 *.har
 .tokensave
+
+# Claude Code — personal local overrides (project-shared .claude/settings.json is tracked)
+.claude/settings.local.json

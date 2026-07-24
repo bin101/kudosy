@@ -82,7 +82,12 @@ async def test_rate_limit_aborts_remaining_kudos() -> None:
     assert result.newly_kudoed == ["act-0"]
     assert client.send_kudos.call_count == 2  # aborted after the 429
     assert result.aborted_reason == "rate_limited"
-    assert result.success is True  # a backoff is not a crash
+    # A backoff isn't an exception/crash (no `error`), but the run did not
+    # complete as intended, so it must not be reported as a success — callers
+    # (notify.build_run_payload, run history) distinguish "aborted" from a
+    # hard failure via `aborted_reason`, not by pretending this succeeded.
+    assert result.success is False
+    assert result.error is None
 
 
 @pytest.mark.asyncio
@@ -125,6 +130,7 @@ async def test_three_consecutive_failures_abort_run() -> None:
     assert client.send_kudos.call_count == 3
     assert result.given == 0
     assert result.aborted_reason == "consecutive_failures"
+    assert result.success is False
 
 
 @pytest.mark.asyncio

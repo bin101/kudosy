@@ -32,7 +32,6 @@ _RUN_HEADER = "=== Lauf: {ts}  dryRun={dry} ==="
 _MAX_CONSECUTIVE_FAILURES = 3
 _RUN_FOOTER = "=== Beendet: {ts}  Exit-Code: {code}  Kudos: {kudos} ==="
 
-_GIVE_MARKER = "+++ Would give kudos" if True else None  # used in dry-run log
 _SKIP_REASONS = {
     DecisionReason.IGNORE: "--- Athlete is in ignore list",
     DecisionReason.ALREADY: "--- Already kudoed this activity",
@@ -136,11 +135,15 @@ async def run_kudos(
                 reason_msg = _SKIP_REASONS.get(decision.reason, f"--- {decision.reason.value}")
                 log.debug(reason_msg)
 
+        # rng is only ever consumed below (shuffle + delay computation), both of
+        # which are skipped in dry-run — lazily init it once here rather than
+        # separately at each call site.
+        if rng is None and not dry_run:
+            rng = random.Random()
+
         # 4. Optionally shuffle order for more human-like sending
         if settings.shuffleOrder and not dry_run:
-            if rng is None:
-                rng = random.Random()
-            rng.shuffle(to_give)
+            rng.shuffle(to_give)  # type: ignore[union-attr]
 
         # 5. Summary
         log.info("Would send kudos to %d out of %d activities", len(to_give), total)
@@ -151,8 +154,6 @@ async def run_kudos(
                 log.info("Would send kudos to: %s - %s", act.athlete_name, act.activity_name)
         else:
             # 6. Send kudos with human-like delays
-            if rng is None:
-                rng = random.Random()
             consecutive_failures = 0
             for i, act in enumerate(to_give):
                 if i > 0:
@@ -203,10 +204,14 @@ async def run_kudos(
 
     finished_at = datetime.now(UTC)
     kudos_count = len(to_give) if dry_run else given
+    # A run that stopped early (rate limit / consecutive send failures) did
+    # not complete as intended, even though it didn't raise — don't report it
+    # as a success (see app.py auth_ok handling and notify.build_run_payload).
+    success = error is None and aborted_reason is None
     log.info(
         _RUN_FOOTER.format(
             ts=finished_at.isoformat(),
-            code=0 if error is None else 1,
+            code=0 if success else 1,
             kudos=kudos_count,
         )
     )
@@ -214,7 +219,7 @@ async def run_kudos(
     return RunResult(
         started_at=started_at,
         finished_at=finished_at,
-        success=error is None,
+        success=success,
         dry_run=dry_run,
         total=total,
         would_give=len(to_give),
