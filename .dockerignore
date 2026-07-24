@@ -6,6 +6,7 @@ data/
 venv/
 .env
 .env.local
+*.har
 .coverage
 htmlcov/
 .mypy_cache/
