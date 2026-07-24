@@ -18,6 +18,14 @@ import { initStatsTab } from './stats.js';
 import { initBackup } from './backup.js';
 
 async function init() {
+  // Translate static [data-i18n] markup — including the login overlay itself —
+  // *before* the auth gate below, which can block for a while showing that
+  // overlay. Otherwise the overlay's own labels stay in the raw German
+  // fallback text baked into index.html while anything localized dynamically
+  // (e.g. a login error via t()) correctly follows the detected language,
+  // producing a mismatched-language UI during login.
+  applyStaticTranslations();
+
   // Blocks here (showing a login overlay) until authenticated, if the server
   // has a login configured at all — a no-op otherwise. Must run before any
   // other /api/* call so the app never flashes real data before the gate.
@@ -34,9 +42,6 @@ async function init() {
     state.sportTypes      = [];
     state.sportCategories = {};
   }
-
-  // Apply static translations for the initial language before any tab renders
-  applyStaticTranslations();
 
   applyTheme(getTheme());
   initThemeSelect();
