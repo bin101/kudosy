@@ -20,7 +20,7 @@ services:
       KUDOSY_LOG_LEVEL: INFO
       # Override port if needed:
       # KUDOSY_PORT: "8080"
-      # Set a password to enable the login screen (see README "Zugriffsschutz"):
+      # Set a password to enable the login screen (see README "Access Control"):
       # KUDOSY_AUTH_PASSWORD: "change-me"
     security_opt:
       - no-new-privileges:true
