@@ -70,15 +70,22 @@
           <div class="form-group">
             <label for="cookieInput" data-i18n="config.cookie.label">Strava Session Cookie</label>
             <div class="input-reveal">
-              <input type="password" id="cookieInput"
-                     data-i18n-placeholder="config.cookie.placeholder"
-                     placeholder="Aus Browser DevTools: _strava4_session"
-                     autocomplete="off">
+              <textarea id="cookieInput" class="cookie-textarea masked" rows="3"
+                        data-i18n-placeholder="config.cookie.placeholder"
+                        placeholder="Kompletten Cookie-Header aus den DevTools einfügen"
+                        autocomplete="off" spellcheck="false"></textarea>
               <button type="button" class="btn-icon" data-reveal="cookieInput"
                       data-i18n-title="config.cookie.reveal.title"
                       title="Anzeigen/Verbergen">👁</button>
             </div>
-            <small data-i18n="config.cookie.hint">Browser → DevTools → Application → Cookies → _strava4_session</small>
+            <small data-i18n="config.cookie.hint">DevTools → Network → Request auf strava.com/dashboard → Request Headers → Zeile „Cookie“ komplett kopieren. Mit den Remember-Cookies erneuert Kudosy die Session selbst.</small>
+            <div class="cookie-test-row">
+              <button type="button" class="btn btn-outline btn-sm" id="btn-cookie-test"
+                      data-i18n="config.cookie.test.btn">Cookie testen</button>
+              <span id="cookie-test-status" class="cookie-test-status" role="status" hidden></span>
+            </div>
+            <small id="cookie-remember-warning" class="cookie-warning" hidden
+                   data-i18n="config.cookie.noRemember.warning">Kein Remember-Token enthalten – Kudosy kann die Session nicht automatisch erneuern. Bitte den kompletten Cookie-Header einfügen.</small>
           </div>
           <div class="form-group">
             <label for="athleteIdInput" data-i18n="config.athleteId.label">Athlete ID</label>

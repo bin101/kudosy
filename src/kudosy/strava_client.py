@@ -3,7 +3,10 @@
 All assumptions about Strava's URL structure and response format are
 encapsulated in this module and feed.py. Changing endpoints only touches here.
 
-Authentication: uses the user's _strava4_session browser cookie.
+Authentication: uses the user's Strava browser cookies (``_strava4_session`` plus the
+remember-me pair). They live in a real cookie jar, so ``Set-Cookie`` rotations — e.g. a
+fresh session issued from the remember-me token — are sent on automatically and can be
+read back via :meth:`StravaClient.current_cookies` for persistence.
 The CSRF token is extracted from a page's <meta name="csrf-token"> tag.
 
 Feed format (verified 2026-07-01 via HAR capture):
@@ -47,7 +50,7 @@ from typing import Any
 import httpx
 
 from kudosy.feed import AuthError, RateLimitError
-from kudosy.parsers import parse_athlete_name
+from kudosy.parsers import REMEMBER_COOKIES, is_strava_cookie_name, parse_athlete_name
 
 log = logging.getLogger(__name__)
 
@@ -92,6 +95,17 @@ def _mask_cookie(cookie: str) -> str:
     return cookie[:8] + "…" if len(cookie) > 8 else "***"
 
 
+_COOKIE_DOMAIN = ".strava.com"
+# Redirect targets that mean "not logged in".
+_LOGIN_PATH_RE = re.compile(r"(^|/)(login|sessions?)(/|$)")
+
+
+def _masked_cookie_header(header: str) -> str:
+    """``name=value`` pairs of a Cookie header with every value masked."""
+    pairs = (p.strip().split("=", 1) for p in header.split(";") if "=" in p)
+    return ", ".join(f"{n}={_mask_cookie(v)}" for n, v in pairs) or "(none)"
+
+
 # A transient network hiccup (DNS blip, reset connection, momentary timeout)
 # shouldn't turn into a hard failure for idempotent GETs — retry a couple of
 # times with a short backoff before giving up.
@@ -104,12 +118,14 @@ class StravaClient:
 
     def __init__(
         self,
-        session_cookie: str,
+        cookies: dict[str, str],
         *,
         sleep: Callable[[float], Awaitable[None]] | None = None,
         rng: random.Random | None = None,
     ) -> None:
-        self._cookie = session_cookie
+        self._initial_cookies = dict(cookies)
+        # Set once Strava has treated the session as logged out; see current_cookies().
+        self._auth_failed = False
         self._client: httpx.AsyncClient | None = None
         # Inject sleep/rng for deterministic testing (analogous to humanizer.py).
         self._sleep: Callable[[float], Awaitable[None]] = (
@@ -119,15 +135,56 @@ class StravaClient:
 
     def _get_client(self) -> httpx.AsyncClient:
         if self._client is None or self._client.is_closed:
+            jar = httpx.Cookies()
+            for name, value in self._initial_cookies.items():
+                jar.set(name, value, domain=_COOKIE_DOMAIN, path="/")
             self._client = httpx.AsyncClient(
-                headers={
-                    **_BROWSER_HEADERS,
-                    "Cookie": f"_strava4_session={self._cookie}",
-                },
+                headers=_BROWSER_HEADERS,
+                cookies=jar,
                 follow_redirects=True,
                 timeout=30.0,
+                event_hooks={"response": [self._dedupe_cookies]},
             )
         return self._client
+
+    async def _dedupe_cookies(self, response: httpx.Response) -> None:
+        """Keep one entry per Strava cookie name: the one a response just set.
+
+        The jar is seeded under ``.strava.com``; a ``Set-Cookie`` without ``Domain``
+        lands under ``www.strava.com`` instead, so both would be sent and the server
+        would read the old (first) value. httpx stores each hop's cookies before this
+        hook runs, so redirect chains are covered too.
+        """
+        client = self._client
+        if client is None:
+            return
+        for fresh in list(response.cookies.jar):
+            if not is_strava_cookie_name(fresh.name) or fresh.is_expired():
+                continue
+            for old in list(client.cookies.jar):
+                if old.name == fresh.name and (old.domain, old.path) != (fresh.domain, fresh.path):
+                    client.cookies.jar.clear(old.domain, old.path, old.name)
+
+    def current_cookies(self) -> dict[str, str]:
+        """Strava cookies as they stand now, including any ``Set-Cookie`` rotations.
+
+        Falls back to the initial cookies before the first request (or after
+        ``aclose``). :meth:`_dedupe_cookies` guarantees one entry per name.
+
+        After an auth failure the initial cookies are returned: whatever Strava set
+        on a rejected session (an anonymous session, say) must never replace the
+        user's stored cookies.
+        """
+        if self._client is None or self._auth_failed:
+            return dict(self._initial_cookies)
+        result: dict[str, str] = {}
+        for c in self._client.cookies.jar:
+            if not c.domain.endswith("strava.com") or c.value is None:
+                continue
+            if not is_strava_cookie_name(c.name):
+                continue
+            result[c.name] = c.value
+        return result
 
     async def aclose(self) -> None:
         if self._client and not self._client.is_closed:
@@ -165,10 +222,10 @@ class StravaClient:
 
     async def get_csrf_token(self) -> str:
         """Fetch the dashboard page and extract the CSRF token."""
-        log.debug("Fetching CSRF token (cookie: %s)", _mask_cookie(self._cookie))
+        log.debug("Fetching CSRF token (cookies: %s)", ", ".join(sorted(self._initial_cookies)))
         client = self._get_client()
         resp = await self._get_with_retry(client, _DASHBOARD_URL, timeout=10.0)
-        self._check_auth(resp)
+        self._check_auth(resp, probe=True)
         m = _CSRF_RE.search(resp.text)
         if not m:
             raise RuntimeError("Could not extract CSRF token from dashboard page")
@@ -386,15 +443,60 @@ class StravaClient:
         except httpx.RequestError:
             return None
 
-    def _check_auth(self, resp: httpx.Response) -> None:
-        """Raise AuthError if Strava redirected to the login page."""
-        url_str = str(resp.url)
-        if "login" in url_str or "sessions" in url_str:
-            err = AuthError(
-                "Strava-Session-Cookie ist ungültig oder abgelaufen. "
-                "Bitte neuen Cookie in der Konfiguration eintragen."
+    def _check_auth(self, resp: httpx.Response, *, probe: bool = False) -> None:
+        """Raise AuthError if Strava treats the session as logged out.
+
+        Looks at the final URL *path* (not the whole URL) so a query like
+        ``?x=sessions`` is no false positive, and logs the redirect chain so a
+        failure can be diagnosed without exposing cookie values.
+
+        ``probe`` marks the first call of a run (the dashboard load): only there is a
+        400/500 read as a malformed cookie. Elsewhere a 5xx is an ordinary Strava error.
+        """
+        try:
+            self._raise_for_auth(resp, probe=probe)
+        except AuthError:
+            self._auth_failed = True
+            raise
+
+    def _raise_for_auth(self, resp: httpx.Response, *, probe: bool) -> None:
+        sent = resp.request.headers.get("cookie", "")
+        if _LOGIN_PATH_RE.search(resp.url.path):
+            chain = " -> ".join(f"{r.status_code} {r.url.path}" for r in resp.history)
+            log.warning(
+                "Strava redirected to login: %s%s %d %s | cookies sent: %s",
+                chain,
+                " ->" if chain else "",
+                resp.status_code,
+                resp.url.path,
+                _masked_cookie_header(sent),
             )
-            err.code = "AUTH_INVALID_COOKIE"
+            has_remember = all(self._initial_cookies.get(n) for n in REMEMBER_COOKIES)
+            if has_remember:
+                err = AuthError(
+                    "Strava hat die Session trotz Remember-Cookies abgelehnt. "
+                    "Bitte den kompletten Cookie-Header neu eintragen."
+                )
+                err.code = "AUTH_REMEMBER_EXPIRED"
+            else:
+                err = AuthError(
+                    "Strava-Session ist abgelaufen und es sind keine Remember-Cookies "
+                    "hinterlegt. Bitte den kompletten Cookie-Header neu eintragen."
+                )
+                err.code = "AUTH_SESSION_EXPIRED"
+            raise err
+        if probe and resp.status_code in (400, 500) and sent:
+            log.warning(
+                "Strava answered %d for %s | cookies sent: %s",
+                resp.status_code,
+                resp.url.path,
+                _masked_cookie_header(sent),
+            )
+            err = AuthError(
+                f"Strava hat die Cookies abgelehnt (HTTP {resp.status_code}); "
+                "vermutlich ist der Cookie unvollständig oder beschädigt."
+            )
+            err.code = "AUTH_MALFORMED_COOKIE"
             raise err
         if resp.status_code == 401:
             err = AuthError("Authentifizierung fehlgeschlagen (HTTP 401).")

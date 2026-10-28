@@ -322,7 +322,14 @@ small, .hint {
   position: relative;
   display: flex;
 }
-.input-reveal input { padding-right: 38px; }
+.input-reveal input, .input-reveal textarea { padding-right: 38px; }
+.input-reveal textarea { width: 100%; resize: vertical; font-family: monospace; }
+/* A textarea has no type=password: mask its text with CSS (toggled by the reveal button). */
+.cookie-textarea.masked { -webkit-text-security: disc; }
+.cookie-test-row { display: flex; align-items: center; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
+.cookie-test-status.ok { color: var(--success-text); }
+.cookie-test-status.fail { color: var(--error); }
+.cookie-warning { display: block; margin-top: 6px; color: var(--error); }
 .btn-icon {
   position: absolute;
   right: 0;

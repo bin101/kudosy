@@ -30,7 +30,7 @@ FastAPI app (app.py / routes.py)
 
 ## Key Design Decisions
 
-- **`KUDOSY_DATA_DIR`** (default `/data`): all user data lives here — `config.yaml`,
+- **`KUDOSY_DATA_DIR`** (default `/data`): all user data lives here — `config.yaml` (Strava cookies as `stravaCookies`; legacy `stravaSessionCookie` is migrated on read),
   `settings.json`, `athlete-labels.json`, `last-run.log`. Override in tests.
   Legacy `defaults.yaml` files are automatically migrated into `config.yaml` on first boot
   and renamed to `defaults.yaml.migrated`.
@@ -98,6 +98,20 @@ Known unavoidable external warnings must be added to the `filterwarnings` ignore
 > step, or quality requirement, update this file in the same PR. CLAUDE.md is the single source
 > of truth for how this project is built and maintained.
 
+### Implementation & review loop
+
+Standard for every new feature and fix:
+
+1. A Sonnet agent implements the change test-first and runs the quality gate. It does not commit
+   (GPG pinentry hangs in background processes).
+2. An Opus agent reviews the diff (`git diff main`) given only the plan and the code, without the
+   implementer's conclusions. It returns findings classified as grave or minor, plus a fix plan for
+   the grave ones.
+3. If there are grave findings, the Sonnet agent receives the fix plan (same agent, context kept) and
+   fixes them; then Opus reviews again. Repeat until no grave findings remain, at most 4 rounds; after
+   that, hand back to the user.
+4. Finally run the quality gate yourself, commit in the foreground, push and open the PR.
+
 ### Browser-based UI verification
 
 When verifying frontend/UI changes visually, always use an isolated, dedicated browser
@@ -140,7 +154,7 @@ docker compose up --build   # builds image, starts on :8080
 
 | Module | Responsibility |
 |---|---|
-| `parsers.py` | Pure: `parse_athlete_name`, `decode_html_entities` |
+| `parsers.py` | Pure: `parse_athlete_name`, `decode_html_entities`, `parse_strava_cookies` (full `Cookie` header / pairs / bare value → whitelisted Strava cookies) |
 | `stat_parse.py` | Pure: `strip_unit_markup`, `parse_distance`, `parse_duration`, `parse_pace`, `parse_elevation`, `classify_stat` — all stat string→number conversions |
 | `sport_types.py` | `ALL_SPORT_TYPES` enum list, `fetch_sport_types`, `merge_sport_types` |
 | `humanizer.py` | Pure: `compute_jitter`, `compute_delay` — RNG injected for tests |
@@ -148,10 +162,10 @@ docker compose up --build   # builds image, starts on :8080
 | `effective_config.py` | Pure: `build_effective_config(user)` — two-layer merge (catchAll → user per-sport) |
 | `decision.py` | Pure: `decide(activity, effective_config) -> Decision` — reads typed `ActivityStats` fields directly |
 | `feed.py` | `FeedParser` protocol + `StructuredFeedParser` — parses JSON XHR feed response into `list[Activity]` |
-| `strava_client.py` | httpx async: CSRF, JSON feed fetch (`/dashboard/feed` XHR), kudo POST, athlete lookup, name search, `fetch_current_athlete_id` |
+| `strava_client.py` | httpx async (real cookie jar, `current_cookies()` exposes `Set-Cookie` rotations): CSRF, JSON feed fetch (`/dashboard/feed` XHR), kudo POST, athlete lookup, name search, `fetch_current_athlete_id` |
 | `engine.py` | Orchestrator: run-kudos loop with delays, dry-run, RunResult |
 | `notify.py` | Pure: `send_notification(url, payload, *, post_fn)` — HTTP POST injected for tests; `build_run_payload`, `build_auth_error_payload` |
-| `store.py` | `/data` file I/O — atomic YAML/JSON writes, bootstrap, one-time migration of legacy `defaults.yaml`; athlete-labels.json + athlete-avatars.json; `append_run_history` / `read_run_history` |
+| `store.py` | `/data` file I/O — atomic YAML/JSON writes, `update_strava_cookies` / `persist_rotated_cookies` (store refreshed cookies), bootstrap, one-time migration of legacy `defaults.yaml`; athlete-labels.json + athlete-avatars.json; `append_run_history` / `read_run_history` |
 | `scheduler.py` | APScheduler wrapper with jitter, reschedule, in-flight guard |
 | `logging_conf.py` | stdout + `/data/last-run.log` handler setup |
 | `app.py` | FastAPI app factory + lifespan |
@@ -164,8 +178,9 @@ docker compose up --build   # builds image, starts on :8080
 All endpoints match the legacy Node.js wrapper exactly (so the frontend works unchanged):
 
 ```
-GET  /api/config                    — read user config (cookie redacted — see hasCookie/cookiePreview)
-PUT  /api/config                    — merge+validate user config (empty cookie keeps existing; 422 on invalid)
+GET  /api/config                    — read user config (cookies redacted — see hasCookie/hasRememberToken/cookiePreview)
+PUT  /api/config                    — merge+validate user config (`stravaSessionCookie` = pasted Cookie header/pairs/bare value, parsed into `stravaCookies`; empty keeps existing; 422 on invalid)
+POST /api/cookie/test               — try the stored cookies against Strava → {ok, athleteId?, code?, hasRememberToken}; persists rotated cookies
 GET  /api/settings                  — read scheduler/delay settings
 PUT  /api/settings                  — write settings + reschedule
 GET  /api/sport-types               — list of Strava sport types
@@ -203,6 +218,8 @@ If Strava changes their response format, only these two modules need updating.
 
 - **Never commit `/data/`**: it contains the real `_strava4_session` cookie, the session-signing
   secret, and real athlete names. `.gitignore` and `.dockerignore` both exclude it.
+- **Remember token**: `config.yaml` now also holds `strava_remember_token` (long-lived login), not just the
+  short-lived session — same sensitivity as a password. Exports omit all cookies.
 - **Cookie masking**: logs show only the first ~8 characters (e.g., `r2i8rfkf…`); `GET /api/config`
   never returns the raw cookie (only `hasCookie`/`cookiePreview`).
 - **ToS grey area**: Kudosy uses the Strava web session (not the official API). Use it for personal,

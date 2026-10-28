@@ -5,9 +5,12 @@
 # /data/config.yaml is excluded from git and Docker images for security.
 # ──────────────────────────────────────────────────────────────────────────────
 
-# Your Strava session cookie: browser DevTools → Application → Cookies
-# Cookie name: _strava4_session
-stravaSessionCookie: "PASTE_YOUR_STRAVA4_SESSION_COOKIE_VALUE_HERE"
+# Your Strava cookies (easier: paste the whole "Cookie" request header in the web UI).
+# Include the remember-me pair so Kudosy can renew the session itself.
+stravaCookies:
+  _strava4_session: "PASTE_YOUR_STRAVA4_SESSION_COOKIE_VALUE_HERE"
+  # strava_remember_id: "..."
+  # strava_remember_token: "..."
 
 # Your Strava Athlete ID (visible in your profile URL: strava.com/athletes/<ID>)
 athleteId: "YOUR_ATHLETE_ID"

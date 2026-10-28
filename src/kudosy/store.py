@@ -122,6 +122,52 @@ def write_user_config(cfg: UserConfig) -> None:
     _write_yaml_atomic(_path(_CONFIG_FILE), cfg.model_dump())
 
 
+def update_strava_cookies(cookies: dict[str, str]) -> None:
+    """Replace only ``stravaCookies`` in config.yaml, leaving every other field as stored.
+
+    Read-modify-write of the raw YAML (no awaits in between), so rules edited
+    concurrently via the API are never clobbered by a background cookie refresh.
+    """
+    raw = _read_yaml(_path(_CONFIG_FILE)) or {}
+    raw.pop("stravaSessionCookie", None)  # drop the legacy single-cookie field
+    raw["stravaCookies"] = dict(cookies)
+    _write_yaml_atomic(_path(_CONFIG_FILE), raw)
+
+
+def persist_rotated_cookies(used: dict[str, str], current: dict[str, str]) -> bool:
+    """Store cookies Strava rotated during a client's lifetime; True when saved.
+
+    *used* is what the client started with, *current* what its jar holds now.
+    Skipped when nothing changed, when *current* would no longer be a usable login,
+    or when the user stored different cookies in the meantime (never overwrite those).
+    Logs only that a refresh happened, never any value.
+    """
+    from kudosy.parsers import REMEMBER_COOKIES, SESSION_COOKIE
+
+    if not current or current == used:
+        return False
+    if not current.get(SESSION_COOKIE) and not all(current.get(n) for n in REMEMBER_COOKIES):
+        return False
+    stored = read_user_config()
+    if stored is None or stored.stravaCookies != used:
+        return False
+    update_strava_cookies(current)
+    log.info("Strava-Session erneuert")
+    return True
+
+
+def persist_client_cookies(used: dict[str, str], client: Any) -> None:
+    """Best-effort :func:`persist_rotated_cookies` for a StravaClient's jar.
+
+    Meant for ``finally`` blocks: a failure here (disk, bad YAML …) is logged
+    without cookie values and must never mask the caller's result or exception.
+    """
+    try:
+        persist_rotated_cookies(used, client.current_cookies())
+    except Exception as exc:
+        log.warning("Could not persist refreshed Strava cookies (%s)", type(exc).__name__)
+
+
 def write_user_config_raw(data: dict[str, Any]) -> None:
     """Write user config from a raw dict (used by the API endpoint)."""
     _write_yaml_atomic(_path(_CONFIG_FILE), data)

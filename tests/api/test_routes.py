@@ -137,7 +137,7 @@ def test_put_config_ok(app_client: TestClient) -> None:
 
     from kudosy import store
 
-    assert store.read_user_config().stravaSessionCookie == "new-cookie"  # type: ignore[union-attr]
+    assert store.read_user_config().stravaCookies == {"_strava4_session": "new-cookie"}  # type: ignore[union-attr]
 
 
 def test_put_config_empty_cookie_keeps_existing(app_client: TestClient) -> None:
@@ -147,7 +147,7 @@ def test_put_config_empty_cookie_keeps_existing(app_client: TestClient) -> None:
 
     from kudosy import store
 
-    assert store.read_user_config().stravaSessionCookie == "test-session-cookie"  # type: ignore[union-attr]
+    assert store.read_user_config().stravaCookies == {"_strava4_session": "test-session-cookie"}  # type: ignore[union-attr]
 
 
 def test_put_config_empty_cookie_without_existing_is_400(
@@ -368,6 +368,7 @@ def test_get_athlete_auth_error_returns_401(app_client: TestClient, data_dir: Pa
     mock_instance = AsyncMock()
     mock_instance.lookup_athlete.side_effect = AuthError("Cookie abgelaufen")
     mock_instance.aclose = AsyncMock()
+    mock_instance.current_cookies = MagicMock(return_value={})
 
     with patch("kudosy.routes.StravaClient", return_value=mock_instance):
         resp = app_client.get("/api/athletes/20000007")
@@ -382,6 +383,7 @@ def test_get_athlete_not_found_returns_none_name(app_client: TestClient, data_di
     mock_instance = AsyncMock()
     mock_instance.lookup_athlete.return_value = None
     mock_instance.aclose = AsyncMock()
+    mock_instance.current_cookies = MagicMock(return_value={})
 
     with patch("kudosy.routes.StravaClient", return_value=mock_instance):
         resp = app_client.get("/api/athletes/99999999")
@@ -418,6 +420,7 @@ def test_search_athletes_caches_labels_and_avatars(app_client: TestClient, data_
         {"id": "30000001", "name": "Found Athlete", "avatarUrl": "https://example.com/a.jpg"},
     ]
     mock_instance.aclose = AsyncMock()
+    mock_instance.current_cookies = MagicMock(return_value={})
 
     with patch("kudosy.routes.StravaClient", return_value=mock_instance):
         resp = app_client.get("/api/athletes/search?q=Found")
@@ -438,6 +441,7 @@ def test_search_athletes_auth_error_returns_401(app_client: TestClient, data_dir
     mock_instance = AsyncMock()
     mock_instance.search_athletes.side_effect = AuthError("Cookie abgelaufen")
     mock_instance.aclose = AsyncMock()
+    mock_instance.current_cookies = MagicMock(return_value={})
 
     with patch("kudosy.routes.StravaClient", return_value=mock_instance):
         resp = app_client.get("/api/athletes/search?q=Alex")
@@ -682,6 +686,7 @@ def test_get_feed_returns_activities_with_decision(app_client: TestClient, data_
         "55000000001", "Test Run", sport_type="Run", athlete_id="300000001"
     )
     mock_instance.aclose = AsyncMock()
+    mock_instance.current_cookies = MagicMock(return_value={})
 
     with patch("kudosy.routes.StravaClient", return_value=mock_instance):
         resp = app_client.get("/api/feed")
@@ -716,6 +721,7 @@ def test_get_feed_auth_error_returns_401(app_client: TestClient, data_dir: Path)
     mock_instance = AsyncMock()
     mock_instance.fetch_following_feed.side_effect = AuthError("Cookie abgelaufen")
     mock_instance.aclose = AsyncMock()
+    mock_instance.current_cookies = MagicMock(return_value={})
 
     with patch("kudosy.routes.StravaClient", return_value=mock_instance):
         resp = app_client.get("/api/feed")
@@ -741,6 +747,7 @@ def test_get_feed_network_error_returns_502_not_500(app_client: TestClient, data
     mock_instance = AsyncMock()
     mock_instance.fetch_following_feed.side_effect = httpx.ConnectError("boom")
     mock_instance.aclose = AsyncMock()
+    mock_instance.current_cookies = MagicMock(return_value={})
 
     with patch("kudosy.routes.StravaClient", return_value=mock_instance):
         resp = app_client.get("/api/feed?refresh=true")
@@ -763,6 +770,7 @@ def test_get_feed_refresh_does_not_dump_raw_feed_by_default(
     mock_instance = AsyncMock()
     mock_instance.fetch_following_feed.return_value = {"entries": [], "pagination": {}}
     mock_instance.aclose = AsyncMock()
+    mock_instance.current_cookies = MagicMock(return_value={})
 
     with patch("kudosy.routes.StravaClient", return_value=mock_instance):
         resp = app_client.get("/api/feed?refresh=true")
@@ -786,6 +794,7 @@ def test_get_feed_empty_feed_returns_empty_list(app_client: TestClient, data_dir
         "pagination": {"hasMore": False},
     }
     mock_instance.aclose = AsyncMock()
+    mock_instance.current_cookies = MagicMock(return_value={})
 
     with patch("kudosy.routes.StravaClient", return_value=mock_instance):
         resp = app_client.get("/api/feed")
@@ -875,6 +884,7 @@ def test_get_feed_refresh_true_fetches_from_strava_and_writes_cache(
         elapsed_time=3600,
     )
     mock_instance.aclose = AsyncMock()
+    mock_instance.current_cookies = MagicMock(return_value={})
 
     with patch("kudosy.routes.StravaClient", return_value=mock_instance):
         resp = app_client.get("/api/feed?refresh=true")
@@ -916,6 +926,7 @@ def test_get_feed_first_boot_empty_cache_fetches_live_and_writes(
         elapsed_time=1500,
     )
     mock_instance.aclose = AsyncMock()
+    mock_instance.current_cookies = MagicMock(return_value={})
 
     with patch("kudosy.routes.StravaClient", return_value=mock_instance):
         resp = app_client.get("/api/feed")
@@ -989,6 +1000,7 @@ def test_post_kudos_flips_has_kudoed_in_cache(app_client: TestClient, data_dir: 
     mock_instance.get_csrf_token.return_value = "csrf-token"
     mock_instance.send_kudos.return_value = True
     mock_instance.aclose = AsyncMock()
+    mock_instance.current_cookies = MagicMock(return_value={})
 
     with patch("kudosy.routes.StravaClient", return_value=mock_instance):
         resp = app_client.post("/api/kudos/55000000001")
@@ -1093,3 +1105,174 @@ def test_login_locks_out_after_repeated_failures(
     resp = app_client.post("/api/login", json={"password": "secret123"})
     assert resp.status_code == 429
     assert resp.json()["detail"]["code"] == "TOO_MANY_ATTEMPTS"
+
+
+# ── Strava cookie input / test endpoint ───────────────────────────────────────
+
+_FULL_HEADER = (
+    "Cookie: _ga=GA1.2.3; _strava4_session=sess-12345; sp=zz; "
+    "strava_remember_id=42; strava_remember_token=tok"
+)
+
+
+def test_put_config_normalises_full_cookie_header(app_client: TestClient) -> None:
+    from kudosy import store
+
+    resp = app_client.put("/api/config", json={"stravaSessionCookie": _FULL_HEADER})
+    assert resp.status_code == 200
+    assert store.read_user_config().stravaCookies == {  # type: ignore[union-attr]
+        "_strava4_session": "sess-12345",
+        "strava_remember_id": "42",
+        "strava_remember_token": "tok",
+    }
+
+
+def test_put_config_invalid_cookie_input_is_422_with_code(app_client: TestClient) -> None:
+    from kudosy import store
+
+    resp = app_client.put("/api/config", json={"stravaSessionCookie": "_ga=1; sp=2"})
+    assert resp.status_code == 422
+    assert resp.json()["detail"]["code"] == "INVALID_COOKIE"
+    # existing cookies untouched
+    assert store.read_user_config().stravaCookies == {  # type: ignore[union-attr]
+        "_strava4_session": "test-session-cookie"
+    }
+
+
+def test_put_config_ignores_direct_stravacookies_field(app_client: TestClient) -> None:
+    from kudosy import store
+
+    resp = app_client.put("/api/config", json={"stravaCookies": {"_strava4_session": "evil"}})
+    assert resp.status_code == 200
+    assert store.read_user_config().stravaCookies == {  # type: ignore[union-attr]
+        "_strava4_session": "test-session-cookie"
+    }
+
+
+def test_get_config_reports_remember_token(app_client: TestClient) -> None:
+    assert app_client.get("/api/config").json()["hasRememberToken"] is False
+    app_client.put("/api/config", json={"stravaSessionCookie": _FULL_HEADER})
+    data = app_client.get("/api/config").json()
+    assert data["hasRememberToken"] is True
+    assert data["cookiePreview"] == "sess-1…"
+    assert "stravaCookies" not in data
+    assert "tok" not in str(data)
+
+
+def test_export_omits_all_cookies(app_client: TestClient) -> None:
+    app_client.put("/api/config", json={"stravaSessionCookie": _FULL_HEADER})
+    body = app_client.get("/api/export").text
+    assert "stravaCookies" not in body
+    assert "remember" not in body
+
+
+def test_cookie_test_ok_persists_rotated_cookies(app_client: TestClient) -> None:
+    from unittest.mock import patch
+
+    from kudosy import store
+
+    mock_instance = AsyncMock()
+    mock_instance.get_csrf_token.return_value = "csrf"
+    mock_instance.fetch_current_athlete_id.return_value = "20000001"
+    mock_instance.current_cookies = MagicMock(
+        return_value={
+            "_strava4_session": "rotated",
+            "strava_remember_id": "1",
+            "strava_remember_token": "t",
+        }
+    )
+    with patch("kudosy.routes.StravaClient", return_value=mock_instance):
+        resp = app_client.post("/api/cookie/test")
+
+    assert resp.status_code == 200
+    assert resp.json() == {"ok": True, "athleteId": "20000001", "hasRememberToken": True}
+    assert get_app_state()["auth_ok"] is True
+    assert store.read_user_config().stravaCookies["_strava4_session"] == "rotated"  # type: ignore[union-attr]
+    mock_instance.aclose.assert_awaited_once()
+
+
+def test_cookie_test_auth_failure(app_client: TestClient) -> None:
+    from unittest.mock import patch
+
+    from kudosy.feed import AuthError
+
+    err = AuthError("expired")
+    err.code = "AUTH_SESSION_EXPIRED"
+    mock_instance = AsyncMock()
+    mock_instance.get_csrf_token.side_effect = err
+    mock_instance.current_cookies = MagicMock(
+        return_value={"_strava4_session": "test-session-cookie"}
+    )
+    with patch("kudosy.routes.StravaClient", return_value=mock_instance):
+        resp = app_client.post("/api/cookie/test")
+
+    assert resp.status_code == 200
+    assert resp.json() == {"ok": False, "code": "AUTH_SESSION_EXPIRED", "hasRememberToken": False}
+    assert get_app_state()["auth_ok"] is False
+
+
+def test_cookie_test_network_error_is_502(app_client: TestClient) -> None:
+    from unittest.mock import patch
+
+    import httpx
+
+    mock_instance = AsyncMock()
+    mock_instance.get_csrf_token.side_effect = httpx.ConnectError("boom")
+    mock_instance.current_cookies = MagicMock(
+        return_value={"_strava4_session": "test-session-cookie"}
+    )
+    with patch("kudosy.routes.StravaClient", return_value=mock_instance):
+        resp = app_client.post("/api/cookie/test")
+    assert resp.status_code == 502
+    assert resp.json()["detail"]["code"] == "STRAVA_UNREACHABLE"
+
+
+def test_cookie_test_without_cookie_is_400(app_client: TestClient) -> None:
+    from kudosy import store
+
+    store.write_user_config_raw({"stravaSessionCookie": "", "athleteId": ""})
+    assert app_client.post("/api/cookie/test").status_code == 400
+
+
+@pytest.mark.parametrize(
+    ("exc", "code"),
+    [
+        (RuntimeError("Could not extract CSRF token"), "UNEXPECTED_RESPONSE"),
+        ("rate", "RATE_LIMITED"),
+    ],
+)
+def test_cookie_test_other_failures_are_structured(
+    app_client: TestClient, exc: object, code: str
+) -> None:
+    from unittest.mock import patch
+
+    from kudosy.feed import RateLimitError
+
+    error = RateLimitError("429") if exc == "rate" else exc
+    mock_instance = AsyncMock()
+    mock_instance.get_csrf_token.side_effect = error
+    mock_instance.current_cookies = MagicMock(
+        return_value={"_strava4_session": "test-session-cookie"}
+    )
+    with patch("kudosy.routes.StravaClient", return_value=mock_instance):
+        resp = app_client.post("/api/cookie/test")
+    assert resp.status_code == 200
+    assert resp.json()["ok"] is False
+    assert resp.json()["code"] == code
+
+
+def test_failing_persist_in_route_does_not_break_response(app_client: TestClient) -> None:
+    from unittest.mock import patch
+
+    mock_instance = AsyncMock()
+    mock_instance.get_csrf_token.return_value = "csrf"
+    mock_instance.fetch_current_athlete_id.return_value = "1"
+    mock_instance.current_cookies = MagicMock(return_value={"_strava4_session": "rotated"})
+    with (
+        patch("kudosy.routes.StravaClient", return_value=mock_instance),
+        patch("kudosy.store.persist_rotated_cookies", side_effect=OSError("disk full")),
+    ):
+        resp = app_client.post("/api/cookie/test")
+    assert resp.status_code == 200
+    assert resp.json()["ok"] is True
+    mock_instance.aclose.assert_awaited_once()
