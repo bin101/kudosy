@@ -36,8 +36,14 @@ from kudosy.auth import (
 )
 from kudosy.decision import decide
 from kudosy.effective_config import build_effective_config
-from kudosy.feed import AuthError, StructuredFeedParser
+from kudosy.feed import AuthError, RateLimitError, StructuredFeedParser
 from kudosy.models import Activity, RunResult, RunStatus
+from kudosy.parsers import (
+    REMEMBER_COOKIES,
+    SESSION_COOKIE,
+    is_strava_cookie_name,
+    parse_strava_cookies,
+)
 from kudosy.settings import get_settings
 from kudosy.sport_types import categorize_sport_types
 from kudosy.store import (
@@ -45,6 +51,7 @@ from kudosy.store import (
     cache_athlete_label,
     mark_activity_kudoed_in_cache,
     mark_kudoed,
+    persist_client_cookies,
     read_activity_cache,
     read_athlete_avatars,
     read_athlete_labels,
@@ -191,22 +198,30 @@ def _mask_cookie_preview(cookie: str) -> str:
     return cookie[:6] + "…" if len(cookie) > 6 else "***"
 
 
+def _has_remember_token(cookies: dict[str, str]) -> bool:
+    return all(cookies.get(n) for n in REMEMBER_COOKIES)
+
+
 @router.get("/api/config")
 async def get_config() -> dict[str, Any]:
-    """Return the user config with the live session cookie redacted.
+    """Return the user config with all Strava cookies redacted.
 
-    The raw ``stravaSessionCookie`` is never sent to the client — only whether
-    one is set (``hasCookie``) and a short, non-sensitive preview
-    (``cookiePreview``). This prevents session-hijacking via a leaked/XSS'd
-    response (see PUT /api/config for how a cookie is set/kept).
+    The raw cookies are never sent to the client — only whether a session is
+    set (``hasCookie``), whether the remember-me pair is present
+    (``hasRememberToken``, i.e. Kudosy can renew the session itself) and a
+    short, non-sensitive preview of the session (``cookiePreview``). This
+    prevents session-hijacking via a leaked/XSS'd response (see PUT
+    /api/config for how cookies are set/kept).
     """
     cfg = read_user_config()
     if not cfg:
-        return {"hasCookie": False, "cookiePreview": ""}
+        return {"hasCookie": False, "hasRememberToken": False, "cookiePreview": ""}
     data = cfg.model_dump()
-    cookie = data.pop("stravaSessionCookie", "")
-    data["hasCookie"] = bool(cookie)
-    data["cookiePreview"] = _mask_cookie_preview(cookie) if cookie else ""
+    cookies = data.pop("stravaCookies", {})
+    session = cookies.get(SESSION_COOKIE, "")
+    data["hasCookie"] = bool(cookies)
+    data["hasRememberToken"] = _has_remember_token(cookies)
+    data["cookiePreview"] = _mask_cookie_preview(session) if session else ""
     return data
 
 
@@ -214,29 +229,36 @@ async def get_config() -> dict[str, Any]:
 async def put_config(request: Request) -> dict[str, Any]:
     """Merge incoming config with the stored one, then validate before writing.
 
-    ``stravaSessionCookie`` is only replaced when the request supplies a
-    non-empty value — an absent or empty cookie keeps the existing one (the
-    frontend never has the raw cookie to send back, see GET /api/config).
-    An empty cookie is rejected only when there is no existing cookie to fall
-    back to (i.e. this would leave the config without any cookie at all).
+    ``stravaSessionCookie`` is the *input* field: a full ``Cookie`` header,
+    ``name=value`` pairs or a bare session value, normalised by
+    :func:`parse_strava_cookies` into ``stravaCookies``. An absent or empty
+    value keeps the existing cookies (the frontend never has them to send
+    back, see GET /api/config); that is rejected only when there are none
+    stored. Unparseable input is a 422 (``INVALID_COOKIE``).
     """
     from kudosy.models import UserConfig
 
     data = await request.json()
     existing = read_user_config()
 
-    new_cookie = data.get("stravaSessionCookie")
-    if not new_cookie:
-        existing_cookie = existing.stravaSessionCookie if existing else ""
-        if not existing_cookie:
+    raw_input = data.pop("stravaSessionCookie", None)
+    data.pop("stravaCookies", None)  # never accept the parsed form directly
+    if raw_input and str(raw_input).strip():
+        try:
+            data["stravaCookies"] = parse_strava_cookies(str(raw_input))
+        except ValueError as exc:
             raise HTTPException(
-                status_code=400,
-                detail={
-                    "code": "EMPTY_COOKIE",
-                    "message": "stravaSessionCookie darf nicht leer sein",
-                },
-            )
-        data["stravaSessionCookie"] = existing_cookie
+                status_code=422,
+                detail={"code": "INVALID_COOKIE", "message": str(exc)},
+            ) from exc
+    elif not (existing and existing.stravaCookies):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "EMPTY_COOKIE",
+                "message": "stravaSessionCookie darf nicht leer sein",
+            },
+        )
 
     merged = {**(existing.model_dump() if existing else {}), **data}
     try:
@@ -248,6 +270,67 @@ async def put_config(request: Request) -> dict[str, Any]:
 
     write_user_config(new_cfg)
     return {"ok": True}
+
+
+@router.post("/api/cookie/test")
+async def test_cookie() -> dict[str, Any]:
+    """Check the stored Strava cookies against Strava right now.
+
+    Loads the dashboard (CSRF) and the current athlete; persists cookies
+    Strava rotated on the way and updates the auth state shown in the UI.
+    """
+    from kudosy.app import get_app_state  # avoid circular import
+
+    cfg = read_user_config()
+    if not cfg or not cfg.stravaCookies:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "NO_COOKIE", "message": "Kein Session-Cookie konfiguriert"},
+        )
+
+    state = get_app_state()
+    client = StravaClient(cfg.stravaCookies)
+    try:
+        await client.get_csrf_token()
+        athlete_id = await client.fetch_current_athlete_id()
+        state["auth_ok"] = True
+        return {
+            "ok": True,
+            "athleteId": athlete_id,
+            "hasRememberToken": _has_remember_token(client.current_cookies()),
+        }
+    except AuthError as exc:
+        state["auth_ok"] = False
+        return {
+            "ok": False,
+            "code": getattr(exc, "code", "AUTH_FAILED"),
+            "hasRememberToken": _has_remember_token(cfg.stravaCookies),
+        }
+    except RateLimitError:
+        return {
+            "ok": False,
+            "code": "RATE_LIMITED",
+            "hasRememberToken": _has_remember_token(cfg.stravaCookies),
+        }
+    except RuntimeError:
+        # No CSRF meta on the dashboard: Strava served something unexpected.
+        return {
+            "ok": False,
+            "code": "UNEXPECTED_RESPONSE",
+            "hasRememberToken": _has_remember_token(cfg.stravaCookies),
+        }
+    except httpx.RequestError as exc:
+        log.warning("Cookie test failed (network error): %s", exc)
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "code": "STRAVA_UNREACHABLE",
+                "message": "Strava war nicht erreichbar. Bitte später erneut versuchen.",
+            },
+        ) from exc
+    finally:
+        persist_client_cookies(cfg.stravaCookies, client)
+        await client.aclose()
 
 
 # ── Settings ──────────────────────────────────────────────────────────────────
@@ -322,13 +405,13 @@ async def search_athletes_route(q: str = "") -> list[dict[str, Any]]:
         return []
 
     cfg = read_user_config()
-    if not cfg or not cfg.stravaSessionCookie:
+    if not cfg or not cfg.stravaCookies:
         raise HTTPException(
             status_code=400,
             detail={"code": "NO_COOKIE", "message": "Kein Session-Cookie konfiguriert"},
         )
 
-    client = StravaClient(cfg.stravaSessionCookie)
+    client = StravaClient(cfg.stravaCookies)
     try:
         results = await client.search_athletes(q.strip())
         # Cache names and avatars so they survive across page reloads
@@ -345,6 +428,7 @@ async def search_athletes_route(q: str = "") -> list[dict[str, Any]]:
         code = getattr(exc, "code", "AUTH_FAILED")
         raise HTTPException(status_code=401, detail={"code": code, "message": str(exc)}) from exc
     finally:
+        persist_client_cookies(cfg.stravaCookies, client)
         await client.aclose()
 
 
@@ -353,7 +437,7 @@ async def get_athlete(
     athlete_id: str = ApiPath(pattern=r"^\d+$"),
 ) -> dict[str, Any]:
     cfg = read_user_config()
-    if not cfg or not cfg.stravaSessionCookie:
+    if not cfg or not cfg.stravaCookies:
         raise HTTPException(
             status_code=400,
             detail={"code": "NO_COOKIE", "message": "Kein Session-Cookie konfiguriert"},
@@ -364,13 +448,14 @@ async def get_athlete(
     if athlete_id in labels:
         return {"id": athlete_id, "name": labels[athlete_id]}
 
-    client = StravaClient(cfg.stravaSessionCookie)
+    client = StravaClient(cfg.stravaCookies)
     try:
         name = await client.lookup_athlete(athlete_id)
     except AuthError as exc:
         code = getattr(exc, "code", "AUTH_FAILED")
         raise HTTPException(status_code=401, detail={"code": code, "message": str(exc)}) from exc
     finally:
+        persist_client_cookies(cfg.stravaCookies, client)
         await client.aclose()
 
     if name:
@@ -517,7 +602,7 @@ async def get_feed(request: Request) -> dict[str, Any]:
     to force a live Strava fetch and update the cache.
     """
     cfg = read_user_config()
-    if not cfg or not cfg.stravaSessionCookie:
+    if not cfg or not cfg.stravaCookies:
         raise HTTPException(
             status_code=400,
             detail={"code": "NO_COOKIE", "message": "Kein Session-Cookie konfiguriert"},
@@ -538,7 +623,7 @@ async def get_feed(request: Request) -> dict[str, Any]:
     import datetime as _dt
     from pathlib import Path
 
-    client = StravaClient(cfg.stravaSessionCookie)
+    client = StravaClient(cfg.stravaCookies)
     try:
         # Resolve athlete ID (from config or live lookup).
         athlete_id = cfg.athleteId or await client.fetch_current_athlete_id() or ""
@@ -577,6 +662,7 @@ async def get_feed(request: Request) -> dict[str, Any]:
             },
         ) from exc
     finally:
+        persist_client_cookies(cfg.stravaCookies, client)
         await client.aclose()
 
 
@@ -595,13 +681,13 @@ async def post_single_kudos(
     import datetime as _dt
 
     cfg = read_user_config()
-    if not cfg or not cfg.stravaSessionCookie:
+    if not cfg or not cfg.stravaCookies:
         raise HTTPException(
             status_code=400,
             detail={"code": "NO_COOKIE", "message": "Kein Session-Cookie konfiguriert"},
         )
 
-    client = StravaClient(cfg.stravaSessionCookie)
+    client = StravaClient(cfg.stravaCookies)
     try:
         csrf_token = await client.get_csrf_token()
         ok = await client.send_kudos(activity_id, csrf_token)
@@ -613,6 +699,7 @@ async def post_single_kudos(
         code = getattr(exc, "code", "AUTH_FAILED")
         raise HTTPException(status_code=401, detail={"code": code, "message": str(exc)}) from exc
     finally:
+        persist_client_cookies(cfg.stravaCookies, client)
         await client.aclose()
 
 
@@ -636,8 +723,8 @@ async def get_history(limit: int = 100) -> list[dict[str, Any]]:
 async def export_config() -> JSONResponse:
     """Export config + settings as a downloadable JSON backup.
 
-    The ``stravaSessionCookie`` is intentionally omitted from the export for
-    security — it contains a live browser session token.
+    ``stravaCookies`` is intentionally omitted from the export for
+    security — it contains a live browser session and remember-me token.
     """
     import datetime as _dt
 
@@ -645,7 +732,7 @@ async def export_config() -> JSONResponse:
     settings = read_settings()
 
     cfg_dict = cfg.model_dump(mode="json") if cfg else {}
-    cfg_dict.pop("stravaSessionCookie", None)  # never export the live session cookie
+    cfg_dict.pop("stravaCookies", None)  # never export the live session cookies
 
     payload = {
         "version": 1,
@@ -671,14 +758,34 @@ class _ImportBody(BaseModel):
 async def import_config(body: _ImportBody) -> dict[str, Any]:
     """Restore config + settings from a backup payload.
 
-    The ``stravaSessionCookie`` is only updated when explicitly present and
-    non-empty in the import payload — otherwise the existing cookie is kept.
+    The Strava cookies are only updated when explicitly present and non-empty
+    in the import payload (``stravaCookies``, or the legacy
+    ``stravaSessionCookie``) — otherwise the existing ones are kept.
     """
     from kudosy.models import AppSettings, UserConfig
 
+    config = dict(body.config)
+    legacy = config.pop("stravaSessionCookie", None)
+    if isinstance(config.get("stravaCookies"), dict):
+        # Same whitelist as pasted input: no tracking cookies or non-string junk.
+        config["stravaCookies"] = {
+            k: v
+            for k, v in config["stravaCookies"].items()
+            if isinstance(v, str) and v and is_strava_cookie_name(k)
+        }
+    elif "stravaCookies" in config:
+        del config["stravaCookies"]
+    if legacy and str(legacy).strip() and not config.get("stravaCookies"):
+        try:
+            config["stravaCookies"] = parse_strava_cookies(str(legacy))
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422, detail={"code": "INVALID_COOKIE", "message": str(exc)}
+            ) from exc
+
     # Validate imported config (may raise 422 automatically via Pydantic)
     try:
-        new_cfg = UserConfig.model_validate(body.config)
+        new_cfg = UserConfig.model_validate(config)
     except Exception as exc:
         raise HTTPException(
             status_code=422, detail={"code": "INVALID_CONFIG", "message": str(exc)}
@@ -692,12 +799,10 @@ async def import_config(body: _ImportBody) -> dict[str, Any]:
         ) from exc
 
     # Preserve the existing session cookie unless the import explicitly supplies one
-    if not new_cfg.stravaSessionCookie:
+    if not new_cfg.stravaCookies:
         existing = read_user_config()
-        if existing and existing.stravaSessionCookie:
-            new_cfg = new_cfg.model_copy(
-                update={"stravaSessionCookie": existing.stravaSessionCookie}
-            )
+        if existing and existing.stravaCookies:
+            new_cfg = new_cfg.model_copy(update={"stravaCookies": existing.stravaCookies})
 
     write_user_config(new_cfg)
     write_settings(new_settings)

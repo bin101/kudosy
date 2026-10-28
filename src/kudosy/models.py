@@ -94,12 +94,26 @@ class CatchAll(BaseModel):
 class UserConfig(BaseModel):
     """Contents of config.yaml — user-specific Strava config."""
 
-    stravaSessionCookie: str = ""
+    stravaCookies: dict[str, str] = {}
+    """Strava cookies by name: ``_strava4_session`` plus the remember-me pair that lets
+    Strava re-issue the session. Rotated values are written back after each request."""
+
     athleteId: str = ""
     ignoreAthletes: list[str] = []
     allowAthletes: list[str] = []
     catchAll: CatchAll = CatchAll()
     kudoRules: KudoRules = KudoRules()
+
+    @model_validator(mode="before")
+    @classmethod
+    def migrate_session_cookie(cls, data: Any) -> Any:
+        """Legacy configs stored a single ``stravaSessionCookie`` string."""
+        if isinstance(data, dict) and "stravaSessionCookie" in data:
+            data = dict(data)
+            legacy = data.pop("stravaSessionCookie")
+            if legacy and not data.get("stravaCookies"):
+                data["stravaCookies"] = {"_strava4_session": str(legacy)}
+        return data
 
     @field_validator("athleteId", mode="before")
     @classmethod
@@ -240,7 +254,7 @@ class AppSettings(BaseModel):
 class EffectiveConfig(BaseModel):
     """The merged config handed to the engine."""
 
-    stravaSessionCookie: str
+    stravaCookies: dict[str, str]
     athleteId: str
     ignoreAthletes: list[str]
     allowAthletes: list[str]

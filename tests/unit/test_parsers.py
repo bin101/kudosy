@@ -4,9 +4,13 @@ Note: distance/duration parsing tests have moved to test_stat_parse.py
 since those functions now live in kudosy.stat_parse.
 """
 
+import pytest
+
 from kudosy.parsers import (
     decode_html_entities,
+    is_strava_cookie_name,
     parse_athlete_name,
+    parse_strava_cookies,
 )
 
 
@@ -79,3 +83,58 @@ class TestParseAthleteName:
             '<meta property="og:title" content="Anna | Strava"><title>BetterName | Strava</title>'
         )
         assert parse_athlete_name(html) == "Anna"
+
+
+class TestParseStravaCookies:
+    def test_bare_value(self) -> None:
+        assert parse_strava_cookies("abc123") == {"_strava4_session": "abc123"}
+
+    def test_bare_value_with_equals_padding(self) -> None:
+        assert parse_strava_cookies("abc123==") == {"_strava4_session": "abc123=="}
+
+    def test_bare_value_with_quotes_and_whitespace(self) -> None:
+        assert parse_strava_cookies('  "abc123"\n') == {"_strava4_session": "abc123"}
+
+    def test_bare_value_with_clipboard_line_breaks(self) -> None:
+        assert parse_strava_cookies("abc\n  def\r\nghi ") == {"_strava4_session": "abcdefghi"}
+
+    def test_name_value_pairs(self) -> None:
+        got = parse_strava_cookies("_strava4_session=s1; strava_remember_id=1; x_other=2")
+        assert got == {"_strava4_session": "s1", "strava_remember_id": "1"}
+
+    def test_full_cookie_header_with_prefix_and_tracking_dropped(self) -> None:
+        header = (
+            "Cookie: _ga=GA1.2.3; _strava4_session=s1; sp=zzz;\n"
+            " strava_remember_id=42; strava_remember_token=tok"
+        )
+        assert parse_strava_cookies(header) == {
+            "_strava4_session": "s1",
+            "strava_remember_id": "42",
+            "strava_remember_token": "tok",
+        }
+
+    def test_prefix_is_case_insensitive_and_quotes_stripped(self) -> None:
+        assert parse_strava_cookies('"cookie: _strava4_session=s1"') == {"_strava4_session": "s1"}
+
+    def test_prefixed_strava_cookies_are_kept(self) -> None:
+        got = parse_strava_cookies("_strava4_session=s1; _strava_idcf=x; strava_foo=y")
+        assert got == {"_strava4_session": "s1", "_strava_idcf": "x", "strava_foo": "y"}
+
+    def test_remember_pair_without_session_is_valid(self) -> None:
+        got = parse_strava_cookies("strava_remember_id=1; strava_remember_token=t")
+        assert got == {"strava_remember_id": "1", "strava_remember_token": "t"}
+
+    def test_remember_id_alone_is_invalid(self) -> None:
+        with pytest.raises(ValueError):
+            parse_strava_cookies("strava_remember_id=1; _ga=x")
+
+    @pytest.mark.parametrize("text", ["", "   \n", "_ga=1; sp=2", "_strava4_session="])
+    def test_invalid_inputs_raise(self, text: str) -> None:
+        with pytest.raises(ValueError):
+            parse_strava_cookies(text)
+
+
+def test_is_strava_cookie_name() -> None:
+    assert is_strava_cookie_name("_strava4_session")
+    assert is_strava_cookie_name("strava_remember_token")
+    assert not is_strava_cookie_name("_ga")

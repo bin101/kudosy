@@ -71,8 +71,11 @@ export function initRevealButtons() {
     btn.addEventListener('click', () => {
       const input = $(btn.dataset.reveal);
       if (!input) return;
-      const hidden = input.type === 'password';
-      input.type = hidden ? 'text' : 'password';
+      // A <textarea> cannot be type=password; it is masked via a CSS class instead.
+      const isArea = input.tagName === 'TEXTAREA';
+      const hidden = isArea ? input.classList.contains('masked') : input.type === 'password';
+      if (isArea) input.classList.toggle('masked', !hidden);
+      else input.type = hidden ? 'text' : 'password';
       btn.textContent = hidden ? '🙈' : '👁';
     });
   });

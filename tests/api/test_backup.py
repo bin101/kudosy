@@ -80,7 +80,7 @@ def test_export_excludes_cookie(client: TestClient) -> None:
     resp = client.get("/api/export")
     data = resp.json()
     config = data.get("config", {})
-    assert "stravaSessionCookie" not in config or config.get("stravaSessionCookie") == ""
+    assert "stravaCookies" not in config and "stravaSessionCookie" not in config
 
 
 def test_export_includes_config_section(client: TestClient) -> None:
@@ -119,7 +119,7 @@ def _minimal_import(data_dir: Path) -> dict:
     cfg = store.read_user_config()
     settings = store.read_settings()
     cfg_dict = cfg.model_dump() if cfg else {}
-    cfg_dict.pop("stravaSessionCookie", None)
+    cfg_dict.pop("stravaCookies", None)
     return {
         "config": cfg_dict,
         "settings": settings.model_dump(),
@@ -141,7 +141,7 @@ def test_import_preserves_existing_cookie_when_omitted(client: TestClient, data_
     client.post("/api/import", json=payload)
     cfg = store.read_user_config()
     assert cfg is not None
-    assert cfg.stravaSessionCookie == "my-real-cookie"
+    assert cfg.stravaCookies == {"_strava4_session": "my-real-cookie"}
 
 
 def test_import_updates_cookie_when_provided(client: TestClient, data_dir: Path) -> None:
@@ -152,7 +152,7 @@ def test_import_updates_cookie_when_provided(client: TestClient, data_dir: Path)
     client.post("/api/import", json=payload)
     cfg = store.read_user_config()
     assert cfg is not None
-    assert cfg.stravaSessionCookie == "new-cookie-value"
+    assert cfg.stravaCookies == {"_strava4_session": "new-cookie-value"}
 
 
 def test_import_does_not_overwrite_cookie_with_empty(client: TestClient, data_dir: Path) -> None:
@@ -163,7 +163,7 @@ def test_import_does_not_overwrite_cookie_with_empty(client: TestClient, data_di
     client.post("/api/import", json=payload)
     cfg = store.read_user_config()
     assert cfg is not None
-    assert cfg.stravaSessionCookie == "my-real-cookie"
+    assert cfg.stravaCookies == {"_strava4_session": "my-real-cookie"}
 
 
 def test_import_updates_settings(client: TestClient, data_dir: Path) -> None:
@@ -195,3 +195,41 @@ def test_import_invalid_settings_interval_clamps(client: TestClient, data_dir: P
     assert resp.status_code == 200
     settings = store.read_settings()
     assert settings.intervalMinutes >= 5
+
+
+def test_import_legacy_session_cookie_is_parsed_as_header(
+    client: TestClient, data_dir: Path
+) -> None:
+    from kudosy import store
+
+    payload = _minimal_import(data_dir)
+    payload["config"]["stravaSessionCookie"] = (
+        "Cookie: _ga=1; _strava4_session=sess; strava_remember_id=1; strava_remember_token=t"
+    )
+    assert client.post("/api/import", json=payload).status_code == 200
+    cfg = store.read_user_config()
+    assert cfg is not None
+    assert cfg.stravaCookies == {
+        "_strava4_session": "sess",
+        "strava_remember_id": "1",
+        "strava_remember_token": "t",
+    }
+
+
+def test_import_filters_imported_stravacookies(client: TestClient, data_dir: Path) -> None:
+    from kudosy import store
+
+    payload = _minimal_import(data_dir)
+    payload["config"]["stravaCookies"] = {"_strava4_session": "s", "_ga": "track", "x": 5}
+    assert client.post("/api/import", json=payload).status_code == 200
+    cfg = store.read_user_config()
+    assert cfg is not None
+    assert cfg.stravaCookies == {"_strava4_session": "s"}
+
+
+def test_import_invalid_legacy_cookie_is_422(client: TestClient, data_dir: Path) -> None:
+    payload = _minimal_import(data_dir)
+    payload["config"]["stravaSessionCookie"] = "_ga=1; sp=2"
+    resp = client.post("/api/import", json=payload)
+    assert resp.status_code == 422
+    assert resp.json()["detail"]["code"] == "INVALID_COOKIE"

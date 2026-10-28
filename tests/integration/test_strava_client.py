@@ -30,7 +30,7 @@ async def test_get_csrf_token_success() -> None:
     html = _load("csrf_page.html")
     respx.get("https://www.strava.com/dashboard").mock(return_value=httpx.Response(200, text=html))
 
-    client = StravaClient("test-cookie-value")
+    client = StravaClient({"_strava4_session": "test-cookie-value"})
     token = await client.get_csrf_token()
     await client.aclose()
 
@@ -44,7 +44,7 @@ async def test_get_csrf_token_missing_raises() -> None:
         return_value=httpx.Response(200, text="<html><head></head><body>no csrf</body></html>")
     )
 
-    client = StravaClient("test-cookie-value")
+    client = StravaClient({"_strava4_session": "test-cookie-value"})
     with pytest.raises(RuntimeError, match="CSRF"):
         await client.get_csrf_token()
     await client.aclose()
@@ -54,7 +54,7 @@ async def test_get_csrf_token_missing_raises() -> None:
 @respx.mock
 async def test_get_csrf_token_login_redirect_raises_auth_error() -> None:
     """When the resolved URL is a login page, _check_auth raises AuthError."""
-    client = StravaClient("expired-cookie")
+    client = StravaClient({"_strava4_session": "expired-cookie"})
     login_resp = httpx.Response(
         200,
         text="<html>login</html>",
@@ -66,7 +66,7 @@ async def test_get_csrf_token_login_redirect_raises_auth_error() -> None:
 
 @pytest.mark.asyncio
 async def test_check_auth_raises_on_login_url() -> None:
-    client = StravaClient("bad-cookie")
+    client = StravaClient({"_strava4_session": "bad-cookie"})
     resp = httpx.Response(
         200,
         text="",
@@ -78,7 +78,7 @@ async def test_check_auth_raises_on_login_url() -> None:
 
 @pytest.mark.asyncio
 async def test_check_auth_raises_on_401() -> None:
-    client = StravaClient("bad-cookie")
+    client = StravaClient({"_strava4_session": "bad-cookie"})
     resp = httpx.Response(
         401,
         text="Unauthorized",
@@ -97,7 +97,7 @@ async def test_fetch_current_athlete_id_success() -> None:
     respx.get("https://www.strava.com/frontend/athletes/current").mock(
         return_value=httpx.Response(200, json={"currentAthlete": {"id_str": "20000001"}})
     )
-    client = StravaClient("test-cookie-value")
+    client = StravaClient({"_strava4_session": "test-cookie-value"})
     athlete_id = await client.fetch_current_athlete_id()
     await client.aclose()
     assert athlete_id == "20000001"
@@ -110,7 +110,7 @@ async def test_fetch_current_athlete_id_falls_back_to_numeric_id() -> None:
     respx.get("https://www.strava.com/frontend/athletes/current").mock(
         return_value=httpx.Response(200, json={"currentAthlete": {"id": 20000002}})
     )
-    client = StravaClient("test-cookie-value")
+    client = StravaClient({"_strava4_session": "test-cookie-value"})
     athlete_id = await client.fetch_current_athlete_id()
     await client.aclose()
     assert athlete_id == "20000002"
@@ -124,7 +124,7 @@ async def test_fetch_current_athlete_id_auth_error_propagates() -> None:
     respx.get("https://www.strava.com/frontend/athletes/current").mock(
         return_value=httpx.Response(401, text="Unauthorized")
     )
-    client = StravaClient("expired-cookie")
+    client = StravaClient({"_strava4_session": "expired-cookie"})
     with pytest.raises(AuthError):
         await client.fetch_current_athlete_id()
     await client.aclose()
@@ -137,7 +137,7 @@ async def test_fetch_current_athlete_id_malformed_json_returns_none() -> None:
     respx.get("https://www.strava.com/frontend/athletes/current").mock(
         return_value=httpx.Response(200, text="not json")
     )
-    client = StravaClient("test-cookie-value")
+    client = StravaClient({"_strava4_session": "test-cookie-value"})
     athlete_id = await client.fetch_current_athlete_id()
     await client.aclose()
     assert athlete_id is None
@@ -156,7 +156,7 @@ async def test_get_with_retry_recovers_after_transient_network_error() -> None:
             httpx.Response(200, json={"currentAthlete": {"id_str": "20000003"}}),
         ]
     )
-    client = StravaClient("test-cookie-value", sleep=AsyncMock())
+    client = StravaClient({"_strava4_session": "test-cookie-value"}, sleep=AsyncMock())
     athlete_id = await client.fetch_current_athlete_id()
     await client.aclose()
     assert athlete_id == "20000003"
@@ -170,7 +170,7 @@ async def test_get_with_retry_gives_up_after_max_attempts() -> None:
     respx.get("https://www.strava.com/frontend/athletes/current").mock(
         side_effect=httpx.ConnectError("boom")
     )
-    client = StravaClient("test-cookie-value", sleep=AsyncMock())
+    client = StravaClient({"_strava4_session": "test-cookie-value"}, sleep=AsyncMock())
     athlete_id = await client.fetch_current_athlete_id()
     await client.aclose()
     assert athlete_id is None
@@ -190,7 +190,7 @@ async def test_fetch_feed_returns_json_dict() -> None:
         return_value=httpx.Response(200, json=feed_payload)
     )
 
-    client = StravaClient("test-cookie-value")
+    client = StravaClient({"_strava4_session": "test-cookie-value"})
     result = await client.fetch_following_feed("20000001")
     await client.aclose()
 
@@ -207,7 +207,7 @@ async def test_fetch_feed_passes_athlete_id_param() -> None:
         return_value=httpx.Response(200, json={"entries": []})
     )
 
-    client = StravaClient("test-cookie-value")
+    client = StravaClient({"_strava4_session": "test-cookie-value"})
     await client.fetch_following_feed("99887766")
     await client.aclose()
 
@@ -224,7 +224,7 @@ async def test_fetch_feed_sends_accept_language_en() -> None:
         return_value=httpx.Response(200, json={"entries": []})
     )
 
-    client = StravaClient("test-cookie-value")
+    client = StravaClient({"_strava4_session": "test-cookie-value"})
     await client.fetch_following_feed("20000001")
     await client.aclose()
 
@@ -240,7 +240,7 @@ async def test_fetch_feed_auth_redirect_raises() -> None:
         return_value=httpx.Response(401, text="Unauthorized")
     )
 
-    client = StravaClient("expired-cookie")
+    client = StravaClient({"_strava4_session": "expired-cookie"})
     with pytest.raises(AuthError):
         await client.fetch_following_feed("20000001")
     await client.aclose()
@@ -256,7 +256,7 @@ async def test_send_kudos_success() -> None:
         return_value=httpx.Response(200, text="")
     )
 
-    client = StravaClient("test-cookie-value")
+    client = StravaClient({"_strava4_session": "test-cookie-value"})
     result = await client.send_kudos("10000000001", "test-csrf-abc123")
     await client.aclose()
 
@@ -270,7 +270,7 @@ async def test_send_kudos_rate_limit_raises() -> None:
         return_value=httpx.Response(429, text="Rate limited")
     )
 
-    client = StravaClient("test-cookie-value")
+    client = StravaClient({"_strava4_session": "test-cookie-value"})
     with pytest.raises(RateLimitError):
         await client.send_kudos("10000000002", "csrf")
     await client.aclose()
@@ -283,7 +283,7 @@ async def test_send_kudos_network_error_returns_false() -> None:
         side_effect=httpx.ConnectError("Connection refused")
     )
 
-    client = StravaClient("test-cookie-value")
+    client = StravaClient({"_strava4_session": "test-cookie-value"})
     result = await client.send_kudos("10000000003", "csrf")
     await client.aclose()
 
@@ -301,7 +301,7 @@ async def test_lookup_athlete_success() -> None:
         return_value=httpx.Response(200, text=html)
     )
 
-    client = StravaClient("test-cookie-value")
+    client = StravaClient({"_strava4_session": "test-cookie-value"})
     name = await client.lookup_athlete("20000001")
     await client.aclose()
 
@@ -315,7 +315,7 @@ async def test_lookup_athlete_not_found_returns_none() -> None:
         return_value=httpx.Response(404, text="Not Found")
     )
 
-    client = StravaClient("test-cookie-value")
+    client = StravaClient({"_strava4_session": "test-cookie-value"})
     name = await client.lookup_athlete("99999999")
     await client.aclose()
 
@@ -331,7 +331,7 @@ async def test_lookup_athlete_network_error_returns_none() -> None:
         side_effect=httpx.ConnectError("boom")
     )
 
-    client = StravaClient("test-cookie-value")
+    client = StravaClient({"_strava4_session": "test-cookie-value"})
     name = await client.lookup_athlete("20000001")
     await client.aclose()
 
@@ -349,7 +349,7 @@ async def test_search_athletes_success_from_fixture() -> None:
         return_value=httpx.Response(200, text=html)
     )
 
-    client = StravaClient("test-cookie-value")
+    client = StravaClient({"_strava4_session": "test-cookie-value"})
     results = await client.search_athletes("Alex")
     await client.aclose()
 
@@ -364,7 +364,7 @@ async def test_search_athletes_auth_error_propagates() -> None:
         return_value=httpx.Response(401, text="Unauthorized")
     )
 
-    client = StravaClient("expired-cookie")
+    client = StravaClient({"_strava4_session": "expired-cookie"})
     with pytest.raises(AuthError):
         await client.search_athletes("Alex")
     await client.aclose()
@@ -377,7 +377,7 @@ async def test_search_athletes_non_success_status_returns_empty_list() -> None:
         return_value=httpx.Response(500, text="Internal Server Error")
     )
 
-    client = StravaClient("test-cookie-value")
+    client = StravaClient({"_strava4_session": "test-cookie-value"})
     results = await client.search_athletes("Alex")
     await client.aclose()
 
@@ -389,7 +389,7 @@ async def test_search_athletes_non_success_status_returns_empty_list() -> None:
 async def test_search_athletes_network_error_returns_empty_list() -> None:
     respx.get("https://www.strava.com/athletes/search").mock(side_effect=httpx.ConnectError("boom"))
 
-    client = StravaClient("test-cookie-value")
+    client = StravaClient({"_strava4_session": "test-cookie-value"})
     results = await client.search_athletes("Alex")
     await client.aclose()
 
@@ -477,7 +477,7 @@ async def test_fetch_feed_merges_multiple_pages() -> None:
         ]
     )
 
-    client = StravaClient("cookie", sleep=AsyncMock(), rng=random.Random(0))
+    client = StravaClient({"_strava4_session": "cookie"}, sleep=AsyncMock(), rng=random.Random(0))
     result = await client.fetch_following_feed("111")
     await client.aclose()
 
@@ -496,7 +496,7 @@ async def test_fetch_feed_stops_on_hasmore_false() -> None:
         return_value=httpx.Response(200, json=page1)
     )
 
-    client = StravaClient("cookie", sleep=AsyncMock(), rng=random.Random(0))
+    client = StravaClient({"_strava4_session": "cookie"}, sleep=AsyncMock(), rng=random.Random(0))
     result = await client.fetch_following_feed("111")
     await client.aclose()
 
@@ -517,7 +517,7 @@ async def test_fetch_feed_stops_at_max_pages() -> None:
         side_effect=[httpx.Response(200, json=infinite_page)] * (_FEED_MAX_PAGES + 2)
     )
 
-    client = StravaClient("cookie", sleep=AsyncMock(), rng=random.Random(0))
+    client = StravaClient({"_strava4_session": "cookie"}, sleep=AsyncMock(), rng=random.Random(0))
     await client.fetch_following_feed("111")
     await client.aclose()
 
@@ -534,7 +534,7 @@ async def test_fetch_feed_first_request_has_no_cursor() -> None:
         return_value=httpx.Response(200, json=page1)
     )
 
-    client = StravaClient("cookie", sleep=AsyncMock(), rng=random.Random(0))
+    client = StravaClient({"_strava4_session": "cookie"}, sleep=AsyncMock(), rng=random.Random(0))
     await client.fetch_following_feed("42")
     await client.aclose()
 
@@ -556,7 +556,7 @@ async def test_fetch_feed_passes_cursor_on_second_page() -> None:
         ]
     )
 
-    client = StravaClient("cookie", sleep=AsyncMock(), rng=random.Random(0))
+    client = StravaClient({"_strava4_session": "cookie"}, sleep=AsyncMock(), rng=random.Random(0))
     await client.fetch_following_feed("42")
     await client.aclose()
 
@@ -587,7 +587,7 @@ async def test_fetch_feed_deduplicates_activities() -> None:
         ]
     )
 
-    client = StravaClient("cookie", sleep=AsyncMock(), rng=random.Random(0))
+    client = StravaClient({"_strava4_session": "cookie"}, sleep=AsyncMock(), rng=random.Random(0))
     result = await client.fetch_following_feed("42")
     await client.aclose()
 
@@ -608,7 +608,7 @@ async def test_fetch_feed_stops_gracefully_when_cursor_data_missing() -> None:
         return_value=httpx.Response(200, json=page1)
     )
 
-    client = StravaClient("cookie", sleep=AsyncMock(), rng=random.Random(0))
+    client = StravaClient({"_strava4_session": "cookie"}, sleep=AsyncMock(), rng=random.Random(0))
     result = await client.fetch_following_feed("42")
     await client.aclose()
 
@@ -633,9 +633,255 @@ async def test_fetch_feed_sleep_called_between_pages() -> None:
     )
 
     mock_sleep = AsyncMock()
-    client = StravaClient("cookie", sleep=mock_sleep, rng=random.Random(0))
+    client = StravaClient({"_strava4_session": "cookie"}, sleep=mock_sleep, rng=random.Random(0))
     await client.fetch_following_feed("42")
     await client.aclose()
 
     # 3 pages → 2 pauses (after page 1, after page 2, not after the last)
     assert mock_sleep.call_count == 2
+
+
+# ── Cookie jar, rotation & auth diagnostics ───────────────────────────────────
+
+_CSRF_HTML = '<html><head><meta name="csrf-token" content="tok123"></head></html>'
+_FULL_COOKIES = {
+    "_strava4_session": "sess-old-0123456789",
+    "strava_remember_id": "4242",
+    "strava_remember_token": "remember-secret-token",
+}
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_all_cookies_are_sent() -> None:
+    route = respx.get("https://www.strava.com/dashboard").mock(
+        return_value=httpx.Response(200, text=_CSRF_HTML)
+    )
+    client = StravaClient(_FULL_COOKIES)
+    await client.get_csrf_token()
+    await client.aclose()
+
+    sent = route.calls[0].request.headers["cookie"]
+    for name, value in _FULL_COOKIES.items():
+        assert f"{name}={value}" in sent
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_set_cookie_rotation_is_sent_next_and_exposed() -> None:
+    respx.get("https://www.strava.com/dashboard").mock(
+        return_value=httpx.Response(
+            200,
+            text=_CSRF_HTML,
+            headers={"Set-Cookie": "_strava4_session=sess-new; Domain=.strava.com; Path=/"},
+        )
+    )
+    athlete = respx.get("https://www.strava.com/frontend/athletes/current").mock(
+        return_value=httpx.Response(200, json={"currentAthlete": {"id_str": "1"}})
+    )
+    client = StravaClient(_FULL_COOKIES)
+    await client.get_csrf_token()
+    await client.fetch_current_athlete_id()
+
+    assert "_strava4_session=sess-new" in athlete.calls[0].request.headers["cookie"]
+    assert "sess-old" not in athlete.calls[0].request.headers["cookie"]
+    current = client.current_cookies()
+    assert current["_strava4_session"] == "sess-new"
+    assert current["strava_remember_id"] == "4242"
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_host_only_set_cookie_wins_over_initial_domain_cookie() -> None:
+    respx.get("https://www.strava.com/dashboard").mock(
+        return_value=httpx.Response(
+            200, text=_CSRF_HTML, headers={"Set-Cookie": "_strava4_session=sess-host; Path=/"}
+        )
+    )
+    client = StravaClient(_FULL_COOKIES)
+    await client.get_csrf_token()
+    assert client.current_cookies()["_strava4_session"] == "sess-host"
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_current_cookies_drops_tracking_cookies() -> None:
+    respx.get("https://www.strava.com/dashboard").mock(
+        return_value=httpx.Response(
+            200,
+            text=_CSRF_HTML,
+            headers=[
+                ("Set-Cookie", "_ga=GA1; Domain=.strava.com; Path=/"),
+                ("Set-Cookie", "sp=zz; Domain=.strava.com; Path=/"),
+            ],
+        )
+    )
+    client = StravaClient({"_strava4_session": "s"})
+    await client.get_csrf_token()
+    assert client.current_cookies() == {"_strava4_session": "s"}
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_current_cookies_before_first_request_returns_initial() -> None:
+    client = StravaClient(_FULL_COOKIES)
+    assert client.current_cookies() == _FULL_COOKIES
+
+
+def _login_redirect_mocks() -> None:
+    respx.get("https://www.strava.com/dashboard").mock(
+        return_value=httpx.Response(302, headers={"Location": "https://www.strava.com/login"})
+    )
+    respx.get("https://www.strava.com/login").mock(
+        return_value=httpx.Response(200, text="<html>login</html>")
+    )
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_login_redirect_without_remember_cookies_is_session_expired(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    _login_redirect_mocks()
+    client = StravaClient({"_strava4_session": "sess-old-0123456789"})
+    with caplog.at_level("WARNING"), pytest.raises(AuthError) as exc_info:
+        await client.get_csrf_token()
+    await client.aclose()
+
+    assert exc_info.value.code == "AUTH_SESSION_EXPIRED"
+    assert "302 /dashboard" in caplog.text
+    assert "200 /login" in caplog.text
+    assert "_strava4_session=sess-old" in caplog.text
+    assert "sess-old-0123456789" not in caplog.text
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_login_redirect_with_remember_cookies_is_remember_expired(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    _login_redirect_mocks()
+    client = StravaClient(_FULL_COOKIES)
+    with caplog.at_level("WARNING"), pytest.raises(AuthError) as exc_info:
+        await client.get_csrf_token()
+    await client.aclose()
+
+    assert exc_info.value.code == "AUTH_REMEMBER_EXPIRED"
+    assert "strava_remember_token=remember" in caplog.text
+    assert "remember-secret-token" not in caplog.text
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_sessions_in_query_is_not_an_auth_error() -> None:
+    respx.get("https://www.strava.com/dashboard").mock(
+        return_value=httpx.Response(200, text=_CSRF_HTML)
+    )
+    client = StravaClient({"_strava4_session": "s"})
+    resp = await client._get_client().get("https://www.strava.com/dashboard?x=sessions&y=login")
+    client._check_auth(resp)  # must not raise
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+@respx.mock
+@pytest.mark.parametrize("status", [400, 500])
+async def test_dashboard_400_500_with_cookie_is_malformed_cookie(status: int) -> None:
+    respx.get("https://www.strava.com/dashboard").mock(return_value=httpx.Response(status))
+    client = StravaClient({"_strava4_session": "garbage"})
+    with pytest.raises(AuthError) as exc_info:
+        await client.get_csrf_token()
+    await client.aclose()
+    assert exc_info.value.code == "AUTH_MALFORMED_COOKIE"
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_rotation_on_rejected_session_is_not_exposed() -> None:
+    """Cookies Strava sets while rejecting the session never replace the stored ones."""
+    respx.get("https://www.strava.com/dashboard").mock(
+        return_value=httpx.Response(
+            302,
+            headers=[
+                ("Location", "https://www.strava.com/login"),
+                ("Set-Cookie", "_strava4_session=anonymous; Domain=.strava.com; Path=/"),
+            ],
+        )
+    )
+    respx.get("https://www.strava.com/login").mock(return_value=httpx.Response(200, text="x"))
+    client = StravaClient(_FULL_COOKIES)
+    with pytest.raises(AuthError):
+        await client.get_csrf_token()
+    assert client.current_cookies() == _FULL_COOKIES
+    await client.aclose()
+
+
+def _session_values(cookie_header: str) -> list[str]:
+    return [
+        p.strip().split("=", 1)[1]
+        for p in cookie_header.split(";")
+        if p.strip().startswith("_strava4_session=")
+    ]
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_host_only_rotation_is_sent_exactly_once_and_old_value_never() -> None:
+    respx.get("https://www.strava.com/dashboard").mock(
+        return_value=httpx.Response(
+            200, text=_CSRF_HTML, headers={"Set-Cookie": "_strava4_session=NEW; Path=/"}
+        )
+    )
+    athlete = respx.get("https://www.strava.com/frontend/athletes/current").mock(
+        return_value=httpx.Response(200, json={"currentAthlete": {"id_str": "1"}})
+    )
+    client = StravaClient(_FULL_COOKIES)
+    await client.get_csrf_token()
+    await client.fetch_current_athlete_id()
+
+    sent = athlete.calls[0].request.headers["cookie"]
+    assert _session_values(sent) == ["NEW"]
+    assert "strava_remember_id=4242" in sent
+    assert "strava_remember_token=remember-secret-token" in sent
+    assert client.current_cookies()["_strava4_session"] == "NEW"
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_host_only_rotation_within_redirect_chain_applies_to_next_hop() -> None:
+    respx.get("https://www.strava.com/dashboard").mock(
+        return_value=httpx.Response(
+            302,
+            headers={
+                "Location": "https://www.strava.com/dashboard/home",
+                "Set-Cookie": "_strava4_session=NEW; Path=/",
+            },
+        )
+    )
+    final = respx.get("https://www.strava.com/dashboard/home").mock(
+        return_value=httpx.Response(200, text=_CSRF_HTML)
+    )
+    client = StravaClient(_FULL_COOKIES)
+    await client.get_csrf_token()
+
+    sent = final.calls[0].request.headers["cookie"]
+    assert _session_values(sent) == ["NEW"]
+    assert "strava_remember_token=remember-secret-token" in sent
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_locale_prefixed_login_path_is_auth_error() -> None:
+    respx.get("https://www.strava.com/dashboard").mock(
+        return_value=httpx.Response(302, headers={"Location": "https://www.strava.com/de-de/login"})
+    )
+    respx.get("https://www.strava.com/de-de/login").mock(return_value=httpx.Response(200, text="x"))
+    client = StravaClient({"_strava4_session": "s"})
+    with pytest.raises(AuthError) as exc_info:
+        await client.get_csrf_token()
+    assert exc_info.value.code == "AUTH_SESSION_EXPIRED"
+    await client.aclose()

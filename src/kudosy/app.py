@@ -34,6 +34,7 @@ from kudosy.store import (
     bootstrap,
     log_path,
     mark_kudoed_many,
+    persist_client_cookies,
     prune_kudoed,
     read_kudoed_ids,
     read_last_digest_at,
@@ -127,14 +128,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         if dry_run is None:
             dry_run = settings.dryRun
         user_cfg = read_user_config()
-        if not user_cfg or not user_cfg.stravaSessionCookie:
+        if not user_cfg or not user_cfg.stravaCookies:
             log.error("Kein Session-Cookie konfiguriert — Job abgebrochen")
             return None
         from kudosy.strava_client import StravaClient
 
         reset_log_handler(log_path())
         kudoed_ids = read_kudoed_ids()
-        client = StravaClient(user_cfg.stravaSessionCookie)
+        client = StravaClient(user_cfg.stravaCookies)
         try:
             result = await run_kudos(
                 user_cfg,
@@ -204,7 +205,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
             return result
         except AuthError as exc:
             _app_state["auth_ok"] = False
-            log.error("Strava auth failed (cookie expired?): %s", exc)
+            log.error("Strava auth failed [%s]: %s", getattr(exc, "code", "AUTH_FAILED"), exc)
             if settings.notifyOnAuthError and settings.notifyWebhookUrl:
                 await send_notification(
                     settings.notifyWebhookUrl,
@@ -213,6 +214,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
                 )
             return None
         finally:
+            persist_client_cookies(user_cfg.stravaCookies, client)
             await client.aclose()
 
     async def _scheduled_job() -> None:

@@ -60,7 +60,7 @@ def build_effective_config(
     _apply_layer(min_time, user_rules.minTime)
 
     return EffectiveConfig(
-        stravaSessionCookie=user.stravaSessionCookie if user else "",
+        stravaCookies=user.stravaCookies if user else {},
         athleteId=user.athleteId if user else "",
         ignoreAthletes=user.ignoreAthletes if user else [],
         allowAthletes=user.allowAthletes if user else [],

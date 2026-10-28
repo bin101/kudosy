@@ -9,6 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+import yaml
 
 from kudosy.models import AppSettings, KudoRules, UserConfig
 from kudosy.store import (
@@ -96,7 +97,7 @@ def test_write_read_user_config(data_dir: Path) -> None:
     write_user_config(cfg)
     loaded = read_user_config()
     assert loaded is not None
-    assert loaded.stravaSessionCookie == "test-cookie-value"
+    assert loaded.stravaCookies == {"_strava4_session": "test-cookie-value"}
     assert loaded.athleteId == "99900001"
     assert loaded.ignoreAthletes == ["99900002", "99900003"]
     assert loaded.kudoRules.minDistance == {"Run": 5.0}
@@ -108,7 +109,7 @@ def test_write_user_config_raw(data_dir: Path) -> None:
     write_user_config_raw(raw)
     loaded = read_user_config()
     assert loaded is not None
-    assert loaded.stravaSessionCookie == "raw-cookie"
+    assert loaded.stravaCookies == {"_strava4_session": "raw-cookie"}
 
 
 def test_write_is_atomic(data_dir: Path) -> None:
@@ -298,7 +299,7 @@ def test_bootstrap_seeds_config_yaml(data_dir: Path) -> None:
     assert (data_dir / "config.yaml").exists()
     cfg = read_user_config()
     assert cfg is not None
-    assert cfg.stravaSessionCookie == ""
+    assert cfg.stravaCookies == {}
     assert cfg.athleteId == ""
 
 
@@ -315,7 +316,7 @@ def test_bootstrap_does_not_overwrite_existing_config(data_dir: Path) -> None:
     bootstrap()
     cfg = read_user_config()
     assert cfg is not None
-    assert cfg.stravaSessionCookie == "my-existing-cookie"
+    assert cfg.stravaCookies == {"_strava4_session": "my-existing-cookie"}
 
 
 def test_bootstrap_does_not_overwrite_existing_labels(data_dir: Path) -> None:
@@ -358,3 +359,106 @@ def test_read_athlete_avatars_corrupt_json(data_dir: Path) -> None:
     (data_dir / "athlete-avatars.json").write_text("{not valid json!!!", encoding="utf-8")
     result = read_athlete_avatars()
     assert result == {}
+
+
+# ── update_strava_cookies / persist_rotated_cookies ────────────────────────────
+
+
+def test_update_strava_cookies_leaves_other_fields_untouched(data_dir: Path) -> None:
+    from kudosy.store import update_strava_cookies
+
+    write_user_config(
+        UserConfig(
+            stravaCookies={"_strava4_session": "old"},
+            athleteId="77",
+            ignoreAthletes=["5"],
+            kudoRules=KudoRules(minDistance={"Run": 5.0}),
+        )
+    )
+    update_strava_cookies({"_strava4_session": "new", "strava_remember_id": "1"})
+
+    loaded = read_user_config()
+    assert loaded is not None
+    assert loaded.stravaCookies == {"_strava4_session": "new", "strava_remember_id": "1"}
+    assert loaded.athleteId == "77"
+    assert loaded.ignoreAthletes == ["5"]
+    assert loaded.kudoRules.minDistance == {"Run": 5.0}
+
+
+def test_update_strava_cookies_migrates_legacy_field_on_disk(data_dir: Path) -> None:
+    from kudosy.store import update_strava_cookies
+
+    write_user_config_raw({"stravaSessionCookie": "legacy", "athleteId": "9"})
+    update_strava_cookies({"_strava4_session": "new"})
+
+    raw = yaml.safe_load((data_dir / "config.yaml").read_text())
+    assert "stravaSessionCookie" not in raw
+    assert raw["stravaCookies"] == {"_strava4_session": "new"}
+    assert raw["athleteId"] == "9"
+
+
+def test_update_strava_cookies_without_config_creates_one(data_dir: Path) -> None:
+    from kudosy.store import update_strava_cookies
+
+    update_strava_cookies({"_strava4_session": "x"})
+    loaded = read_user_config()
+    assert loaded is not None
+    assert loaded.stravaCookies == {"_strava4_session": "x"}
+
+
+def test_persist_rotated_cookies_saves_changes(
+    data_dir: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    from kudosy.store import persist_rotated_cookies
+
+    used = {"_strava4_session": "old", "strava_remember_id": "1", "strava_remember_token": "t"}
+    write_user_config(UserConfig(stravaCookies=used, athleteId="1"))
+    current = {**used, "_strava4_session": "fresh-session-value"}
+
+    with caplog.at_level("INFO"):
+        assert persist_rotated_cookies(used, current) is True
+
+    loaded = read_user_config()
+    assert loaded is not None
+    assert loaded.stravaCookies == current
+    assert "Strava-Session erneuert" in caplog.text
+    assert "fresh-session-value" not in caplog.text
+
+
+def test_persist_rotated_cookies_noop_when_unchanged(data_dir: Path) -> None:
+    from kudosy.store import persist_rotated_cookies
+
+    used = {"_strava4_session": "same"}
+    write_user_config(UserConfig(stravaCookies=used))
+    assert persist_rotated_cookies(used, dict(used)) is False
+    assert persist_rotated_cookies(used, {}) is False
+
+
+def test_persist_rotated_cookies_skips_unusable_result(data_dir: Path) -> None:
+    from kudosy.store import persist_rotated_cookies
+
+    used = {"_strava4_session": "old"}
+    write_user_config(UserConfig(stravaCookies=used))
+    assert persist_rotated_cookies(used, {"strava_remember_id": "1"}) is False
+    loaded = read_user_config()
+    assert loaded is not None
+    assert loaded.stravaCookies == used
+
+
+def test_persist_rotated_cookies_does_not_overwrite_user_change(data_dir: Path) -> None:
+    from kudosy.store import persist_rotated_cookies
+
+    write_user_config(UserConfig(stravaCookies={"_strava4_session": "user-pasted-new"}))
+    assert (
+        persist_rotated_cookies({"_strava4_session": "old"}, {"_strava4_session": "rotated"})
+        is False
+    )
+    loaded = read_user_config()
+    assert loaded is not None
+    assert loaded.stravaCookies == {"_strava4_session": "user-pasted-new"}
+
+
+def test_persist_rotated_cookies_without_config(data_dir: Path) -> None:
+    from kudosy.store import persist_rotated_cookies
+
+    assert persist_rotated_cookies({"_strava4_session": "a"}, {"_strava4_session": "b"}) is False

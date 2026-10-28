@@ -25,7 +25,7 @@
   auth errors, and as a daily digest
 - 🪵 **Live log** — the log tab streams run output in real time via Server-Sent Events
 - ⬆️ **Update check** — footer hint when a newer release is available (optional, max. 1 check/12 h)
-- 💾 **Backup** — export/import config + settings as JSON (session cookie excluded from exports)
+- 💾 **Backup** — export/import config + settings as JSON (Strava cookies excluded from exports)
 - 🐳 **Docker-first** — single `docker compose up` to run, multi-arch images on GHCR
 - 🧪 **Test-driven** — ≥85% test coverage, pure functions tested in isolation
 
@@ -55,14 +55,17 @@ pip install -e ".[dev]"
 KUDOSY_DATA_DIR=./data KUDOSY_PORT=8080 python -m kudosy
 ```
 
-## Getting Your Strava Session Cookie
+## Getting Your Strava Cookies
 
 1. Log in to [strava.com](https://www.strava.com) in your browser.
-2. Open DevTools → **Application** → **Cookies** → `https://www.strava.com`.
-3. Copy the value of `_strava4_session`.
-4. Paste it into `data/config.yaml` as `stravaSessionCookie`, or enter it in the web UI.
+2. Open DevTools → **Network**, reload the page and select the request to `strava.com/dashboard`.
+3. Under **Request Headers**, copy the whole `Cookie` line.
+4. Paste it into the **Strava Cookies** field of the web UI (or into `data/config.yaml` as `stravaCookies`, a map of cookie name to value). Kudosy keeps only the Strava cookies and drops tracking cookies.
+5. Click **Test cookie** to check the login.
 
-The cookie expires — if Kudosy suddenly stops finding activities, refresh it here.
+Pasting the complete header includes the remember-me cookies (`strava_remember_id`, `strava_remember_token`). With them Kudosy renews the short-lived `_strava4_session` by itself and stores the rotated values, so you normally paste the header only once. If the header contains no remember-me cookies, the UI warns you: Kudosy then cannot renew the session and you have to paste a fresh one when it expires.
+
+A bare `_strava4_session` value is still accepted. Existing configs with `stravaSessionCookie` are migrated automatically.
 
 ## Configuration
 
@@ -70,7 +73,7 @@ All config lives in `./data/` (mounted as `/data` in Docker):
 
 | File | Purpose |
 |---|---|
-| `config.yaml` | Your session cookie, athlete ID, allow/deny lists, catch-all + per-sport rules |
+| `config.yaml` | Your Strava cookies (session + remember-me token), athlete ID, allow/deny lists, catch-all + per-sport rules |
 | `settings.json` | Scheduler interval, jitter, delays, quiet-hours matrix, notifications, dry-run flag |
 | `athlete-labels.json` | Cached athlete ID → name lookups |
 | `athlete-avatars.json` | Cached athlete ID → avatar URL lookups |

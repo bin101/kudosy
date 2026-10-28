@@ -191,6 +191,8 @@ export async function loadConfig() {
   $('cookieInput').placeholder = cfg.hasCookie
     ? t('config.cookie.placeholder.set', { preview: cfg.cookiePreview || '' })
     : t('config.cookie.placeholder');
+  $('cookie-remember-warning').hidden = !(cfg.hasCookie && !cfg.hasRememberToken);
+  $('btn-cookie-test').disabled = !cfg.hasCookie;
   $('athleteIdInput').value = cfg.athleteId || '';
 
   // Catch-all thresholds
@@ -217,11 +219,42 @@ export async function loadConfig() {
   }
 }
 
-export async function saveConfig() {
+/** Ask the server to try the stored cookies against Strava and show the result inline. */
+export async function testCookie() {
+  const status = $('cookie-test-status');
+  status.hidden = false;
+  status.className = 'cookie-test-status';
+  status.textContent = t('config.cookie.test.running');
   try {
+    const res = await fetchJson('/api/cookie/test', { method: 'POST' });
+    $('cookie-remember-warning').hidden = res.hasRememberToken;
+    if (res.ok) {
+      status.className = 'cookie-test-status ok';
+      status.textContent = res.athleteId
+        ? t('config.cookie.test.ok', { athleteId: res.athleteId })
+        : t('config.cookie.test.okNoId');
+    } else {
+      const key = `error.${res.code}`;
+      const msg = t(key) !== key ? t(key) : res.code;
+      status.className = 'cookie-test-status fail';
+      status.textContent = t('config.cookie.test.fail', { msg });
+    }
+  } catch (err) {
+    status.className = 'cookie-test-status fail';
+    status.textContent = t('config.cookie.test.fail', { msg: err.message });
+  }
+}
+
+/**
+ * Save the config form. The cookie textarea is only sent when `includeCookie`
+ * is set (on blur), never by the debounced auto-save of other fields.
+ */
+export async function saveConfig({ includeCookie = false } = {}) {
+  try {
+    const pastedCookie = includeCookie ? $('cookieInput').value.trim() : '';
     const { allowAthletes, ignoreAthletes } = getAthleteLists($('athlete-manage-list'));
     const cfg = {
-      stravaSessionCookie: $('cookieInput').value.trim(),
+      stravaSessionCookie: pastedCookie,
       athleteId:           $('athleteIdInput').value.trim(),
       ignoreAthletes,
       allowAthletes,
@@ -243,6 +276,18 @@ export async function saveConfig() {
     };
     if (!cfg.kudoRules.activityNames.length) delete cfg.kudoRules.activityNames;
     await putJson('/api/config', cfg);
+    if (cfg.stravaSessionCookie) {
+      // The pasted input is stored server-side now; clear the field so later
+      // auto-saves cannot overwrite cookies Strava rotated in the meantime.
+      // Only if untouched: text typed while the PUT was in flight must survive.
+      if ($('cookieInput').value.trim() === pastedCookie) $('cookieInput').value = '';
+      const saved = await fetchJson('/api/config');
+      $('cookieInput').placeholder = t('config.cookie.placeholder.set', {
+        preview: saved.cookiePreview || '',
+      });
+      $('btn-cookie-test').disabled = false;
+      await testCookie();
+    }
   } catch (err) {
     toast(err.message, 'error');
   }
@@ -254,6 +299,7 @@ export function initConfigTab() {
   // Prevent accidental submit via Enter key (no submit button present).
   $('form-config').addEventListener('submit', e => e.preventDefault());
 
+  $('btn-cookie-test').addEventListener('click', testCookie);
   $('btn-add-athlete').addEventListener('click', openAthleteSearchModal);
   $('btn-add-distance').addEventListener('click', () => { addRuleRow($('tbody-distance')); debouncedSaveConfig(); });
   $('btn-add-time').addEventListener('click',     () => { addRuleRow($('tbody-time'));     debouncedSaveConfig(); });
@@ -280,8 +326,13 @@ export function initConfigTab() {
   });
 
   // Auto-save: native form inputs (text, number) and selects
-  $('form-config').addEventListener('input',  debouncedSaveConfig);
-  $('form-config').addEventListener('change', debouncedSaveConfig);
+  // The cookie textarea is excluded: it is saved on blur instead (see below).
+  const autoSave = e => { if (e.target.id !== 'cookieInput') debouncedSaveConfig(); };
+  $('form-config').addEventListener('input',  autoSave);
+  $('form-config').addEventListener('change', autoSave);
+  $('cookieInput').addEventListener('blur', () => {
+    if ($('cookieInput').value.trim()) saveConfig({ includeCookie: true });
+  });
 
   // Auto-save: Allow/Deny toggle buttons (custom elements, not form inputs)
   $('athlete-manage-list').addEventListener('click', e => {

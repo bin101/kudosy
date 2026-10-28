@@ -55,7 +55,7 @@ class TestCatchAll:
         cfg = build_effective_config(None)
         assert cfg.kudoRules.minDistance == {}
         assert cfg.kudoRules.minTime == {}
-        assert cfg.stravaSessionCookie == ""
+        assert cfg.stravaCookies == {}
         assert cfg.athleteId == ""
         assert cfg.ignoreAthletes == []
 
