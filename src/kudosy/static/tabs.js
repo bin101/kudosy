@@ -6,6 +6,7 @@ import { SUPPORTED, LANG_LABELS, t, getLang, setLang } from './i18n.js';
 import { state } from './state.js';
 import { pollStatus, startPolling, stopPolling } from './status.js';
 import { loadFeed, renderFeed } from './feed.js';
+import { updateCookieButtons } from './config.js';
 import { loadStats } from './stats.js';
 import { updateThemeSelectLabels } from './theme.js';
 
@@ -69,6 +70,7 @@ export function initLangSelect() {
   sel.addEventListener('change', () => {
     setLang(sel.value, () => {
       updateThemeSelectLabels();
+      updateCookieButtons();  // the test button's tooltip is set from JS, not data-i18n
       // Re-render dynamic areas after language change
       pollStatus();
       const activeFeedPane = document.querySelector('#tab-feed.active');

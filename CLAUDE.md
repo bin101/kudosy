@@ -162,7 +162,7 @@ docker compose up --build   # builds image, starts on :8080
 | `effective_config.py` | Pure: `build_effective_config(user)` — two-layer merge (catchAll → user per-sport) |
 | `decision.py` | Pure: `decide(activity, effective_config) -> Decision` — reads typed `ActivityStats` fields directly |
 | `feed.py` | `FeedParser` protocol + `StructuredFeedParser` — parses JSON XHR feed response into `list[Activity]` |
-| `strava_client.py` | httpx async (real cookie jar, `current_cookies()` exposes `Set-Cookie` rotations): CSRF, JSON feed fetch (`/dashboard/feed` XHR), kudo POST, athlete lookup, name search, `fetch_current_athlete_id` |
+| `strava_client.py` | httpx async (real cookie jar, `current_cookies()` exposes `Set-Cookie` rotations): multi-source CSRF (see Brittleness note), JSON feed fetch (`/dashboard/feed` XHR), kudo POST, athlete lookup, name search, `fetch_current_athlete_id` |
 | `engine.py` | Orchestrator: run-kudos loop with delays, dry-run, RunResult |
 | `notify.py` | Pure: `send_notification(url, payload, *, post_fn)` — HTTP POST injected for tests; `build_run_payload`, `build_auth_error_payload` |
 | `store.py` | `/data` file I/O — atomic YAML/JSON writes, `update_strava_cookies` / `persist_rotated_cookies` (store refreshed cookies), bootstrap, one-time migration of legacy `defaults.yaml`; athlete-labels.json + athlete-avatars.json; `append_run_history` / `read_run_history` |
@@ -207,6 +207,10 @@ POST /api/logout                    — clears the session cookie
 undocumented web session endpoints. The JSON feed format (`GET /dashboard/feed?feed_type=following&athlete_id=<id>`)
 is isolated in `feed.py` (`StructuredFeedParser`) and `strava_client.py`.
 `GET /api/athletes/search` HTML parsing is isolated in `strava_client.py` (`_extract_search_results`).
+CSRF token (verified 2026-10-28): `/dashboard` is a Next.js page without `<meta name="csrf-token">`, so
+`get_csrf_token()` uses `/dashboard` as the auth probe and then tries, in order: the dashboard meta tag,
+the `csrf-token` response header of `/frontend/athletes/current` (athlete ID cached from the same
+response), and the meta tag of the Rails page `/athlete/training`. The kudo endpoint is unchanged.
 If Strava changes their response format, only these two modules need updating.
 
 **Auth note:** all `/api/*` routes except `/api/auth-status`, `/api/login`, and `/api/logout`
