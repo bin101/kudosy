@@ -7,11 +7,14 @@ Authentication: uses the user's Strava browser cookies (``_strava4_session`` plu
 remember-me pair). They live in a real cookie jar, so ``Set-Cookie`` rotations — e.g. a
 fresh session issued from the remember-me token — are sent on automatically and can be
 read back via :meth:`StravaClient.current_cookies` for persistence.
-The CSRF token is looked up in several places because Strava migrated ``/dashboard``
-to Next.js (verified 2026-10-28): that page no longer carries ``<meta name="csrf-token">``
-(only an unrelated ``<meta name="csrf">`` in another format). See
-:meth:`StravaClient.get_csrf_token` for the sources and their order. The kudo endpoint
-itself (``POST /feed/activity/<id>/kudo`` + ``x-csrf-token``) is unchanged.
+
+Dashboard (verified 2026-10-28 via HAR): Strava migrated ``/dashboard`` to Next.js
+(``GET /dashboard`` -> 302 ``/dashboard?dashboard_next=1``). One request now yields
+everything needed to start a run: the CSRF token (``<meta name="csrf">``, the same kind of
+token as the Rails ``csrf-token`` meta), the athlete ID and the first feed page, both
+embedded in ``__NEXT_DATA__``. See :meth:`StravaClient.get_csrf_token` for the sources and
+their order. The kudo endpoint itself (``POST /feed/activity/<id>/kudo`` +
+``x-csrf-token``) is unchanged.
 
 Feed format (verified 2026-07-01 via HAR capture):
   The following feed is a JSON XHR endpoint::
@@ -21,10 +24,14 @@ Feed format (verified 2026-07-01 via HAR capture):
       X-Requested-With: XMLHttpRequest
       Accept-Language: en   ← forces English stat labels & decimal format
 
+  The first page is already embedded in the dashboard HTML
+  (``__NEXT_DATA__`` -> ``props.pageProps.dashboardData.feed``, same shape), so the XHR is
+  only needed for pages 2+ (not verified live — failures there degrade gracefully).
+
   Pagination: every response carries ``{"entries": [...], "pagination": {"hasMore": bool}}``.
   Each entry (Activity **and** Challenge) includes::
 
-      "cursorData": {"updated_at": <unix seconds>, "rank": <float>}
+      "cursorData": {"updated_at": <unix seconds>, "rank": <int or float>}
 
   The next (older) page is fetched by appending to the same URL::
 
@@ -67,7 +74,7 @@ _DASHBOARD_URL = f"{_BASE}/dashboard"
 _FEED_URL = f"{_BASE}/dashboard/feed"
 _CURRENT_ATHLETE_URL = f"{_BASE}/frontend/athletes/current"
 _KUDO_URL = f"{_BASE}/feed/activity/{{activity_id}}/kudo"
-# Rails page (still has <meta name="csrf-token">) used as the last-resort CSRF source.
+# Rails page (has <meta name="csrf-token">) used as the last-resort CSRF source.
 _TRAINING_URL = f"{_BASE}/athlete/training"
 _ATHLETE_URL = f"{_BASE}/athletes/{{athlete_id}}"
 _ATHLETE_SEARCH_URL = f"{_BASE}/athletes/search"
@@ -79,10 +86,14 @@ _FEED_TARGET_ACTIVITIES = 100
 # Human-like pause between page requests (seconds). Keeps us gentle with Strava.
 _FEED_PAGE_DELAY_RANGE = (0.5, 1.5)
 
-_CSRF_RE = re.compile(r'<meta\s+name="csrf-token"\s+content="([^"]+)"', re.IGNORECASE)
+# Rails pages call the meta "csrf-token", the Next.js dashboard "csrf"; same token kind.
+_CSRF_RE = re.compile(r'<meta\s+name="csrf(?:-token)?"\s+content="([^"]+)"', re.IGNORECASE)
+# Plausibility only (URL-safe Base64, no fixed length): keeps a stray non-token meta out.
+_CSRF_PLAUSIBLE_RE = re.compile(r"^[A-Za-z0-9_\-+/=]{40,}$")
 
-# Athlete search: results are embedded in a <script id="__NEXT_DATA__"> tag
-# under props.pageProps.searchResults (verified from HAR traffic capture).
+# Next.js pages embed their data in a <script id="__NEXT_DATA__"> tag: the athlete search
+# results under props.pageProps.searchResults, the dashboard's athlete ID and first feed
+# page under props.currentAthletePreload / props.pageProps.dashboardData (HAR captures).
 _NEXT_DATA_RE = re.compile(
     r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>',
     re.DOTALL,
@@ -97,6 +108,8 @@ _BROWSER_HEADERS = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "de-DE,de;q=0.9,en;q=0.8",
 }
+# English labels and decimal format keep stat parsing deterministic (dashboard + feed XHR).
+_EN_HEADERS = {"Accept-Language": "en"}
 
 
 def _mask_cookie(cookie: str) -> str:
@@ -182,6 +195,8 @@ class StravaClient:
         self._auth_failed = False
         # Athlete ID read while looking for the CSRF token; saves a second request.
         self._athlete_id: str | None = None
+        # First feed page embedded in the dashboard HTML; consumed by fetch_following_feed.
+        self._dashboard_feed: dict[str, Any] | None = None
         self._client: httpx.AsyncClient | None = None
         # Inject sleep/rng for deterministic testing (analogous to humanizer.py).
         self._sleep: Callable[[float], Awaitable[None]] = (
@@ -279,17 +294,18 @@ class StravaClient:
     async def get_csrf_token(self) -> str:
         """Auth probe plus CSRF token lookup.
 
-        ``GET /dashboard`` doubles as the login check. The token is then taken from
-        the first of these sources that has one:
+        ``GET /dashboard`` (English) doubles as the login check. Its ``__NEXT_DATA__``
+        also yields the athlete ID and the first feed page, cached for
+        :meth:`fetch_current_athlete_id` and :meth:`fetch_following_feed`. The token is
+        taken from the first of these sources that has a plausible one:
 
-        1. ``<meta name="csrf-token">`` on the dashboard (the old Rails page).
-        2. The ``csrf-token`` *response header* of ``/frontend/athletes/current``
-           (the Next.js dashboard has no meta tag). The athlete ID in that response
-           is cached for :meth:`fetch_current_athlete_id`.
+        1. ``<meta name="csrf">`` (Next.js dashboard) or ``<meta name="csrf-token">``
+           (old Rails dashboard) on the dashboard.
+        2. The ``csrf-token`` *response header* of ``/frontend/athletes/current``.
+           The athlete ID in that response is cached as well.
         3. ``<meta name="csrf-token">`` on ``/athlete/training`` (a Rails page).
 
-        The Next.js dashboard's ``<meta name="csrf">`` is deliberately not used: its
-        format differs and it is unproven as a kudo token.
+        Sources 2 and 3 are fallbacks for a dashboard without the meta tag.
 
         Raises :class:`~kudosy.feed.AuthError` on a logged-out session and
         ``RuntimeError`` when no source yields a token.
@@ -298,25 +314,34 @@ class StravaClient:
         client = self._get_client()
         tried: list[str] = []
 
-        resp = await self._get_with_retry(client, _DASHBOARD_URL, timeout=10.0)
+        resp = await self._get_with_retry(client, _DASHBOARD_URL, headers=_EN_HEADERS, timeout=10.0)
         self._check_auth(resp, probe=True)
-        m = _CSRF_RE.search(resp.text)
-        tried.append(self._log_csrf_source("/dashboard", resp, m.group(1) if m else None))
-        if m:
-            return self._csrf_found("/dashboard meta tag", m.group(1))
+        athlete_id, self._dashboard_feed = _parse_next_data(resp.text)
+        self._athlete_id = athlete_id or self._athlete_id
+        log.debug(
+            "Dashboard __NEXT_DATA__: athlete id %s, embedded feed %s",
+            "found" if athlete_id else "missing",
+            "found" if self._dashboard_feed else "missing",
+        )
+        token = _csrf_from_html(resp.text)
+        tried.append(self._log_csrf_source("/dashboard", resp, token))
+        if token:
+            return self._csrf_found("/dashboard meta tag", token)
 
         resp = await self._get_with_retry(
             client, _CURRENT_ATHLETE_URL, headers={"Accept": "application/json"}, timeout=10.0
         )
         self._check_auth(resp)
         # The athlete ID is optional data and must never break the CSRF flow.
+        identified: str | None = None
         with contextlib.suppress(ValueError):
-            self._athlete_id = _athlete_id_from(resp.json())
+            identified = _athlete_id_from(resp.json())
+        self._athlete_id = identified or self._athlete_id
         # Only trust the header from a successful response that identified an athlete:
         # an anonymous session may get a csrf-token header too. Repeated headers are merged
         # by httpx with ", ", so a comma means the value is not a single token.
         header_token = resp.headers.get("csrf-token", "").strip()
-        if not (resp.is_success and self._athlete_id) or "," in header_token:
+        if not (resp.is_success and identified) or "," in header_token:
             header_token = ""
         tried.append(
             self._log_csrf_source("/frontend/athletes/current", resp, header_token or None)
@@ -326,10 +351,10 @@ class StravaClient:
 
         resp = await self._get_with_retry(client, _TRAINING_URL, timeout=10.0)
         self._check_auth(resp)
-        m = _CSRF_RE.search(resp.text)
-        tried.append(self._log_csrf_source("/athlete/training", resp, m.group(1) if m else None))
-        if m:
-            return self._csrf_found("/athlete/training meta tag", m.group(1))
+        token = _csrf_from_html(resp.text)
+        tried.append(self._log_csrf_source("/athlete/training", resp, token))
+        if token:
+            return self._csrf_found("/athlete/training meta tag", token)
 
         log.warning("No CSRF token found (%s)", "; ".join(tried))
         raise RuntimeError("Could not extract CSRF token from any known Strava source")
@@ -338,8 +363,7 @@ class StravaClient:
     def _log_csrf_source(path: str, resp: httpx.Response, token: str | None) -> str:
         """Log one CSRF source attempt and return the summary line.
 
-        Only the token's length is logged, never its value: a 69- vs 86-character
-        token tells the Next.js format from the Rails one at a glance.
+        Only the token's length is logged, never its value.
         """
         line = (
             f"{path} -> {resp.status_code}, page={_page_kind(resp.text)}, "
@@ -357,8 +381,9 @@ class StravaClient:
         """Return the numeric athlete ID string for the current session.
 
         Fetches ``/frontend/athletes/current`` and reads
-        ``currentAthlete.id_str``.  Returns ``None`` on any error. Reuses the ID
-        :meth:`get_csrf_token` already read from that endpoint, if any.
+        ``currentAthlete.id_str``.  Returns ``None`` on any error. Makes no request
+        when :meth:`get_csrf_token` already read the ID (from the dashboard's
+        ``__NEXT_DATA__`` or that endpoint).
         """
         if self._athlete_id:
             return self._athlete_id
@@ -386,8 +411,10 @@ class StravaClient:
     ) -> dict[str, Any]:
         """Fetch the following activity feed, merging multiple pages into one dict.
 
-        Calls ``GET /dashboard/feed?feed_type=following&athlete_id=<id>`` and
-        follows Strava's cursor pagination (``before`` / ``cursor`` params
+        Page 1 comes from the dashboard HTML when :meth:`get_csrf_token` found a usable
+        embedded feed (entries of ``feedType`` ``following``); otherwise, and for every
+        further page, it calls ``GET /dashboard/feed?feed_type=following&athlete_id=<id>``
+        and follows Strava's cursor pagination (``before`` / ``cursor`` params
         derived from each page's last entry ``cursorData``) until:
 
         * ``pagination.hasMore`` is false, or
@@ -410,33 +437,62 @@ class StravaClient:
             equivalent to what the caller would see from a single-page response.
             :class:`~kudosy.feed.StructuredFeedParser` can consume it unchanged.
 
+        A failing XHR for page 2+ (HTML, 4xx/5xx, unexpected format) only logs a
+        WARNING and ends pagination with the entries collected so far. One WARNING
+        also reports entries whose ``locale`` is not ``en``.
+
         Raises:
             AuthError: if the session cookie is expired/invalid.
+            RuntimeError: if page 1 is neither embedded in the dashboard nor
+                          readable from the XHR (the message carries status,
+                          content type and path, never any values).
         """
         client = self._get_client()
         feed_headers = {
             "Accept": "application/json, text/plain, */*",
             "X-Requested-With": "XMLHttpRequest",
             "Referer": _DASHBOARD_URL,
-            "Accept-Language": "en",
+            **_EN_HEADERS,
         }
+        embedded = self._take_embedded_feed(athlete_id)
         params: dict[str, Any] = {"feed_type": "following", "athlete_id": athlete_id}
         merged_entries: list[Any] = []
-        seen_activity_ids: set[Any] = set()
+        seen_activity_ids: set[str] = set()
         last_pagination: dict[str, Any] = {}
 
         for page_num in range(_FEED_MAX_PAGES):
-            resp = await self._get_with_retry(
-                client, _FEED_URL, params=params, headers=feed_headers, timeout=15.0
-            )
-            self._check_auth(resp)
-            payload: dict[str, Any] = resp.json()
-            entries: list[Any] = payload.get("entries") or []
+            if page_num == 0 and embedded is not None:
+                log.info("Feed: Seite 1 aus Dashboard")
+                payload = embedded
+            else:
+                resp = await self._get_with_retry(
+                    client, _FEED_URL, params=params, headers=feed_headers, timeout=15.0
+                )
+                self._check_auth(resp)
+                parsed, detail = _feed_payload(resp)
+                if parsed is None:
+                    if page_num == 0:
+                        raise RuntimeError(
+                            "Feed page 1 unavailable: no usable feed embedded in the dashboard"
+                            f" and the feed request failed ({detail})"
+                        )
+                    log.warning(
+                        "Feed page %d could not be read (%s) — stopping pagination with"
+                        " %d activities",
+                        page_num + 1,
+                        detail,
+                        len(seen_activity_ids),
+                    )
+                    break
+                payload = parsed
+            entries: list[Any] = payload["entries"]
             last_pagination = payload.get("pagination") or {}
 
             for entry in entries:
                 act = entry.get("activity") if isinstance(entry, dict) else None
-                aid = act.get("id") if isinstance(act, dict) else None
+                # Page 1 (embedded JSON) and pages 2+ (XHR) may type the same ID differently.
+                raw_id = act.get("id") if isinstance(act, dict) else None
+                aid = str(raw_id) if raw_id is not None else None
                 if aid is not None and aid in seen_activity_ids:
                     continue
                 if aid is not None:
@@ -473,6 +529,7 @@ class StravaClient:
             len(seen_activity_ids),
             _FEED_MAX_PAGES,
         )
+        _warn_on_foreign_locale(merged_entries)
 
         merged: dict[str, Any] = {"entries": merged_entries, "pagination": last_pagination}
         if dump_raw is not None:
@@ -486,6 +543,29 @@ class StravaClient:
             except OSError as exc:
                 log.debug("Could not dump raw feed: %s", exc)
         return merged
+
+    def _take_embedded_feed(self, athlete_id: str) -> dict[str, Any] | None:
+        """Hand out (once) the dashboard's embedded feed page if it is usable.
+
+        Usable means: the entries are a list, at least one carries
+        ``feedType == "following"``, none has a ``locale`` other than ``en`` (labels
+        would not parse; the XHR is asked for English instead) and it belongs to the
+        requested athlete.
+        """
+        feed, self._dashboard_feed = self._dashboard_feed, None
+        if feed is None:
+            return None
+        if self._athlete_id and self._athlete_id != str(athlete_id):
+            return None
+        entries = feed.get("entries")
+        if not isinstance(entries, list) or not any(
+            isinstance(e, dict) and e.get("feedType") == "following" for e in entries
+        ):
+            return None
+        if any(isinstance(e, dict) and e.get("locale") not in (None, "en") for e in entries):
+            # The XHR page replacing it is checked by the aggregated locale warning.
+            return None
+        return feed
 
     async def send_kudos(self, activity_id: str, csrf_token: str) -> bool:
         """POST a kudo for *activity_id*. Returns True on success."""
@@ -632,12 +712,87 @@ class StravaClient:
             raise err
 
 
+def _csrf_from_html(html: str) -> str | None:
+    """First plausible ``csrf`` / ``csrf-token`` meta value of a page, or ``None``."""
+    for m in _CSRF_RE.finditer(html):
+        if _CSRF_PLAUSIBLE_RE.match(m.group(1)):
+            return m.group(1)
+    return None
+
+
+def _parse_next_data(html: str) -> tuple[str | None, dict[str, Any] | None]:
+    """Athlete ID and embedded feed page from a Next.js dashboard's ``__NEXT_DATA__``.
+
+    The ID is ``props.currentAthletePreload.id_str`` (fallback
+    ``props.pageProps.dashboardData.currentAthlete``); the feed is
+    ``props.pageProps.dashboardData.feed`` (``{"entries": [...], "pagination": {...}}``).
+    Total: a missing tag, invalid JSON or any unexpected shape yields ``None`` for the
+    affected part, never an exception.
+    """
+    m = _NEXT_DATA_RE.search(html)
+    if not m:
+        return None, None
+    try:
+        data = json.loads(m.group(1))
+    except (ValueError, RecursionError):
+        return None, None
+    props = data.get("props") if isinstance(data, dict) else None
+    if not isinstance(props, dict):
+        return None, None
+    page_props = props.get("pageProps")
+    dashboard = page_props.get("dashboardData") if isinstance(page_props, dict) else None
+    if not isinstance(dashboard, dict):
+        dashboard = {}
+    athlete_id = _athlete_id_from(
+        {"currentAthlete": props.get("currentAthletePreload")}
+    ) or _athlete_id_from(dashboard)
+    feed = dashboard.get("feed")
+    return athlete_id, feed if isinstance(feed, dict) else None
+
+
+def _feed_payload(resp: httpx.Response) -> tuple[dict[str, Any] | None, str]:
+    """Feed XHR body as ``{"entries": list, ...}``, or ``None`` plus a value-free reason."""
+    detail = (
+        f"HTTP {resp.status_code}, content-type {resp.headers.get('content-type', '-')!r},"
+        f" path {resp.url.path}"
+    )
+    if not resp.is_success:
+        return None, detail
+    try:
+        payload = resp.json()
+    except ValueError:
+        return None, f"{detail}, body is not JSON"
+    if not isinstance(payload, dict) or not isinstance(payload.get("entries"), list):
+        return None, f"{detail}, unexpected JSON shape"
+    return payload, detail
+
+
+def _warn_on_foreign_locale(entries: list[Any]) -> None:
+    """One aggregated WARNING if entries come in a non-English locale (labels may not parse)."""
+    foreign = [
+        e["locale"] for e in entries if isinstance(e, dict) and e.get("locale") not in (None, "en")
+    ]
+    if foreign:
+        log.warning(
+            "%d of %d feed entries have a locale other than 'en' (%s) — stat labels may not parse",
+            len(foreign),
+            len(entries),
+            ", ".join(sorted({str(loc) for loc in foreign})),
+        )
+
+
 def _athlete_id_from(data: Any) -> str | None:
     """``currentAthlete.id_str`` (or numeric ``id``) from a ``/frontend/athletes/current`` body."""
     current = data.get("currentAthlete") if isinstance(data, dict) else None
     if not isinstance(current, dict):
         return None
-    return current.get("id_str") or str(current.get("id") or "") or None
+    id_str = current.get("id_str")
+    if isinstance(id_str, str) and id_str:
+        return id_str
+    numeric = current.get("id")
+    if isinstance(numeric, int) and not isinstance(numeric, bool) and numeric:
+        return str(numeric)
+    return None
 
 
 def _next_cursor_params(entries: list[Any]) -> dict[str, int] | None:

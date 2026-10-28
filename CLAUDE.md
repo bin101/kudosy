@@ -162,7 +162,7 @@ docker compose up --build   # builds image, starts on :8080
 | `effective_config.py` | Pure: `build_effective_config(user)` — two-layer merge (catchAll → user per-sport) |
 | `decision.py` | Pure: `decide(activity, effective_config) -> Decision` — reads typed `ActivityStats` fields directly |
 | `feed.py` | `FeedParser` protocol + `StructuredFeedParser` — parses JSON XHR feed response into `list[Activity]` |
-| `strava_client.py` | httpx async (real cookie jar, `current_cookies()` exposes `Set-Cookie` rotations): multi-source CSRF (see Brittleness note), JSON feed fetch (`/dashboard/feed` XHR), kudo POST, athlete lookup, name search, `fetch_current_athlete_id` |
+| `strava_client.py` | httpx async (real cookie jar, `current_cookies()` exposes `Set-Cookie` rotations): dashboard `__NEXT_DATA__` as source for CSRF token, athlete ID and feed page 1 plus multi-source CSRF fallbacks (see Brittleness note), JSON feed fetch (`/dashboard/feed` XHR for pages 2+), kudo POST, athlete lookup, name search, `fetch_current_athlete_id` |
 | `engine.py` | Orchestrator: run-kudos loop with delays, dry-run, RunResult |
 | `notify.py` | Pure: `send_notification(url, payload, *, post_fn)` — HTTP POST injected for tests; `build_run_payload`, `build_auth_error_payload` |
 | `store.py` | `/data` file I/O — atomic YAML/JSON writes, `update_strava_cookies` / `persist_rotated_cookies` (store refreshed cookies), bootstrap, one-time migration of legacy `defaults.yaml`; athlete-labels.json + athlete-avatars.json; `append_run_history` / `read_run_history` |
@@ -207,10 +207,17 @@ POST /api/logout                    — clears the session cookie
 undocumented web session endpoints. The JSON feed format (`GET /dashboard/feed?feed_type=following&athlete_id=<id>`)
 is isolated in `feed.py` (`StructuredFeedParser`) and `strava_client.py`.
 `GET /api/athletes/search` HTML parsing is isolated in `strava_client.py` (`_extract_search_results`).
-CSRF token (verified 2026-10-28): `/dashboard` is a Next.js page without `<meta name="csrf-token">`, so
-`get_csrf_token()` uses `/dashboard` as the auth probe and then tries, in order: the dashboard meta tag,
-the `csrf-token` response header of `/frontend/athletes/current` (athlete ID cached from the same
-response), and the meta tag of the Rails page `/athlete/training`. The kudo endpoint is unchanged.
+Dashboard (verified 2026-10-28): `/dashboard` is a Next.js page (`GET /dashboard` redirects to
+`/dashboard?dashboard_next=1`) and the single source for a run's start data. `get_csrf_token()` requests it
+once (`Accept-Language: en`, also the auth probe) and reads from that response: the CSRF token from
+`<meta name="csrf">` (or `csrf-token` on the old Rails page; any URL-safe Base64 string of 40+ chars),
+the athlete ID and the first feed page from `__NEXT_DATA__` (`_parse_next_data`: `currentAthletePreload.id_str`,
+`pageProps.dashboardData.feed`, same shape as the XHR). `fetch_following_feed()` uses that embedded page 1
+(if its entries have `feedType == "following"`) and only pages 2+ come from the `/dashboard/feed` XHR; if
+that XHR fails (not verified live) it logs a WARNING and keeps the entries collected so far. Without a
+usable page 1 anywhere it raises `RuntimeError` with status/content type/path. Without a meta token,
+fallbacks are the `csrf-token` response header of `/frontend/athletes/current` and the meta tag of the
+Rails page `/athlete/training`. The kudo endpoint is unchanged.
 If Strava changes their response format, only these two modules need updating.
 
 **Auth note:** all `/api/*` routes except `/api/auth-status`, `/api/login`, and `/api/logout`
