@@ -5,6 +5,15 @@ All notable changes to Kudosy will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.6](https://github.com/bin101/kudosy/compare/v1.9.5...v1.9.6) (2026-10-28)
+
+
+### Bug Fixes
+
+* **auth:** get CSRF token from sources that still work on the Next.js dashboard ([61dc701](https://github.com/bin101/kudosy/commit/61dc701bafa97a155f0eb665717f11bf788d8050))
+* **auth:** use the Next.js dashboard as source for CSRF token, athlete id and first feed page ([adce06f](https://github.com/bin101/kudosy/commit/adce06f540fc8fe3eba2755d0b1b136cf59c7429))
+* surface Strava errors honestly and skip activities with a missing stat under minimum rules ([9ea2703](https://github.com/bin101/kudosy/commit/9ea2703cf3166e90eb93b4e453fd1faa2be23bb1))
+
 ## [1.9.5](https://github.com/bin101/kudosy/compare/v1.9.4...v1.9.5) (2026-10-28)
 
 
