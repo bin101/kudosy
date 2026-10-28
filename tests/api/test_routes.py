@@ -1276,3 +1276,52 @@ def test_failing_persist_in_route_does_not_break_response(app_client: TestClient
     assert resp.status_code == 200
     assert resp.json()["ok"] is True
     mock_instance.aclose.assert_awaited_once()
+
+
+def test_cookie_test_ok_with_nextjs_dashboard(app_client: TestClient) -> None:
+    """Next.js dashboard without a csrf meta tag: the token comes from the athlete header."""
+    import httpx
+    import respx
+
+    with respx.mock:
+        respx.get("https://www.strava.com/dashboard").mock(
+            return_value=httpx.Response(
+                200, text='<html><meta name="csrf" content="not-the-token"></html>'
+            )
+        )
+        respx.get("https://www.strava.com/frontend/athletes/current").mock(
+            return_value=httpx.Response(
+                200,
+                json={"currentAthlete": {"id_str": "20000001"}},
+                headers={"csrf-token": "hdr-token"},
+            )
+        )
+        resp = app_client.post("/api/cookie/test")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["ok"] is True
+    assert body["athleteId"] == "20000001"
+
+
+def test_cookie_test_null_current_athlete_is_structured_not_500(app_client: TestClient) -> None:
+    import httpx
+    import respx
+
+    with respx.mock:
+        respx.get("https://www.strava.com/dashboard").mock(
+            return_value=httpx.Response(200, text="<html></html>")
+        )
+        respx.get("https://www.strava.com/frontend/athletes/current").mock(
+            return_value=httpx.Response(
+                200, json={"currentAthlete": None}, headers={"csrf-token": "hdr-token"}
+            )
+        )
+        respx.get("https://www.strava.com/athlete/training").mock(
+            return_value=httpx.Response(200, text="<html></html>")
+        )
+        resp = app_client.post("/api/cookie/test")
+
+    assert resp.status_code == 200
+    assert resp.json()["ok"] is False
+    assert resp.json()["code"] == "UNEXPECTED_RESPONSE"

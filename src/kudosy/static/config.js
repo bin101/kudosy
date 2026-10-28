@@ -192,7 +192,8 @@ export async function loadConfig() {
     ? t('config.cookie.placeholder.set', { preview: cfg.cookiePreview || '' })
     : t('config.cookie.placeholder');
   $('cookie-remember-warning').hidden = !(cfg.hasCookie && !cfg.hasRememberToken);
-  $('btn-cookie-test').disabled = !cfg.hasCookie;
+  cookieSaved = !!cfg.hasCookie;
+  updateCookieButtons();
   $('athleteIdInput').value = cfg.athleteId || '';
 
   // Catch-all thresholds
@@ -217,6 +218,23 @@ export async function loadConfig() {
   for (const n of (cfg.kudoRules?.activityNames || [])) {
     addListItem(namesList, n, t('config.activityNames.placeholder'));
   }
+}
+
+// Whether the server holds a saved cookie (from GET /api/config / after a save).
+let cookieSaved = false;
+// True while "Save cookie" is saving and testing; keeps the button from double-saving.
+let cookieBusy = false;
+
+/**
+ * "Save cookie" needs pasted text; "Test cookie" needs a saved cookie and an empty
+ * field — a test while text is pending would run against the old, stored cookies.
+ */
+export function updateCookieButtons() {
+  const pending = $('cookieInput').value.trim() !== '';
+  $('btn-cookie-save').disabled = !pending || cookieBusy;
+  const testBtn = $('btn-cookie-test');
+  testBtn.disabled = !cookieSaved || pending;
+  testBtn.title = pending ? t('config.cookie.test.pending') : '';
 }
 
 /** Ask the server to try the stored cookies against Strava and show the result inline. */
@@ -247,9 +265,13 @@ export async function testCookie() {
 
 /**
  * Save the config form. The cookie textarea is only sent when `includeCookie`
- * is set (on blur), never by the debounced auto-save of other fields.
+ * is set (via "Save cookie"), never by the debounced auto-save of other fields.
  */
 export async function saveConfig({ includeCookie = false } = {}) {
+  if (includeCookie) {
+    cookieBusy = true;
+    updateCookieButtons();
+  }
   try {
     const pastedCookie = includeCookie ? $('cookieInput').value.trim() : '';
     const { allowAthletes, ignoreAthletes } = getAthleteLists($('athlete-manage-list'));
@@ -285,11 +307,17 @@ export async function saveConfig({ includeCookie = false } = {}) {
       $('cookieInput').placeholder = t('config.cookie.placeholder.set', {
         preview: saved.cookiePreview || '',
       });
-      $('btn-cookie-test').disabled = false;
+      cookieSaved = true;
+      updateCookieButtons();
       await testCookie();
     }
   } catch (err) {
     toast(err.message, 'error');
+  } finally {
+    if (includeCookie) {
+      cookieBusy = false;
+      updateCookieButtons();
+    }
   }
 }
 
@@ -300,6 +328,8 @@ export function initConfigTab() {
   $('form-config').addEventListener('submit', e => e.preventDefault());
 
   $('btn-cookie-test').addEventListener('click', testCookie);
+  $('btn-cookie-save').addEventListener('click', () => saveConfig({ includeCookie: true }));
+  $('cookieInput').addEventListener('input', updateCookieButtons);
   $('btn-add-athlete').addEventListener('click', openAthleteSearchModal);
   $('btn-add-distance').addEventListener('click', () => { addRuleRow($('tbody-distance')); debouncedSaveConfig(); });
   $('btn-add-time').addEventListener('click',     () => { addRuleRow($('tbody-time'));     debouncedSaveConfig(); });
@@ -326,13 +356,10 @@ export function initConfigTab() {
   });
 
   // Auto-save: native form inputs (text, number) and selects
-  // The cookie textarea is excluded: it is saved on blur instead (see below).
+  // The cookie textarea is excluded: it is only saved via the "Save cookie" button.
   const autoSave = e => { if (e.target.id !== 'cookieInput') debouncedSaveConfig(); };
   $('form-config').addEventListener('input',  autoSave);
   $('form-config').addEventListener('change', autoSave);
-  $('cookieInput').addEventListener('blur', () => {
-    if ($('cookieInput').value.trim()) saveConfig({ includeCookie: true });
-  });
 
   // Auto-save: Allow/Deny toggle buttons (custom elements, not form inputs)
   $('athlete-manage-list').addEventListener('click', e => {

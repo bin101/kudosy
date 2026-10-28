@@ -43,6 +43,12 @@ async def test_get_csrf_token_missing_raises() -> None:
     respx.get("https://www.strava.com/dashboard").mock(
         return_value=httpx.Response(200, text="<html><head></head><body>no csrf</body></html>")
     )
+    respx.get("https://www.strava.com/frontend/athletes/current").mock(
+        return_value=httpx.Response(200, json={})
+    )
+    respx.get("https://www.strava.com/athlete/training").mock(
+        return_value=httpx.Response(200, text="<html></html>")
+    )
 
     client = StravaClient({"_strava4_session": "test-cookie-value"})
     with pytest.raises(RuntimeError, match="CSRF"):
@@ -769,7 +775,9 @@ async def test_login_redirect_with_remember_cookies_is_remember_expired(
     await client.aclose()
 
     assert exc_info.value.code == "AUTH_REMEMBER_EXPIRED"
-    assert "strava_remember_token=remember" in caplog.text
+    # The remember token appears by name only — not even a prefix of its value.
+    assert "strava_remember_token" in caplog.text
+    assert "remember-" not in caplog.text
     assert "remember-secret-token" not in caplog.text
 
 
@@ -885,3 +893,269 @@ async def test_locale_prefixed_login_path_is_auth_error() -> None:
         await client.get_csrf_token()
     assert exc_info.value.code == "AUTH_SESSION_EXPIRED"
     await client.aclose()
+
+
+# ── CSRF token sources (Next.js dashboard, 2026-10-28) ─────────────────────────
+
+_NEXT_DASHBOARD = (
+    '<html><head><script id="__NEXT_DATA__" type="application/json">{}</script>'
+    '<meta name="csrf" content="next-token-not-used"></head></html>'
+)
+_DASHBOARD = "https://www.strava.com/dashboard"
+_CURRENT = "https://www.strava.com/frontend/athletes/current"
+_TRAINING = "https://www.strava.com/athlete/training"
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_csrf_from_dashboard_meta_makes_no_further_requests() -> None:
+    respx.get(_DASHBOARD).mock(return_value=httpx.Response(200, text=_CSRF_HTML))
+    current = respx.get(_CURRENT).mock(return_value=httpx.Response(200, json={}))
+    training = respx.get(_TRAINING).mock(return_value=httpx.Response(200, text=""))
+
+    client = StravaClient(_FULL_COOKIES)
+    assert await client.get_csrf_token() == "tok123"
+    await client.aclose()
+
+    assert not current.called
+    assert not training.called
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_csrf_from_current_athlete_header_and_cached_athlete_id() -> None:
+    respx.get(_DASHBOARD).mock(return_value=httpx.Response(200, text=_NEXT_DASHBOARD))
+    current = respx.get(_CURRENT).mock(
+        return_value=httpx.Response(
+            200, json={"currentAthlete": {"id_str": "777"}}, headers={"csrf-token": "hdr-token"}
+        )
+    )
+    training = respx.get(_TRAINING).mock(return_value=httpx.Response(200, text=""))
+
+    client = StravaClient(_FULL_COOKIES)
+    assert await client.get_csrf_token() == "hdr-token"
+    assert await client.fetch_current_athlete_id() == "777"
+    await client.aclose()
+
+    assert current.call_count == 1  # athlete ID came from the cache
+    assert not training.called
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_csrf_from_training_page_when_header_missing() -> None:
+    respx.get(_DASHBOARD).mock(return_value=httpx.Response(200, text=_NEXT_DASHBOARD))
+    respx.get(_CURRENT).mock(return_value=httpx.Response(200, json={}))
+    respx.get(_TRAINING).mock(return_value=httpx.Response(200, text=_CSRF_HTML))
+
+    client = StravaClient(_FULL_COOKIES)
+    assert await client.get_csrf_token() == "tok123"
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_csrf_not_found_anywhere_raises_and_logs_sources_without_values(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    respx.get(_DASHBOARD).mock(return_value=httpx.Response(200, text=_NEXT_DASHBOARD))
+    respx.get(_CURRENT).mock(return_value=httpx.Response(200, json={}))
+    respx.get(_TRAINING).mock(return_value=httpx.Response(200, text="<html></html>"))
+
+    client = StravaClient(_FULL_COOKIES)
+    with caplog.at_level("DEBUG"), pytest.raises(RuntimeError, match="CSRF"):
+        await client.get_csrf_token()
+    await client.aclose()
+
+    for path in ("/dashboard", "/frontend/athletes/current", "/athlete/training"):
+        assert path in caplog.text
+    assert "Next.js" in caplog.text
+    assert "next-token-not-used" not in caplog.text
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_csrf_source_is_logged_without_token_value(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    respx.get(_DASHBOARD).mock(return_value=httpx.Response(200, text=_NEXT_DASHBOARD))
+    respx.get(_CURRENT).mock(
+        return_value=httpx.Response(
+            200,
+            json={"currentAthlete": {"id_str": "1"}},
+            headers={"csrf-token": "hdr-token-secret"},
+        )
+    )
+
+    client = StravaClient(_FULL_COOKIES)
+    with caplog.at_level("DEBUG"):
+        await client.get_csrf_token()
+    await client.aclose()
+
+    assert "CSRF token from /frontend/athletes/current header" in caplog.text
+    assert "hdr-token-secret" not in caplog.text
+    assert "hdr-toke" not in caplog.text
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_login_redirect_on_training_page_raises_auth_error() -> None:
+    respx.get(_DASHBOARD).mock(return_value=httpx.Response(200, text=_NEXT_DASHBOARD))
+    respx.get(_CURRENT).mock(return_value=httpx.Response(200, json={}))
+    respx.get(_TRAINING).mock(
+        return_value=httpx.Response(302, headers={"Location": "https://www.strava.com/login"})
+    )
+    respx.get("https://www.strava.com/login").mock(return_value=httpx.Response(200, text="x"))
+
+    client = StravaClient(_FULL_COOKIES)
+    with pytest.raises(AuthError) as exc_info:
+        await client.get_csrf_token()
+    await client.aclose()
+    assert exc_info.value.code == "AUTH_REMEMBER_EXPIRED"
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_auth_diagnostics_log_hops_cookie_names_and_deletions(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    respx.get(_DASHBOARD).mock(
+        return_value=httpx.Response(
+            301,
+            headers=[
+                ("Location", "https://www.strava.com/login"),
+                ("Set-Cookie", "_strava4_session=anon-value; Path=/"),
+                ("Set-Cookie", "strava_remember_id=; Max-Age=0; Path=/"),
+                ("Set-Cookie", "_strava_cpra=x; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Path=/"),
+            ],
+        )
+    )
+    respx.get("https://www.strava.com/login").mock(return_value=httpx.Response(200, text="x"))
+
+    client = StravaClient(_FULL_COOKIES)
+    with caplog.at_level("WARNING"), pytest.raises(AuthError):
+        await client.get_csrf_token()
+    await client.aclose()
+
+    text = caplog.text
+    assert "301 /dashboard" in text
+    assert "200 /login" in text
+    # Cookie names the first request sent, as a name list.
+    assert "sent=[_strava4_session, strava_remember_id, strava_remember_token]" in text
+    assert "_strava4_session:set" in text
+    assert "strava_remember_id:deleted" in text
+    assert "_strava_cpra:deleted" in text
+    # Values never appear beyond the 8-char mask; the remember token only as a name.
+    assert "anon-value" not in text
+    assert "sess-old-0123456789" not in text
+    assert "_strava4_session=sess-old" in text
+    assert "remember-" not in text
+
+
+@pytest.mark.asyncio
+@respx.mock
+@pytest.mark.parametrize("current", [None, ["x"], "str"])
+async def test_csrf_odd_current_athlete_shape_falls_through_to_training(current: object) -> None:
+    respx.get(_DASHBOARD).mock(return_value=httpx.Response(200, text=_NEXT_DASHBOARD))
+    respx.get(_CURRENT).mock(
+        return_value=httpx.Response(
+            200, json={"currentAthlete": current}, headers={"csrf-token": "hdr-token"}
+        )
+    )
+    respx.get(_TRAINING).mock(return_value=httpx.Response(200, text=_CSRF_HTML))
+
+    client = StravaClient(_FULL_COOKIES)
+    assert await client.get_csrf_token() == "tok123"
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+@respx.mock
+@pytest.mark.parametrize("current", [None, ["x"]])
+async def test_csrf_odd_current_athlete_shape_without_any_token_raises_runtime_error(
+    current: object,
+) -> None:
+    respx.get(_DASHBOARD).mock(return_value=httpx.Response(200, text=_NEXT_DASHBOARD))
+    respx.get(_CURRENT).mock(
+        return_value=httpx.Response(
+            200, json={"currentAthlete": current}, headers={"csrf-token": "hdr-token"}
+        )
+    )
+    respx.get(_TRAINING).mock(return_value=httpx.Response(200, text="<html></html>"))
+
+    client = StravaClient(_FULL_COOKIES)
+    with pytest.raises(RuntimeError, match="CSRF"):
+        await client.get_csrf_token()
+    assert await client.fetch_current_athlete_id() is None  # must not raise either
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+@respx.mock
+@pytest.mark.parametrize("header", ["   ", "a, b"])
+async def test_csrf_unusable_header_falls_through_to_training(header: str) -> None:
+    respx.get(_DASHBOARD).mock(return_value=httpx.Response(200, text=_NEXT_DASHBOARD))
+    respx.get(_CURRENT).mock(
+        return_value=httpx.Response(
+            200, json={"currentAthlete": {"id_str": "1"}}, headers={"csrf-token": header}
+        )
+    )
+    respx.get(_TRAINING).mock(return_value=httpx.Response(200, text=_CSRF_HTML))
+
+    client = StravaClient(_FULL_COOKIES)
+    assert await client.get_csrf_token() == "tok123"
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_csrf_header_without_athlete_id_does_not_short_circuit() -> None:
+    respx.get(_DASHBOARD).mock(return_value=httpx.Response(200, text=_NEXT_DASHBOARD))
+    respx.get(_CURRENT).mock(
+        return_value=httpx.Response(200, json={}, headers={"csrf-token": "anon-token"})
+    )
+    training = respx.get(_TRAINING).mock(return_value=httpx.Response(200, text=_CSRF_HTML))
+
+    client = StravaClient(_FULL_COOKIES)
+    assert await client.get_csrf_token() == "tok123"
+    await client.aclose()
+    assert training.called
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_csrf_header_is_stripped() -> None:
+    respx.get(_DASHBOARD).mock(return_value=httpx.Response(200, text=_NEXT_DASHBOARD))
+    respx.get(_CURRENT).mock(
+        return_value=httpx.Response(
+            200, json={"currentAthlete": {"id_str": "1"}}, headers={"csrf-token": " hdr-token "}
+        )
+    )
+    client = StravaClient(_FULL_COOKIES)
+    assert await client.get_csrf_token() == "hdr-token"
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_csrf_current_athlete_401_raises_auth_error() -> None:
+    respx.get(_DASHBOARD).mock(return_value=httpx.Response(200, text=_NEXT_DASHBOARD))
+    respx.get(_CURRENT).mock(return_value=httpx.Response(401))
+    client = StravaClient(_FULL_COOKIES)
+    with pytest.raises(AuthError):
+        await client.get_csrf_token()
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_csrf_source_log_has_token_length_not_value(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    respx.get(_DASHBOARD).mock(return_value=httpx.Response(200, text=_CSRF_HTML))
+    client = StravaClient(_FULL_COOKIES)
+    with caplog.at_level("DEBUG"):
+        await client.get_csrf_token()
+    await client.aclose()
+    assert "len=6" in caplog.text
+    assert "tok123" not in caplog.text

@@ -7,7 +7,11 @@ Authentication: uses the user's Strava browser cookies (``_strava4_session`` plu
 remember-me pair). They live in a real cookie jar, so ``Set-Cookie`` rotations — e.g. a
 fresh session issued from the remember-me token — are sent on automatically and can be
 read back via :meth:`StravaClient.current_cookies` for persistence.
-The CSRF token is extracted from a page's <meta name="csrf-token"> tag.
+The CSRF token is looked up in several places because Strava migrated ``/dashboard``
+to Next.js (verified 2026-10-28): that page no longer carries ``<meta name="csrf-token">``
+(only an unrelated ``<meta name="csrf">`` in another format). See
+:meth:`StravaClient.get_csrf_token` for the sources and their order. The kudo endpoint
+itself (``POST /feed/activity/<id>/kudo`` + ``x-csrf-token``) is unchanged.
 
 Feed format (verified 2026-07-01 via HAR capture):
   The following feed is a JSON XHR endpoint::
@@ -39,11 +43,14 @@ Feed format (verified 2026-07-01 via HAR capture):
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import random
 import re
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any
 
@@ -60,6 +67,8 @@ _DASHBOARD_URL = f"{_BASE}/dashboard"
 _FEED_URL = f"{_BASE}/dashboard/feed"
 _CURRENT_ATHLETE_URL = f"{_BASE}/frontend/athletes/current"
 _KUDO_URL = f"{_BASE}/feed/activity/{{activity_id}}/kudo"
+# Rails page (still has <meta name="csrf-token">) used as the last-resort CSRF source.
+_TRAINING_URL = f"{_BASE}/athlete/training"
 _ATHLETE_URL = f"{_BASE}/athletes/{{athlete_id}}"
 _ATHLETE_SEARCH_URL = f"{_BASE}/athletes/search"
 
@@ -96,14 +105,59 @@ def _mask_cookie(cookie: str) -> str:
 
 
 _COOKIE_DOMAIN = ".strava.com"
+_REMEMBER_TOKEN = "strava_remember_token"
 # Redirect targets that mean "not logged in".
 _LOGIN_PATH_RE = re.compile(r"(^|/)(login|sessions?)(/|$)")
 
 
+def _cookie_names(header: str) -> list[str]:
+    """Cookie names of a Cookie request header, in sent order."""
+    return [p.strip().split("=", 1)[0] for p in header.split(";") if "=" in p]
+
+
 def _masked_cookie_header(header: str) -> str:
-    """``name=value`` pairs of a Cookie header with every value masked."""
+    """``name=value`` pairs of a Cookie header with every value masked.
+
+    The remember token is the long-lived credential, so it is shown by name only —
+    not even a prefix of its value.
+    """
     pairs = (p.strip().split("=", 1) for p in header.split(";") if "=" in p)
-    return ", ".join(f"{n}={_mask_cookie(v)}" for n, v in pairs) or "(none)"
+    return (
+        ", ".join(n if n == _REMEMBER_TOKEN else f"{n}={_mask_cookie(v)}" for n, v in pairs)
+        or "(none)"
+    )
+
+
+def _set_cookie_actions(resp: httpx.Response) -> list[str]:
+    """``name:set`` / ``name:deleted`` for every ``Set-Cookie`` header of a response."""
+    actions: list[str] = []
+    for raw in resp.headers.get_list("set-cookie"):
+        attrs = [a.strip() for a in raw.split(";")]
+        name = attrs[0].split("=", 1)[0]
+        deleted = False
+        for attr in attrs[1:]:
+            key, _, val = attr.partition("=")
+            if key.lower() == "max-age":
+                deleted = deleted or val.strip().lstrip("+").startswith(("0", "-"))
+            elif key.lower() == "expires":
+                try:
+                    expires = parsedate_to_datetime(val.strip())
+                except (TypeError, ValueError):
+                    continue
+                if expires.tzinfo is None:
+                    expires = expires.replace(tzinfo=UTC)
+                deleted = deleted or expires < datetime.now(UTC)
+        actions.append(f"{name}:{'deleted' if deleted else 'set'}")
+    return actions
+
+
+def _page_kind(html: str) -> str:
+    """Rough page flavour for diagnostics: Strava's Next.js frontend or classic Rails."""
+    if "__NEXT_DATA__" in html or "/_next/" in html:
+        return "Next.js"
+    if _CSRF_RE.search(html):
+        return "Rails"
+    return "unknown"
 
 
 # A transient network hiccup (DNS blip, reset connection, momentary timeout)
@@ -126,6 +180,8 @@ class StravaClient:
         self._initial_cookies = dict(cookies)
         # Set once Strava has treated the session as logged out; see current_cookies().
         self._auth_failed = False
+        # Athlete ID read while looking for the CSRF token; saves a second request.
+        self._athlete_id: str | None = None
         self._client: httpx.AsyncClient | None = None
         # Inject sleep/rng for deterministic testing (analogous to humanizer.py).
         self._sleep: Callable[[float], Awaitable[None]] = (
@@ -221,24 +277,91 @@ class StravaClient:
         raise last_exc
 
     async def get_csrf_token(self) -> str:
-        """Fetch the dashboard page and extract the CSRF token."""
+        """Auth probe plus CSRF token lookup.
+
+        ``GET /dashboard`` doubles as the login check. The token is then taken from
+        the first of these sources that has one:
+
+        1. ``<meta name="csrf-token">`` on the dashboard (the old Rails page).
+        2. The ``csrf-token`` *response header* of ``/frontend/athletes/current``
+           (the Next.js dashboard has no meta tag). The athlete ID in that response
+           is cached for :meth:`fetch_current_athlete_id`.
+        3. ``<meta name="csrf-token">`` on ``/athlete/training`` (a Rails page).
+
+        The Next.js dashboard's ``<meta name="csrf">`` is deliberately not used: its
+        format differs and it is unproven as a kudo token.
+
+        Raises :class:`~kudosy.feed.AuthError` on a logged-out session and
+        ``RuntimeError`` when no source yields a token.
+        """
         log.debug("Fetching CSRF token (cookies: %s)", ", ".join(sorted(self._initial_cookies)))
         client = self._get_client()
+        tried: list[str] = []
+
         resp = await self._get_with_retry(client, _DASHBOARD_URL, timeout=10.0)
         self._check_auth(resp, probe=True)
         m = _CSRF_RE.search(resp.text)
-        if not m:
-            raise RuntimeError("Could not extract CSRF token from dashboard page")
-        token = m.group(1)
-        log.debug("CSRF Token: %s…", token[:8])
+        tried.append(self._log_csrf_source("/dashboard", resp, m.group(1) if m else None))
+        if m:
+            return self._csrf_found("/dashboard meta tag", m.group(1))
+
+        resp = await self._get_with_retry(
+            client, _CURRENT_ATHLETE_URL, headers={"Accept": "application/json"}, timeout=10.0
+        )
+        self._check_auth(resp)
+        # The athlete ID is optional data and must never break the CSRF flow.
+        with contextlib.suppress(ValueError):
+            self._athlete_id = _athlete_id_from(resp.json())
+        # Only trust the header from a successful response that identified an athlete:
+        # an anonymous session may get a csrf-token header too. Repeated headers are merged
+        # by httpx with ", ", so a comma means the value is not a single token.
+        header_token = resp.headers.get("csrf-token", "").strip()
+        if not (resp.is_success and self._athlete_id) or "," in header_token:
+            header_token = ""
+        tried.append(
+            self._log_csrf_source("/frontend/athletes/current", resp, header_token or None)
+        )
+        if header_token:
+            return self._csrf_found("/frontend/athletes/current header", header_token)
+
+        resp = await self._get_with_retry(client, _TRAINING_URL, timeout=10.0)
+        self._check_auth(resp)
+        m = _CSRF_RE.search(resp.text)
+        tried.append(self._log_csrf_source("/athlete/training", resp, m.group(1) if m else None))
+        if m:
+            return self._csrf_found("/athlete/training meta tag", m.group(1))
+
+        log.warning("No CSRF token found (%s)", "; ".join(tried))
+        raise RuntimeError("Could not extract CSRF token from any known Strava source")
+
+    @staticmethod
+    def _log_csrf_source(path: str, resp: httpx.Response, token: str | None) -> str:
+        """Log one CSRF source attempt and return the summary line.
+
+        Only the token's length is logged, never its value: a 69- vs 86-character
+        token tells the Next.js format from the Rails one at a glance.
+        """
+        line = (
+            f"{path} -> {resp.status_code}, page={_page_kind(resp.text)}, "
+            f"token={f'found len={len(token)}' if token else 'missing'}"
+        )
+        log.debug("CSRF source: %s", line)
+        return line
+
+    @staticmethod
+    def _csrf_found(source: str, token: str) -> str:
+        log.debug("CSRF token from %s", source)
         return token
 
     async def fetch_current_athlete_id(self) -> str | None:
         """Return the numeric athlete ID string for the current session.
 
         Fetches ``/frontend/athletes/current`` and reads
-        ``currentAthlete.id_str``.  Returns ``None`` on any error.
+        ``currentAthlete.id_str``.  Returns ``None`` on any error. Reuses the ID
+        :meth:`get_csrf_token` already read from that endpoint, if any.
         """
+        if self._athlete_id:
+            return self._athlete_id
         client = self._get_client()
         try:
             resp = await self._get_with_retry(
@@ -248,13 +371,7 @@ class StravaClient:
                 timeout=10.0,
             )
             self._check_auth(resp)
-            data = resp.json()
-            id_str = (
-                data.get("currentAthlete", {}).get("id_str")
-                or str(data.get("currentAthlete", {}).get("id") or "")
-                or None
-            )
-            return id_str or None
+            return _athlete_id_from(resp.json())
         except AuthError:
             # An expired/invalid cookie must reach the caller, not be
             # swallowed into a silent None — the feed fetch that follows would
@@ -459,16 +576,26 @@ class StravaClient:
             self._auth_failed = True
             raise
 
+    @staticmethod
+    def _describe_hops(resp: httpx.Response) -> str:
+        """One line per request of the chain: status, path, cookie names sent / set."""
+        lines = []
+        for hop in (*resp.history, resp):
+            sent = ", ".join(_cookie_names(hop.request.headers.get("cookie", ""))) or "-"
+            set_ = ", ".join(_set_cookie_actions(hop)) or "-"
+            lines.append(f"  {hop.status_code} {hop.url.path} | sent=[{sent}] | set=[{set_}]")
+        return "\n".join(lines)
+
     def _raise_for_auth(self, resp: httpx.Response, *, probe: bool) -> None:
-        sent = resp.request.headers.get("cookie", "")
+        # httpx follows redirects, so resp.request is the *last* hop (after a 301 that is
+        # the anonymous session Strava hands out); the stored cookies went out first.
+        first = resp.history[0].request if resp.history else resp.request
+        sent = first.headers.get("cookie", "")
         if _LOGIN_PATH_RE.search(resp.url.path):
-            chain = " -> ".join(f"{r.status_code} {r.url.path}" for r in resp.history)
             log.warning(
-                "Strava redirected to login: %s%s %d %s | cookies sent: %s",
-                chain,
-                " ->" if chain else "",
-                resp.status_code,
-                resp.url.path,
+                "Strava redirected to login for %s\n%s\n  first request cookies: %s",
+                first.url.path,
+                self._describe_hops(resp),
                 _masked_cookie_header(sent),
             )
             has_remember = all(self._initial_cookies.get(n) for n in REMEMBER_COOKIES)
@@ -487,9 +614,10 @@ class StravaClient:
             raise err
         if probe and resp.status_code in (400, 500) and sent:
             log.warning(
-                "Strava answered %d for %s | cookies sent: %s",
+                "Strava answered %d for %s\n%s\n  first request cookies: %s",
                 resp.status_code,
                 resp.url.path,
+                self._describe_hops(resp),
                 _masked_cookie_header(sent),
             )
             err = AuthError(
@@ -502,6 +630,14 @@ class StravaClient:
             err = AuthError("Authentifizierung fehlgeschlagen (HTTP 401).")
             err.code = "AUTH_FAILED"
             raise err
+
+
+def _athlete_id_from(data: Any) -> str | None:
+    """``currentAthlete.id_str`` (or numeric ``id``) from a ``/frontend/athletes/current`` body."""
+    current = data.get("currentAthlete") if isinstance(data, dict) else None
+    if not isinstance(current, dict):
+        return None
+    return current.get("id_str") or str(current.get("id") or "") or None
 
 
 def _next_cursor_params(entries: list[Any]) -> dict[str, int] | None:
