@@ -93,6 +93,9 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+# Explicit loop scope for async fixtures: pytest-asyncio warns when it is unset, and
+# pytest >= 9.2 applies "error" below already during configure, aborting the whole run.
+asyncio_default_fixture_loop_scope = "function"
 addopts = "-v --tb=short"
 # Treat warnings as errors so the suite stays warning-free (see CLAUDE.md quality gate).
 # Known external warnings we cannot act on are ignored explicitly below.
