@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from kudosy.engine import run_kudos
-from kudosy.models import Activity, AppSettings, CatchAll, UserConfig
+from kudosy.models import Activity, ActivityStats, AppSettings, CatchAll, UserConfig
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -27,7 +27,7 @@ def make_activity(
         activity_name="Morning Run",
         sport_type="Run",
         has_kudoed=has_kudoed,
-        stats={"Distance": "10.23 km"},
+        stats=ActivityStats(distance_m=10230.0),
     )
 
 

@@ -36,6 +36,7 @@ _SKIP_REASONS = {
     DecisionReason.IGNORE: "--- Athlete is in ignore list",
     DecisionReason.ALREADY: "--- Already kudoed this activity",
     DecisionReason.CRITERIA: "--- Activity stats do not meet criteria",
+    DecisionReason.STAT_MISSING: "--- Activity has no value for an active minimum rule",
 }
 
 
@@ -46,6 +47,23 @@ def _fmt_stats(stats: object) -> str:
         parts = [f"{sv.label}={sv.raw}" for sv in stats.display]
         return "{" + ", ".join(parts) + "}"
     return str(stats)
+
+
+def _warn_if_no_distance_parsed(activities: list[Activity]) -> None:
+    """One WARNING when stats are present but not a single distance could be parsed.
+
+    Typical cause: Strava returns localized labels/number formats the stat parser
+    does not know, which would make every distance rule unverifiable.
+    """
+    with_stats = [a for a in activities if a.stats.display]
+    unparsed = [a for a in with_stats if a.stats.distance_m is None]
+    if with_stats and len(unparsed) == len(with_stats):
+        log.warning(
+            "%d of %d activities have no parsable distance — "
+            "Strava may be returning localized labels",
+            len(unparsed),
+            len(with_stats),
+        )
 
 
 async def run_kudos(
@@ -96,13 +114,17 @@ async def run_kudos(
             if athlete_id:
                 log.debug("Resolved athlete ID from Strava: %s", athlete_id)
             else:
-                log.warning("Could not resolve athlete ID — feed fetch may fail")
+                raise RuntimeError(
+                    "Strava-Athleten-ID konnte nicht ermittelt werden — "
+                    "bitte in der Konfiguration eintragen"
+                )
 
         # 3. Fetch feed (JSON endpoint)
         raw_feed = await client.fetch_following_feed(athlete_id)
         activities = feed_parser.parse(raw_feed)  # reassigns the pre-init'd list
         total = len(activities)
         log.info("Found %d activities", total)
+        _warn_if_no_distance_parsed(activities)
 
         if total == 0:
             log.warning(
@@ -181,8 +203,12 @@ async def run_kudos(
                     log.info("✓ Kudos gesendet: %s — %s", act.athlete_name, act.activity_name)
                 else:
                     consecutive_failures += 1
+                    status = getattr(client, "last_kudo_status", None)
                     log.warning(
-                        "✗ Kudos fehlgeschlagen: %s — %s", act.athlete_name, act.activity_name
+                        "✗ Kudos fehlgeschlagen%s: %s — %s",
+                        f" (HTTP {status})" if isinstance(status, int) else "",
+                        act.athlete_name,
+                        act.activity_name,
                     )
                     if consecutive_failures >= _MAX_CONSECUTIVE_FAILURES:
                         aborted_reason = "consecutive_failures"

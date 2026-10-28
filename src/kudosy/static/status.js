@@ -65,6 +65,17 @@ export async function pollStatus() {
       $('val-kudos').textContent    = '—';
     }
 
+    // Reason of a failed last run: translated for known error codes, else the (shortened) backend text.
+    const errEl = $('val-last-error');
+    if (errEl) {
+      const lr  = s.lastRun;
+      const msg = lr?.error_code && t(`error.${lr.error_code}`) !== `error.${lr.error_code}`
+        ? t(`error.${lr.error_code}`)
+        : (lr?.error || '').slice(0, 200);
+      errEl.hidden = !msg;
+      errEl.textContent = msg ? t('status.lastError', { msg }) : '';
+    }
+
     if (s.schedulerEnabled && s.nextRunAt) {
       $('val-next-run').textContent  = formatRelative(s.nextRunAt);
       $('val-interval').textContent  = t('status.interval', {
@@ -81,7 +92,12 @@ export async function pollStatus() {
     if (banner) {
       const authFailed = s.authOk === false;
       banner.hidden = !authFailed;
-      if (authFailed) banner.querySelector('[data-i18n]').textContent = t('status.authError');
+      if (authFailed) {
+        // Code-specific text when the last run carries the auth error code, generic otherwise.
+        const key = `status.authError.${s.lastRun?.error_code}`;
+        banner.querySelector('[data-i18n]').textContent =
+          t(key) !== key ? t(key) : t('status.authError');
+      }
     }
 
     // Update footer version

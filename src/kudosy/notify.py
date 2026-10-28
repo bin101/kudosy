@@ -242,12 +242,25 @@ def build_run_payload(result: Any) -> dict[str, Any]:
     }
 
 
+_AUTH_ERROR_TITLES = {
+    "AUTH_SESSION_EXPIRED": "Kudosy — Strava-Session abgelaufen",
+    "AUTH_REMEMBER_EXPIRED": "Kudosy — Session trotz Remember-Cookies abgelehnt",
+    "AUTH_MALFORMED_COOKIE": "Kudosy — Cookie unvollständig oder beschädigt",
+}
+_AUTH_ERROR_DEFAULT_TITLE = "Kudosy — Authentifizierung fehlgeschlagen"
+
+
 def build_auth_error_payload(exc: Exception) -> dict[str, Any]:
-    """Build a system-agnostic notification message for an auth failure."""
+    """Build a system-agnostic notification message for an auth failure.
+
+    The title follows the exception's ``code`` (set by ``StravaClient``); the
+    message carries the exception text, which already says what to do.
+    """
+    title = _AUTH_ERROR_TITLES.get(getattr(exc, "code", ""), _AUTH_ERROR_DEFAULT_TITLE)
     return {
         "event": "auth_error",
-        "title": "Kudosy — Cookie abgelaufen",
-        "message": f"⚠️ Der Strava Session-Cookie ist abgelaufen.\n{exc}",
+        "title": title,
+        "message": f"⚠️ {title.removeprefix('Kudosy — ')}.\n{exc}",
         "tags": ["warning"],
         "priority": 4,
     }

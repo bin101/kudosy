@@ -1560,3 +1560,214 @@ async def test_embedded_feed_with_foreign_locale_falls_back_to_xhr(
     assert xhr.call_count == 1
     assert [e["activity"]["id"] for e in result["entries"]] == [7]
     assert sum("locale" in r.getMessage() for r in caplog.records) == 1
+
+
+# ── PR 2: kudo POST without redirect following, honest failures ───────────────
+
+_KUDO = "https://www.strava.com/feed/activity/10000000001/kudo"
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_send_kudos_does_not_follow_redirects() -> None:
+    respx.post(_KUDO).mock(
+        return_value=httpx.Response(302, headers={"location": "https://www.strava.com/dashboard"})
+    )
+    landing = respx.get(_DASHBOARD).mock(return_value=httpx.Response(200, text="<html></html>"))
+    client = StravaClient({"_strava4_session": "c"})
+    ok = await client.send_kudos("10000000001", "csrf")
+    await client.aclose()
+
+    assert ok is False
+    assert landing.call_count == 0
+    assert client.last_kudo_status == 302
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_send_kudos_redirect_to_login_is_auth_error() -> None:
+    respx.post(_KUDO).mock(
+        return_value=httpx.Response(302, headers={"location": "https://www.strava.com/login"})
+    )
+    client = StravaClient({"_strava4_session": "c"})
+    with pytest.raises(AuthError) as exc_info:
+        await client.send_kudos("10000000001", "csrf")
+    assert exc_info.value.code == "AUTH_SESSION_EXPIRED"
+    # A rejected session must not replace the stored cookies.
+    assert client.current_cookies() == {"_strava4_session": "c"}
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_send_kudos_relative_login_redirect_is_auth_error() -> None:
+    respx.post(_KUDO).mock(return_value=httpx.Response(302, headers={"location": "/session"}))
+    client = StravaClient({"_strava4_session": "c"})
+    with pytest.raises(AuthError):
+        await client.send_kudos("10000000001", "csrf")
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_send_kudos_401_is_auth_error() -> None:
+    respx.post(_KUDO).mock(return_value=httpx.Response(401, text="no"))
+    client = StravaClient({"_strava4_session": "c"})
+    with pytest.raises(AuthError) as exc_info:
+        await client.send_kudos("10000000001", "csrf")
+    assert exc_info.value.code == "AUTH_FAILED"
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+@respx.mock
+@pytest.mark.parametrize("status", [403, 404, 422, 500, 204, 304])
+async def test_send_kudos_other_statuses_fail_with_status_in_log(
+    status: int, caplog: pytest.LogCaptureFixture
+) -> None:
+    respx.post(_KUDO).mock(return_value=httpx.Response(status))
+    client = StravaClient({"_strava4_session": "c"})
+    with caplog.at_level("WARNING"):
+        ok = await client.send_kudos("10000000001", "csrf-secret-value")
+    await client.aclose()
+
+    assert ok is False
+    assert client.last_kudo_status == status
+    assert f"HTTP {status}" in caplog.text
+    assert "csrf-secret-value" not in caplog.text
+
+
+@pytest.mark.asyncio
+@respx.mock
+@pytest.mark.parametrize("status", [200, 201])
+async def test_send_kudos_success_records_status(status: int) -> None:
+    respx.post(_KUDO).mock(return_value=httpx.Response(status, json={"success": "true"}))
+    client = StravaClient({"_strava4_session": "c"})
+    assert await client.send_kudos("10000000001", "csrf") is True
+    assert client.last_kudo_status == status
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_send_kudos_network_error_resets_status() -> None:
+    respx.post(_KUDO).mock(return_value=httpx.Response(403))
+    client = StravaClient({"_strava4_session": "c"})
+    await client.send_kudos("10000000001", "csrf")
+    respx.post(_KUDO).mock(side_effect=httpx.ConnectError("boom"))
+    assert await client.send_kudos("10000000001", "csrf") is False
+    assert client.last_kudo_status is None
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_csrf_source_is_logged_once_at_info_without_value(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    _mock_nextjs_dashboard()
+    client = StravaClient(_FULL_COOKIES)
+    with caplog.at_level("INFO"):
+        token = await client.get_csrf_token()
+    await client.aclose()
+
+    lines = [r for r in caplog.records if "CSRF token from" in r.getMessage()]
+    assert len(lines) == 1
+    assert lines[0].levelname == "INFO"
+    assert token not in caplog.text
+
+
+# ── PR 2: athlete lookup / search robustness ──────────────────────────────────
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_lookup_athlete_login_redirect_raises_auth_error() -> None:
+    respx.get("https://www.strava.com/athletes/20000001").mock(
+        return_value=httpx.Response(302, headers={"location": "https://www.strava.com/login"})
+    )
+    respx.get("https://www.strava.com/login").mock(
+        return_value=httpx.Response(200, text="<html>login</html>")
+    )
+    client = StravaClient({"_strava4_session": "c"})
+    with pytest.raises(AuthError):
+        await client.lookup_athlete("20000001")
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_search_athletes_warns_when_next_data_is_missing(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    respx.get("https://www.strava.com/athletes/search").mock(
+        return_value=httpx.Response(200, text="<html><body>no next data</body></html>")
+    )
+    client = StravaClient({"_strava4_session": "c"})
+    with caplog.at_level("WARNING"):
+        results = await client.search_athletes("Alex")
+    await client.aclose()
+
+    assert results == []
+    assert "__NEXT_DATA__" in caplog.text
+    assert any(r.levelname == "WARNING" for r in caplog.records)
+
+
+@pytest.mark.asyncio
+@respx.mock
+@pytest.mark.parametrize(
+    "data",
+    [
+        {"props": []},
+        {"props": "x"},
+        {"props": {"pageProps": []}},
+        {"props": {"pageProps": None}},
+        [],
+        "string",
+    ],
+)
+async def test_search_athletes_tolerates_untyped_next_data(data: object) -> None:
+    html = '<script id="__NEXT_DATA__" type="application/json">' + json.dumps(data) + "</script>"
+    respx.get("https://www.strava.com/athletes/search").mock(
+        return_value=httpx.Response(200, text=html)
+    )
+    client = StravaClient({"_strava4_session": "c"})
+    assert await client.search_athletes("Alex") == []
+    await client.aclose()
+
+
+# ── PR 2: feed pagination failures after page 1 ───────────────────────────────
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_pagination_network_error_keeps_page_1_and_warns(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    _mock_nextjs_dashboard()
+    respx.get(_FEED).mock(side_effect=httpx.ConnectError("boom"))
+    client = StravaClient(_FULL_COOKIES, sleep=AsyncMock(), rng=random.Random(0))
+    await client.get_csrf_token()
+    with caplog.at_level("WARNING"):
+        feed = await client.fetch_following_feed("20000001")
+    await client.aclose()
+
+    assert len(feed["entries"]) == 3
+    warning = next(r for r in caplog.records if "Feed page 2" in r.getMessage())
+    assert warning.levelname == "WARNING"
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_pagination_login_redirect_still_raises_and_keeps_stored_cookies() -> None:
+    _mock_nextjs_dashboard()
+    respx.get(_FEED).mock(
+        return_value=httpx.Response(302, headers={"location": "https://www.strava.com/login"})
+    )
+    respx.get("https://www.strava.com/login").mock(return_value=httpx.Response(200, text="login"))
+    client = StravaClient(_FULL_COOKIES, sleep=AsyncMock(), rng=random.Random(0))
+    await client.get_csrf_token()
+    with pytest.raises(AuthError):
+        await client.fetch_following_feed("20000001")
+    assert client.current_cookies() == _FULL_COOKIES
+    await client.aclose()

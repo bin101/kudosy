@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -19,6 +20,7 @@ from kudosy import __version__
 from kudosy.engine import run_kudos
 from kudosy.feed import AuthError, StructuredFeedParser
 from kudosy.logging_conf import configure_logging, reset_log_handler
+from kudosy.models import RunResult
 from kudosy.notify import (
     build_auth_error_payload,
     build_digest_payload,
@@ -134,6 +136,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         from kudosy.strava_client import StravaClient
 
         reset_log_handler(log_path())
+        started_at = datetime.now(UTC)
         kudoed_ids = read_kudoed_ids()
         client = StravaClient(user_cfg.stravaCookies)
         try:
@@ -145,7 +148,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
                 dry_run=dry_run,
                 kudoed_ids=kudoed_ids,
             )
-            _app_state["auth_ok"] = True
+            # A run that failed before/after the auth probe (changed page, network, no
+            # athlete ID) says nothing about the cookie, so only a clean run confirms it.
+            if result.error is None:
+                _app_state["auth_ok"] = True
             # Persist newly kudoed activity IDs (dry-run never sends, so list is empty).
             # One batched read+write for the whole run rather than one per
             # activity — keeps this off the event loop's critical path when a
@@ -212,7 +218,20 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
                     build_auth_error_payload(exc),
                     system=settings.notifySystem,
                 )
-            return None
+            # Keep the failure as the last run (not in the history) so the UI can show
+            # the reason instead of "no run yet".
+            now = datetime.now(UTC)
+            return RunResult(
+                started_at=started_at,
+                finished_at=now,
+                success=False,
+                dry_run=dry_run,
+                total=0,
+                would_give=0,
+                given=0,
+                error=str(exc),
+                error_code=getattr(exc, "code", "AUTH_FAILED"),
+            )
         finally:
             persist_client_cookies(user_cfg.stravaCookies, client)
             await client.aclose()
@@ -224,8 +243,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
             _app_state["last_run"] = result
 
     async def _digest_job() -> None:
-        from datetime import UTC, datetime
-
         settings = read_settings()
         if not settings.notifyWebhookUrl:
             log.debug("[digest] No webhook URL configured — skipping digest")

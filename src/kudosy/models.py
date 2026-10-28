@@ -298,6 +298,7 @@ class DecisionReason(StrEnum):
     CRITERIA = "criteria"  # below minDistance/minTime threshold
     NAME_MATCH = "name_match"  # activity name matched a regex → always give
     NO_RULE = "no_rule"  # sport type has no effective rule → gating skips it
+    STAT_MISSING = "stat_missing"  # active min rule, but the activity has no such value → skip
     DEFAULT = "default"  # rule exists and criteria passed → give kudos
 
 
@@ -349,6 +350,7 @@ class RunResult(BaseModel):
     would_give: int  # number that would receive kudos (dry-run count)
     given: int  # actually sent (0 in dry-run)
     error: str | None = None
+    error_code: str | None = None  # machine-readable code of an auth failure (AUTH_*)
     newly_kudoed: list[str] = []  # activity_ids successfully kudoed this run
     would_give_ids: list[str] = []  # activity_ids eligible for kudos this run
     activity_ids: list[str] = []  # all activity_ids scanned this run

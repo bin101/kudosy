@@ -38,6 +38,24 @@ class FakeAuthFailClient:
         return None
 
 
+class FakeFeedFailClient(FakeAuthFailClient):
+    """Passes the auth probe, then fails like a changed Strava page would."""
+
+    async def get_csrf_token(self) -> str:
+        return "csrf"
+
+    async def fetch_current_athlete_id(self) -> str | None:
+        return "20000001"
+
+    async def fetch_following_feed(self, athlete_id: str, **_: object) -> dict[str, object]:
+        raise RuntimeError("Feed page 1 unavailable")
+
+
+class FakeOkClient(FakeFeedFailClient):
+    async def fetch_following_feed(self, athlete_id: str, **_: object) -> dict[str, object]:
+        return {"entries": [], "pagination": {"hasMore": False}}
+
+
 # ── Fixture: real lifespan, real run_job_fn, faked Strava client ──────────────
 
 
@@ -139,3 +157,67 @@ def test_failing_persist_does_not_mask_result_or_skip_aclose(
     assert closed == [True]
     assert "Could not persist refreshed Strava cookies" in caplog.text
     assert get_app_state()["auth_ok"] is False  # the original AuthError handling still ran
+
+
+def test_auth_error_is_stored_as_failed_last_run_with_code(
+    real_job_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The error code reaches the UI through lastRun instead of 'no run yet'."""
+
+    class ExpiredClient(FakeAuthFailClient):
+        async def get_csrf_token(self) -> str:
+            err = AuthError("Session weg")
+            err.code = "AUTH_SESSION_EXPIRED"
+            raise err
+
+    monkeypatch.setattr("kudosy.strava_client.StravaClient", ExpiredClient)
+    real_job_client.post("/api/run", json={})
+
+    status = real_job_client.get("/api/status").json()
+    last = status["lastRun"]
+    assert last is not None
+    assert last["success"] is False
+    assert last["error_code"] == "AUTH_SESSION_EXPIRED"
+    assert "Session weg" in last["error"]
+    assert get_app_state()["last_run"].error_code == "AUTH_SESSION_EXPIRED"
+
+
+def test_auth_error_run_is_not_written_to_run_history(real_job_client: TestClient) -> None:
+    from kudosy import store
+
+    real_job_client.post("/api/run", json={})
+    assert store.read_run_history() == []
+
+
+def test_failed_run_without_auth_error_does_not_claim_auth_ok(
+    real_job_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    get_app_state().pop("auth_ok", None)
+    monkeypatch.setattr("kudosy.strava_client.StravaClient", FakeFeedFailClient)
+    real_job_client.post("/api/run", json={})
+
+    status = real_job_client.get("/api/status").json()
+    assert status["authOk"] is None
+    assert status["lastRun"]["success"] is False
+    assert "Feed page 1 unavailable" in status["lastRun"]["error"]
+
+
+def test_failed_run_keeps_previous_auth_failure(
+    real_job_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    get_app_state()["auth_ok"] = False
+    monkeypatch.setattr("kudosy.strava_client.StravaClient", FakeFeedFailClient)
+    real_job_client.post("/api/run", json={})
+    assert real_job_client.get("/api/status").json()["authOk"] is False
+
+
+def test_successful_run_sets_auth_ok_true(
+    real_job_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    get_app_state()["auth_ok"] = False
+    monkeypatch.setattr("kudosy.strava_client.StravaClient", FakeOkClient)
+    real_job_client.post("/api/run", json={})
+
+    status = real_job_client.get("/api/status").json()
+    assert status["authOk"] is True
+    assert status["lastRun"]["error"] is None

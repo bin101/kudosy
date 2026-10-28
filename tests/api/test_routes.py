@@ -1325,3 +1325,214 @@ def test_cookie_test_null_current_athlete_is_structured_not_500(app_client: Test
     assert resp.status_code == 200
     assert resp.json()["ok"] is False
     assert resp.json()["code"] == "UNEXPECTED_RESPONSE"
+
+
+# ── Error visibility: unexpected Strava responses become 502, not 500 ─────────
+
+
+def _mock_client(**overrides: object) -> AsyncMock:
+    mock_instance = AsyncMock()
+    mock_instance.get_csrf_token.return_value = "csrf-token"
+    mock_instance.aclose = AsyncMock()
+    mock_instance.current_cookies = MagicMock(return_value={})
+    for name, value in overrides.items():
+        setattr(mock_instance, name, value)
+    return mock_instance
+
+
+@pytest.mark.parametrize("exc", [RuntimeError("no csrf"), ValueError("bad json")])
+def test_post_kudos_unexpected_response_is_502(
+    app_client: TestClient, data_dir: Path, exc: Exception
+) -> None:
+    from unittest.mock import patch
+
+    mock_instance = _mock_client()
+    mock_instance.get_csrf_token.side_effect = exc
+
+    with patch("kudosy.routes.StravaClient", return_value=mock_instance):
+        resp = app_client.post("/api/kudos/55000000001")
+
+    assert resp.status_code == 502
+    assert resp.json()["detail"]["code"] == "UNEXPECTED_RESPONSE"
+    mock_instance.aclose.assert_awaited_once()
+
+
+def test_post_kudos_auth_error_is_401(app_client: TestClient, data_dir: Path) -> None:
+    from unittest.mock import patch
+
+    from kudosy.feed import AuthError
+
+    mock_instance = _mock_client()
+    mock_instance.send_kudos.side_effect = AuthError("expired")
+
+    with patch("kudosy.routes.StravaClient", return_value=mock_instance):
+        resp = app_client.post("/api/kudos/55000000001")
+
+    assert resp.status_code == 401
+    assert resp.json()["detail"]["code"] == "AUTH_FAILED"
+
+
+def test_post_kudos_failed_send_returns_ok_false(app_client: TestClient, data_dir: Path) -> None:
+    from unittest.mock import patch
+
+    mock_instance = _mock_client()
+    mock_instance.send_kudos.return_value = False
+
+    with patch("kudosy.routes.StravaClient", return_value=mock_instance):
+        resp = app_client.post("/api/kudos/55000000001")
+
+    assert resp.status_code == 200
+    assert resp.json() == {"ok": False}
+
+
+@pytest.mark.parametrize("exc", [RuntimeError("page 1 unavailable"), ValueError("bad json")])
+def test_get_feed_unexpected_response_is_502(
+    app_client: TestClient, data_dir: Path, exc: Exception
+) -> None:
+    from unittest.mock import patch
+
+    mock_instance = _mock_client()
+    mock_instance.fetch_following_feed.side_effect = exc
+
+    with patch("kudosy.routes.StravaClient", return_value=mock_instance):
+        resp = app_client.get("/api/feed?refresh=true")
+
+    assert resp.status_code == 502
+    assert resp.json()["detail"]["code"] == "UNEXPECTED_RESPONSE"
+    mock_instance.aclose.assert_awaited_once()
+
+
+def test_get_feed_csrf_runtime_error_is_502(app_client: TestClient, data_dir: Path) -> None:
+    from unittest.mock import patch
+
+    mock_instance = _mock_client()
+    mock_instance.get_csrf_token.side_effect = RuntimeError("no token")
+
+    with patch("kudosy.routes.StravaClient", return_value=mock_instance):
+        resp = app_client.get("/api/feed?refresh=true")
+
+    assert resp.status_code == 502
+    assert resp.json()["detail"]["code"] == "UNEXPECTED_RESPONSE"
+
+
+def test_get_feed_primes_dashboard_before_fetching(app_client: TestClient, data_dir: Path) -> None:
+    """The route goes through get_csrf_token like the engine, so the embedded page 1 is used."""
+    from unittest.mock import patch
+
+    mock_instance = _mock_client()
+    mock_instance.fetch_following_feed.return_value = {"entries": [], "pagination": {}}
+
+    with patch("kudosy.routes.StravaClient", return_value=mock_instance):
+        resp = app_client.get("/api/feed?refresh=true")
+
+    assert resp.status_code == 200
+    called = [
+        c[0] for c in mock_instance.mock_calls if c[0] in ("get_csrf_token", "fetch_following_feed")
+    ]
+    assert called == ["get_csrf_token", "fetch_following_feed"]
+
+
+def test_get_feed_auth_error_from_dashboard_is_401(app_client: TestClient, data_dir: Path) -> None:
+    from unittest.mock import patch
+
+    from kudosy.feed import AuthError
+
+    mock_instance = _mock_client()
+    err = AuthError("expired")
+    err.code = "AUTH_SESSION_EXPIRED"
+    mock_instance.get_csrf_token.side_effect = err
+
+    with patch("kudosy.routes.StravaClient", return_value=mock_instance):
+        resp = app_client.get("/api/feed?refresh=true")
+
+    assert resp.status_code == 401
+    assert resp.json()["detail"]["code"] == "AUTH_SESSION_EXPIRED"
+
+
+def test_get_feed_refresh_with_empty_result_keeps_existing_cache(
+    app_client: TestClient, data_dir: Path
+) -> None:
+    from unittest.mock import patch
+
+    from kudosy import store
+
+    store.write_activity_cache([dict(_CACHED_ACTIVITY)], _CACHE_TS)
+    mock_instance = _mock_client()
+    mock_instance.fetch_following_feed.return_value = {"entries": [], "pagination": {}}
+
+    with patch("kudosy.routes.StravaClient", return_value=mock_instance):
+        resp = app_client.get("/api/feed?refresh=true")
+
+    assert resp.status_code == 200
+    assert resp.json()["activities"] == []
+    cached_acts, fetched_at = store.read_activity_cache()
+    assert fetched_at == _CACHE_TS
+    assert [a["activity_id"] for a in cached_acts] == ["55000000001"]
+
+
+def test_get_feed_without_athlete_id_is_502_and_does_not_fetch(
+    app_client: TestClient, data_dir: Path
+) -> None:
+    from unittest.mock import patch
+
+    from kudosy import store
+
+    store.write_user_config_raw({"stravaSessionCookie": "valid-cookie", "athleteId": ""})
+    mock_instance = _mock_client()
+    mock_instance.fetch_current_athlete_id.return_value = None
+
+    with patch("kudosy.routes.StravaClient", return_value=mock_instance):
+        resp = app_client.get("/api/feed?refresh=true")
+
+    assert resp.status_code == 502
+    assert resp.json()["detail"]["code"] == "UNEXPECTED_RESPONSE"
+    mock_instance.fetch_following_feed.assert_not_called()
+
+
+def test_get_feed_reports_stat_missing_reason(app_client: TestClient, data_dir: Path) -> None:
+    from kudosy import store
+
+    store.write_user_config_raw(
+        {
+            "stravaSessionCookie": "valid-cookie",
+            "athleteId": "20000001",
+            "catchAll": {"minDistance": 5, "minTime": 0},
+        }
+    )
+    no_distance = dict(_CACHED_ACTIVITY)
+    no_distance["stats"] = {"display": [], "extra": {}}
+    store.write_activity_cache([no_distance], _CACHE_TS)
+
+    act = app_client.get("/api/feed").json()["activities"][0]
+    assert act["give_kudos"] is False
+    assert act["reason"] == "stat_missing"
+
+
+def test_post_kudos_rate_limit_is_429(app_client: TestClient, data_dir: Path) -> None:
+    from unittest.mock import patch
+
+    from kudosy.feed import RateLimitError
+
+    mock_instance = _mock_client()
+    mock_instance.send_kudos.side_effect = RateLimitError("HTTP 429")
+
+    with patch("kudosy.routes.StravaClient", return_value=mock_instance):
+        resp = app_client.post("/api/kudos/55000000001")
+
+    assert resp.status_code == 429
+    assert resp.json()["detail"]["code"] == "RATE_LIMITED"
+
+
+def test_post_kudos_network_error_is_502(app_client: TestClient, data_dir: Path) -> None:
+    from unittest.mock import patch
+
+    import httpx
+
+    mock_instance = _mock_client()
+    mock_instance.get_csrf_token.side_effect = httpx.ConnectError("boom")
+
+    with patch("kudosy.routes.StravaClient", return_value=mock_instance):
+        resp = app_client.post("/api/kudos/55000000001")
+
+    assert resp.status_code == 502
+    assert resp.json()["detail"]["code"] == "STRAVA_UNREACHABLE"
