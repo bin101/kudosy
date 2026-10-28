@@ -30,9 +30,11 @@ def decode_html_entities(s: str) -> str:
 
 # ── Athlete name ──────────────────────────────────────────────────────────────
 
+_OG_CONTENT = r"""content=(?:"([^"]+)"|'([^']+)')"""
+_OG_PROPERTY = r"""property=["']og:title["']"""
 _OG_TITLE_RE = (
-    re.compile(r'<meta[^>]*property="og:title"[^>]*content="([^"]+)"', re.IGNORECASE),
-    re.compile(r'<meta[^>]*content="([^"]+)"[^>]*property="og:title"', re.IGNORECASE),
+    re.compile(rf"<meta[^>]*{_OG_PROPERTY}[^>]*{_OG_CONTENT}", re.IGNORECASE),
+    re.compile(rf"<meta[^>]*{_OG_CONTENT}[^>]*{_OG_PROPERTY}", re.IGNORECASE),
 )
 _TITLE_RE = re.compile(r"<title>([^<]+)</title>", re.IGNORECASE)
 
@@ -62,7 +64,7 @@ def parse_athlete_name(html: str) -> str | None:
     for pattern in _OG_TITLE_RE:
         m = pattern.search(html)
         if m:
-            name = _extract_name(m.group(1))
+            name = _extract_name(m.group(1) or m.group(2))
             if name:
                 return name
     m2 = _TITLE_RE.search(html)

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import random
+from collections.abc import Callable
 from pathlib import Path
 from unittest.mock import AsyncMock
 
@@ -10,11 +12,15 @@ import httpx
 import pytest
 import respx
 
-from kudosy.feed import AuthError, RateLimitError
-from kudosy.strava_client import StravaClient, _next_cursor_params
+from kudosy.feed import AuthError, RateLimitError, StructuredFeedParser
+from kudosy.strava_client import _NEXT_DATA_RE, StravaClient, _next_cursor_params, _parse_next_data
 
 # Fixtures directory
 _FIXTURES = Path(__file__).parent.parent / "fixtures"
+
+
+# Synthetic 86-char URL-safe Base64 token, the size of a real Strava CSRF token.
+_TOKEN = "Zm9vYmFyLXN5bnRoZXRpYy1jc3JmLXRva2VuLW5vdC1yZWFsLTAxMjM0NTY3ODlBQkNERUZHSElKS0xNTk9QUVJTVFVWV1hZ"
 
 
 def _load(name: str) -> str:
@@ -27,14 +33,14 @@ def _load(name: str) -> str:
 @pytest.mark.asyncio
 @respx.mock
 async def test_get_csrf_token_success() -> None:
-    html = _load("csrf_page.html")
+    html = _load("rails_dashboard_legacy.html")
     respx.get("https://www.strava.com/dashboard").mock(return_value=httpx.Response(200, text=html))
 
     client = StravaClient({"_strava4_session": "test-cookie-value"})
     token = await client.get_csrf_token()
     await client.aclose()
 
-    assert token == "test-csrf-abc123"
+    assert token == _TOKEN
 
 
 @pytest.mark.asyncio
@@ -454,9 +460,12 @@ def test_next_cursor_params_non_numeric_values_returns_none() -> None:
 # ── fetch_following_feed — pagination ────────────────────────────────────────
 
 
-def _act_entry(act_id: int, rank: float = 9000.0, updated_at: int = 1000) -> dict:
+def _act_entry(
+    act_id: int | str, rank: float = 9000.0, updated_at: int = 1000, locale: str | None = None
+) -> dict:
     """Build a minimal Activity feed entry with cursorData."""
     return {
+        **({"locale": locale} if locale else {}),
         "entity": "Activity",
         "activity": {"id": act_id, "activityName": f"Run {act_id}"},
         "cursorData": {"updated_at": updated_at, "rank": rank},
@@ -649,7 +658,7 @@ async def test_fetch_feed_sleep_called_between_pages() -> None:
 
 # ── Cookie jar, rotation & auth diagnostics ───────────────────────────────────
 
-_CSRF_HTML = '<html><head><meta name="csrf-token" content="tok123"></head></html>'
+_CSRF_HTML = f'<html><head><meta name="csrf-token" content="{_TOKEN}"></head></html>'
 _FULL_COOKIES = {
     "_strava4_session": "sess-old-0123456789",
     "strava_remember_id": "4242",
@@ -897,9 +906,9 @@ async def test_locale_prefixed_login_path_is_auth_error() -> None:
 
 # ── CSRF token sources (Next.js dashboard, 2026-10-28) ─────────────────────────
 
+# Next.js dashboard without any usable CSRF meta (forces the fallback sources).
 _NEXT_DASHBOARD = (
-    '<html><head><script id="__NEXT_DATA__" type="application/json">{}</script>'
-    '<meta name="csrf" content="next-token-not-used"></head></html>'
+    '<html><head><script id="__NEXT_DATA__" type="application/json">{}</script></head></html>'
 )
 _DASHBOARD = "https://www.strava.com/dashboard"
 _CURRENT = "https://www.strava.com/frontend/athletes/current"
@@ -914,7 +923,7 @@ async def test_csrf_from_dashboard_meta_makes_no_further_requests() -> None:
     training = respx.get(_TRAINING).mock(return_value=httpx.Response(200, text=""))
 
     client = StravaClient(_FULL_COOKIES)
-    assert await client.get_csrf_token() == "tok123"
+    assert await client.get_csrf_token() == _TOKEN
     await client.aclose()
 
     assert not current.called
@@ -949,7 +958,7 @@ async def test_csrf_from_training_page_when_header_missing() -> None:
     respx.get(_TRAINING).mock(return_value=httpx.Response(200, text=_CSRF_HTML))
 
     client = StravaClient(_FULL_COOKIES)
-    assert await client.get_csrf_token() == "tok123"
+    assert await client.get_csrf_token() == _TOKEN
     await client.aclose()
 
 
@@ -970,7 +979,6 @@ async def test_csrf_not_found_anywhere_raises_and_logs_sources_without_values(
     for path in ("/dashboard", "/frontend/athletes/current", "/athlete/training"):
         assert path in caplog.text
     assert "Next.js" in caplog.text
-    assert "next-token-not-used" not in caplog.text
 
 
 @pytest.mark.asyncio
@@ -1065,7 +1073,7 @@ async def test_csrf_odd_current_athlete_shape_falls_through_to_training(current:
     respx.get(_TRAINING).mock(return_value=httpx.Response(200, text=_CSRF_HTML))
 
     client = StravaClient(_FULL_COOKIES)
-    assert await client.get_csrf_token() == "tok123"
+    assert await client.get_csrf_token() == _TOKEN
     await client.aclose()
 
 
@@ -1103,7 +1111,7 @@ async def test_csrf_unusable_header_falls_through_to_training(header: str) -> No
     respx.get(_TRAINING).mock(return_value=httpx.Response(200, text=_CSRF_HTML))
 
     client = StravaClient(_FULL_COOKIES)
-    assert await client.get_csrf_token() == "tok123"
+    assert await client.get_csrf_token() == _TOKEN
     await client.aclose()
 
 
@@ -1117,7 +1125,7 @@ async def test_csrf_header_without_athlete_id_does_not_short_circuit() -> None:
     training = respx.get(_TRAINING).mock(return_value=httpx.Response(200, text=_CSRF_HTML))
 
     client = StravaClient(_FULL_COOKIES)
-    assert await client.get_csrf_token() == "tok123"
+    assert await client.get_csrf_token() == _TOKEN
     await client.aclose()
     assert training.called
 
@@ -1157,5 +1165,398 @@ async def test_csrf_source_log_has_token_length_not_value(
     with caplog.at_level("DEBUG"):
         await client.get_csrf_token()
     await client.aclose()
-    assert "len=6" in caplog.text
-    assert "tok123" not in caplog.text
+    assert f"len={len(_TOKEN)}" in caplog.text
+    assert _TOKEN not in caplog.text
+
+
+# ── Next.js dashboard as single source (CSRF + athlete ID + feed page 1) ──────
+
+_FEED = "https://www.strava.com/dashboard/feed"
+
+
+def _nextjs_dashboard(*, mutate: Callable[[dict], None] | None = None) -> str:
+    """The synthetic Next.js dashboard fixture, optionally with its __NEXT_DATA__ altered."""
+    html = _load("nextjs_dashboard.html")
+    if mutate is None:
+        return html
+    m = _NEXT_DATA_RE.search(html)
+    assert m
+    data = json.loads(m.group(1))
+    mutate(data)
+    return html.replace(m.group(1), json.dumps(data))
+
+
+def _mock_nextjs_dashboard(html: str | None = None) -> None:
+    respx.get(_DASHBOARD).mock(
+        return_value=httpx.Response(200, text=html if html is not None else _nextjs_dashboard())
+    )
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_csrf_from_nextjs_meta_csrf_makes_no_further_requests() -> None:
+    _mock_nextjs_dashboard()
+    current = respx.get(_CURRENT).mock(return_value=httpx.Response(200, json={}))
+    training = respx.get(_TRAINING).mock(return_value=httpx.Response(200, text=""))
+
+    client = StravaClient(_FULL_COOKIES)
+    assert await client.get_csrf_token() == _TOKEN
+    await client.aclose()
+
+    assert respx.calls.call_count == 1
+    assert not current.called
+    assert not training.called
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_legacy_rails_dashboard_makes_no_further_requests() -> None:
+    respx.get(_DASHBOARD).mock(
+        return_value=httpx.Response(200, text=_load("rails_dashboard_legacy.html"))
+    )
+    client = StravaClient(_FULL_COOKIES)
+    assert await client.get_csrf_token() == _TOKEN
+    await client.aclose()
+    assert respx.calls.call_count == 1
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_dashboard_request_asks_for_english() -> None:
+    _mock_nextjs_dashboard()
+    client = StravaClient(_FULL_COOKIES)
+    await client.get_csrf_token()
+    await client.aclose()
+    assert respx.calls.last.request.headers["accept-language"] == "en"
+
+
+@pytest.mark.asyncio
+@respx.mock
+@pytest.mark.parametrize("token", ["short", "has space " + "a" * 60, "<b>" + "a" * 60])
+async def test_implausible_meta_csrf_falls_through_to_next_source(token: str) -> None:
+    html = f'<html><head><meta name="csrf" content="{token}"></head></html>'
+    respx.get(_DASHBOARD).mock(return_value=httpx.Response(200, text=html))
+    respx.get(_CURRENT).mock(return_value=httpx.Response(200, json={}))
+    respx.get(_TRAINING).mock(return_value=httpx.Response(200, text=_CSRF_HTML))
+
+    client = StravaClient(_FULL_COOKIES)
+    assert await client.get_csrf_token() == _TOKEN
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_nextjs_dashboard_without_meta_still_yields_athlete_id_from_next_data() -> None:
+    html = _nextjs_dashboard().replace('name="csrf"', 'name="viewport"')
+    respx.get(_DASHBOARD).mock(return_value=httpx.Response(200, text=html))
+    current = respx.get(_CURRENT).mock(
+        return_value=httpx.Response(
+            200, json={"currentAthlete": {"id_str": "20000001"}}, headers={"csrf-token": "hdr"}
+        )
+    )
+    client = StravaClient(_FULL_COOKIES)
+    assert await client.get_csrf_token() == "hdr"
+    assert await client.fetch_current_athlete_id() == "20000001"
+    await client.aclose()
+    assert current.call_count == 1
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_dashboard_athlete_id_does_not_fake_athlete_identification() -> None:
+    """An ID read from the dashboard must not make an anonymous /current header trusted."""
+    html = _nextjs_dashboard().replace('name="csrf"', 'name="viewport"')
+    respx.get(_DASHBOARD).mock(return_value=httpx.Response(200, text=html))
+    respx.get(_CURRENT).mock(
+        return_value=httpx.Response(200, json={}, headers={"csrf-token": "anon-token"})
+    )
+    respx.get(_TRAINING).mock(return_value=httpx.Response(200, text=_CSRF_HTML))
+    client = StravaClient(_FULL_COOKIES)
+    assert await client.get_csrf_token() == _TOKEN
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_athlete_id_from_next_data_needs_no_second_request() -> None:
+    _mock_nextjs_dashboard()
+    current = respx.get(_CURRENT).mock(return_value=httpx.Response(200, json={}))
+    client = StravaClient(_FULL_COOKIES)
+    await client.get_csrf_token()
+    assert await client.fetch_current_athlete_id() == "20000001"
+    await client.aclose()
+    assert not current.called
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_athlete_id_falls_back_to_dashboard_data_current_athlete() -> None:
+    def mutate(data: dict) -> None:
+        del data["props"]["currentAthletePreload"]
+
+    _mock_nextjs_dashboard(_nextjs_dashboard(mutate=mutate))
+    client = StravaClient(_FULL_COOKIES)
+    await client.get_csrf_token()
+    assert await client.fetch_current_athlete_id() == "20000001"
+    await client.aclose()
+    assert respx.calls.call_count == 1
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_feed_page_1_comes_from_dashboard_and_parses() -> None:
+    _mock_nextjs_dashboard()
+    xhr = respx.get(_FEED).mock(
+        return_value=httpx.Response(200, json={"entries": [], "pagination": {"hasMore": False}})
+    )
+    client = StravaClient(_FULL_COOKIES, sleep=AsyncMock(), rng=random.Random(0))
+    await client.get_csrf_token()
+    feed = await client.fetch_following_feed("20000001")
+    await client.aclose()
+
+    # Page 1 was embedded; hasMore=true asks for page 2, which the XHR answers (empty).
+    assert xhr.call_count == 1
+    assert "before" in xhr.calls.last.request.url.params
+    assert xhr.calls.last.request.url.params["before"] == str(1790000000 - 2000)  # last entry
+    activities = StructuredFeedParser().parse(feed)
+    assert [a.activity_id for a in activities] == ["10000000001", "10000000002"]
+    assert activities[0].stats.distance_m == pytest.approx(10500)
+    assert activities[0].stats.moving_time_s == 3010
+    assert activities[0].location == "Example City"
+    assert activities[1].location is None
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_embedded_feed_is_used_once() -> None:
+    def mutate(data: dict) -> None:
+        data["props"]["pageProps"]["dashboardData"]["feed"]["pagination"]["hasMore"] = False
+
+    _mock_nextjs_dashboard(_nextjs_dashboard(mutate=mutate))
+    xhr = respx.get(_FEED).mock(
+        return_value=httpx.Response(200, json={"entries": [], "pagination": {"hasMore": False}})
+    )
+    client = StravaClient(_FULL_COOKIES)
+    await client.get_csrf_token()
+    await client.fetch_following_feed("20000001")
+    assert not xhr.called
+    await client.fetch_following_feed("20000001")  # second call: no stale embedded page
+    await client.aclose()
+    assert xhr.call_count == 1
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_embedded_feed_of_other_athlete_is_ignored() -> None:
+    _mock_nextjs_dashboard()
+    xhr = respx.get(_FEED).mock(
+        return_value=httpx.Response(200, json=_page([_act_entry(5)], False))
+    )
+    client = StravaClient(_FULL_COOKIES)
+    await client.get_csrf_token()
+    result = await client.fetch_following_feed("99999999")
+    await client.aclose()
+    assert xhr.call_count == 1
+    assert [e["activity"]["id"] for e in result["entries"]] == [5]
+
+
+@pytest.mark.asyncio
+@respx.mock
+@pytest.mark.parametrize(
+    "feed",
+    [
+        {"entries": "nope", "pagination": {}},
+        {"entries": [{"entity": "Activity", "feedType": "suggested"}], "pagination": {}},
+        {"entries": [], "pagination": {}},
+        [],
+    ],
+)
+async def test_unusable_embedded_feed_falls_back_to_xhr(feed: object) -> None:
+    def mutate(data: dict) -> None:
+        data["props"]["pageProps"]["dashboardData"]["feed"] = feed
+
+    _mock_nextjs_dashboard(_nextjs_dashboard(mutate=mutate))
+    xhr = respx.get(_FEED).mock(
+        return_value=httpx.Response(200, json=_page([_act_entry(7)], False))
+    )
+    client = StravaClient(_FULL_COOKIES)
+    await client.get_csrf_token()
+    result = await client.fetch_following_feed("20000001")
+    await client.aclose()
+    assert xhr.call_count == 1
+    assert [e["activity"]["id"] for e in result["entries"]] == [7]
+
+
+@pytest.mark.asyncio
+@respx.mock
+@pytest.mark.parametrize(
+    "response",
+    [
+        httpx.Response(200, text="<html>nope</html>", headers={"content-type": "text/html"}),
+        httpx.Response(404, text="gone"),
+        httpx.Response(503, text="down"),
+        httpx.Response(200, json={"unexpected": True}),
+        httpx.Response(200, json=[1, 2]),
+    ],
+)
+async def test_pagination_failure_warns_and_keeps_page_1(
+    response: httpx.Response, caplog: pytest.LogCaptureFixture
+) -> None:
+    _mock_nextjs_dashboard()
+    respx.get(_FEED).mock(return_value=response)
+    client = StravaClient(_FULL_COOKIES, sleep=AsyncMock(), rng=random.Random(0))
+    await client.get_csrf_token()
+    with caplog.at_level("WARNING"):
+        feed = await client.fetch_following_feed("20000001")
+    await client.aclose()
+
+    assert len(feed["entries"]) == 3  # 2 activities + 1 challenge from page 1
+    warning = next(r for r in caplog.records if "Feed page 2" in r.getMessage())
+    assert warning.levelname == "WARNING"
+    for part in ("HTTP", "content-type", "/dashboard/feed"):
+        assert part in warning.getMessage()
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_page_1_missing_and_xhr_broken_raises_runtime_error_with_details(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    def drop_feed(data: dict) -> None:
+        del data["props"]["pageProps"]["dashboardData"]["feed"]
+
+    _mock_nextjs_dashboard(_nextjs_dashboard(mutate=drop_feed))
+    respx.get(_FEED).mock(
+        return_value=httpx.Response(
+            200, text="<html>secret-body</html>", headers={"content-type": "text/html"}
+        )
+    )
+    client = StravaClient(_FULL_COOKIES)
+    await client.get_csrf_token()
+    with pytest.raises(RuntimeError) as exc_info:
+        await client.fetch_following_feed("20000001")
+    await client.aclose()
+
+    msg = str(exc_info.value)
+    assert "HTTP 200" in msg
+    assert "text/html" in msg
+    assert "/dashboard/feed" in msg
+    assert "not JSON" in msg
+    assert "secret-body" not in msg
+    assert _TOKEN not in msg
+    assert "sess-old" not in msg
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_page_1_xhr_json_decode_error_is_not_leaked_as_jsondecodeerror() -> None:
+    respx.get(_FEED).mock(return_value=httpx.Response(200, text="not json"))
+    client = StravaClient(_FULL_COOKIES)
+    with pytest.raises(RuntimeError, match="Feed page 1 unavailable"):
+        await client.fetch_following_feed("20000001")
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_foreign_locale_logs_one_aggregated_warning(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    respx.get(_FEED).mock(
+        return_value=httpx.Response(
+            200,
+            json=_page(
+                [_act_entry(1, locale="de"), _act_entry(2, locale="de"), _act_entry(3)], False
+            ),
+        )
+    )
+    client = StravaClient(_FULL_COOKIES)
+    with caplog.at_level("WARNING"):
+        await client.fetch_following_feed("20000001")
+    await client.aclose()
+
+    warnings = [r.getMessage() for r in caplog.records if "locale" in r.getMessage()]
+    assert len(warnings) == 1
+    assert "2 of 3" in warnings[0]
+    assert "de" in warnings[0]
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_english_locale_logs_no_warning(caplog: pytest.LogCaptureFixture) -> None:
+    respx.get(_FEED).mock(return_value=httpx.Response(200, json=_page([_act_entry(1)], False)))
+    client = StravaClient(_FULL_COOKIES)
+    with caplog.at_level("WARNING"):
+        await client.fetch_following_feed("20000001")
+    await client.aclose()
+    assert "locale" not in caplog.text
+
+
+@pytest.mark.parametrize(
+    "html",
+    [
+        "",
+        '<script id="__NEXT_DATA__" type="application/json">not json</script>',
+        '<script id="__NEXT_DATA__" type="application/json">[1]</script>',
+        '<script id="__NEXT_DATA__" type="application/json">{"props": 5}</script>',
+        '<script id="__NEXT_DATA__" type="application/json">{"props": {"pageProps": 3}}</script>',
+        '<script id="__NEXT_DATA__" type="application/json">'
+        '{"props": {"currentAthletePreload": ["x"], "pageProps": {"dashboardData": []}}}</script>',
+        '<script id="__NEXT_DATA__" type="application/json">'
+        '{"props": {"currentAthletePreload": {"id_str": 5}, '
+        '"pageProps": {"dashboardData": {"feed": "x"}}}}</script>',
+    ],
+)
+def test_parse_next_data_is_total(html: str) -> None:
+    assert _parse_next_data(html) == (None, None)
+
+
+def test_parse_next_data_reads_id_and_feed() -> None:
+    athlete_id, feed = _parse_next_data(_nextjs_dashboard())
+    assert athlete_id == "20000001"
+    assert feed is not None
+    assert len(feed["entries"]) == 3
+    assert feed["entries"][1]["activity"]["timeAndLocation"]["location"] is None
+    assert isinstance(feed["entries"][0]["cursorData"]["rank"], int)
+
+
+@pytest.mark.asyncio
+@respx.mock
+@pytest.mark.parametrize(("first_id", "second_id"), [(5, "5"), ("5", 5)])
+async def test_fetch_feed_deduplicates_int_and_str_activity_ids(
+    first_id: object, second_id: object
+) -> None:
+    """Page 1 (SSR JSON) and page 2 (XHR) may type the same id differently."""
+    respx.get(_FEED).mock(
+        side_effect=[
+            httpx.Response(200, json=_page([_act_entry(first_id)], True)),  # type: ignore[arg-type]
+            httpx.Response(200, json=_page([_act_entry(second_id)], False)),  # type: ignore[arg-type]
+        ]
+    )
+    client = StravaClient(_FULL_COOKIES, sleep=AsyncMock(), rng=random.Random(0))
+    result = await client.fetch_following_feed("1")
+    await client.aclose()
+    assert len(result["entries"]) == 1
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_embedded_feed_with_foreign_locale_falls_back_to_xhr(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    def mutate(data: dict) -> None:
+        feed = data["props"]["pageProps"]["dashboardData"]["feed"]
+        feed["entries"][0]["locale"] = "de"
+
+    _mock_nextjs_dashboard(_nextjs_dashboard(mutate=mutate))
+    xhr = respx.get(_FEED).mock(
+        return_value=httpx.Response(200, json=_page([_act_entry(7, locale="de")], False))
+    )
+    client = StravaClient(_FULL_COOKIES)
+    await client.get_csrf_token()
+    with caplog.at_level("WARNING"):
+        result = await client.fetch_following_feed("20000001")
+    await client.aclose()
+    assert xhr.call_count == 1
+    assert [e["activity"]["id"] for e in result["entries"]] == [7]
+    assert sum("locale" in r.getMessage() for r in caplog.records) == 1

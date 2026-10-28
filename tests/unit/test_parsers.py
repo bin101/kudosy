@@ -51,6 +51,36 @@ class TestParseAthleteName:
         html = '<meta content="Maria Müller | Strava" property="og:title">'
         assert parse_athlete_name(html) == "Maria Müller"
 
+    def test_og_title_single_quotes_property_first(self) -> None:
+        # A differing <title> proves the og:title pattern matched, not the fallback.
+        html = (
+            "<meta property='og:title' content='Anna Beispiel | Strava'>"
+            "<title>Other Name | Strava</title>"
+        )
+        assert parse_athlete_name(html) == "Anna Beispiel"
+
+    def test_og_title_single_quotes_content_first(self) -> None:
+        html = (
+            "<meta content='Anna Beispiel | Strava' property='og:title'>"
+            "<title>Other Name | Strava</title>"
+        )
+        assert parse_athlete_name(html) == "Anna Beispiel"
+
+    def test_og_title_single_quotes_may_contain_double_quote(self) -> None:
+        html = "<meta property='og:title' content='Anna \"Ace\" Beispiel | Strava'>"
+        assert parse_athlete_name(html) == 'Anna "Ace" Beispiel'
+
+    def test_empty_og_title_content_does_not_run_into_next_tag(self) -> None:
+        html = (
+            '<meta property="og:title" content=""><meta name="x" content="Garbage | Strava">'
+            "<title>Real Name | Strava</title>"
+        )
+        assert parse_athlete_name(html) == "Real Name"
+
+    def test_empty_og_title_content_first_does_not_run_into_next_tag(self) -> None:
+        html = '<meta content="" property="og:title"><meta name="x" content="Garbage | Strava">'
+        assert parse_athlete_name(html) is None
+
     def test_title_fallback(self) -> None:
         html = "<title>Klaus Schmidt | Strava</title>"
         assert parse_athlete_name(html) == "Klaus Schmidt"
