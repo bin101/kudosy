@@ -5,6 +5,14 @@ All notable changes to Kudosy will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.5](https://github.com/bin101/kudosy/compare/v1.9.4...v1.9.5) (2026-10-28)
+
+
+### Bug Fixes
+
+* **auth:** keep Strava session alive via remember cookies and cookie jar ([d24983e](https://github.com/bin101/kudosy/commit/d24983e392493d78475c5f31ec8994aafd22cab6))
+* **ci:** set asyncio_default_fixture_loop_scope so pytest 9.2 does not abort at configure ([881a2fd](https://github.com/bin101/kudosy/commit/881a2fd7cfbf9e5954d95894ad00dedcb4f47ec3))
+
 ## [1.9.4](https://github.com/bin101/kudosy/compare/v1.9.3...v1.9.4) (2026-07-24)
 
 
