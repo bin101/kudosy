@@ -141,6 +141,39 @@ def test_build_auth_error_payload_has_title_and_message() -> None:
     assert "Session expired" in payload["message"]
 
 
+@pytest.mark.parametrize(
+    ("code", "title_part"),
+    [
+        ("AUTH_SESSION_EXPIRED", "Session abgelaufen"),
+        ("AUTH_REMEMBER_EXPIRED", "Remember-Cookies"),
+        ("AUTH_MALFORMED_COOKIE", "unvollständig"),
+        ("AUTH_FAILED", "Authentifizierung"),
+    ],
+)
+def test_build_auth_error_payload_is_code_specific(code: str, title_part: str) -> None:
+    exc = AuthError("Details")
+    exc.code = code
+    payload = build_auth_error_payload(exc)
+    assert title_part in payload["title"]
+    assert "Details" in payload["message"]
+
+
+def test_build_auth_error_payload_titles_differ_per_code() -> None:
+    titles = set()
+    for code in ("AUTH_SESSION_EXPIRED", "AUTH_REMEMBER_EXPIRED", "AUTH_MALFORMED_COOKIE"):
+        exc = AuthError("x")
+        exc.code = code
+        titles.add(build_auth_error_payload(exc)["title"])
+    assert len(titles) == 3
+
+
+def test_build_auth_error_payload_unknown_code_falls_back_to_generic() -> None:
+    exc = AuthError("x")
+    exc.code = "SOMETHING_NEW"
+    payload = build_auth_error_payload(exc)
+    assert "Authentifizierung" in payload["title"]
+
+
 def test_build_auth_error_payload_high_priority() -> None:
     payload = build_auth_error_payload(AuthError("x"))
     assert payload["priority"] >= 4

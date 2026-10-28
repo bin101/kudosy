@@ -193,6 +193,19 @@ async def post_logout(response: Response) -> dict[str, Any]:
 # ── Config ────────────────────────────────────────────────────────────────────
 
 
+def _unexpected_response(exc: Exception, action: str) -> HTTPException:
+    """502 for a Strava answer Kudosy cannot interpret (page structure probably changed)."""
+    log.warning("%s failed — unexpected Strava response: %s", action, exc)
+    return HTTPException(
+        status_code=502,
+        detail={
+            "code": "UNEXPECTED_RESPONSE",
+            "message": "Unerwartete Antwort von Strava — die Seitenstruktur hat sich "
+            "vermutlich geändert. Bitte das Log prüfen und Kudosy aktualisieren.",
+        },
+    )
+
+
 def _mask_cookie_preview(cookie: str) -> str:
     """Return a short, non-sensitive preview of a session cookie for display only."""
     return cookie[:6] + "…" if len(cookie) > 6 else "***"
@@ -625,8 +638,12 @@ async def get_feed(request: Request) -> dict[str, Any]:
 
     client = StravaClient(cfg.stravaCookies)
     try:
-        # Resolve athlete ID (from config or live lookup).
+        # Same path as the engine: the dashboard request yields CSRF token, athlete ID and
+        # the embedded first feed page, so the feed works even if the XHR is gone.
+        await client.get_csrf_token()
         athlete_id = cfg.athleteId or await client.fetch_current_athlete_id() or ""
+        if not athlete_id:
+            raise RuntimeError("Strava athlete ID could not be determined")
         # Optional raw feed dump for debugging (written to DATA_DIR/last-feed-raw.json).
         # Gated on KUDOSY_LOG_LEVEL=DEBUG: this writes third-party athletes'
         # full feed data (names, locations, device info) to disk on every
@@ -645,11 +662,18 @@ async def get_feed(request: Request) -> dict[str, Any]:
                 cache_athlete_avatar(act.athlete_id, act.athlete_avatar_url)
         raw_acts = [a.model_dump(mode="json") for a in activities]
         now_ts = _dt.datetime.now(_dt.UTC).isoformat()
-        write_activity_cache(raw_acts, now_ts)
+        if raw_acts:
+            write_activity_cache(raw_acts, now_ts)
+        else:
+            # An empty result is more likely a parse problem than an empty feed:
+            # keep the last good snapshot instead of overwriting it.
+            log.warning("Live feed returned no activities — activity cache left unchanged")
         return {"fetched_at": now_ts, "activities": _decorate_feed(raw_acts, effective)}
     except AuthError as exc:
         code = getattr(exc, "code", "AUTH_FAILED")
         raise HTTPException(status_code=401, detail={"code": code, "message": str(exc)}) from exc
+    except (RuntimeError, ValueError) as exc:
+        raise _unexpected_response(exc, "Live feed fetch") from exc
     except httpx.RequestError as exc:
         # A network-level failure reaching Strava (already retried inside
         # StravaClient) — report it cleanly instead of an unhandled 500.
@@ -698,6 +722,22 @@ async def post_single_kudos(
     except AuthError as exc:
         code = getattr(exc, "code", "AUTH_FAILED")
         raise HTTPException(status_code=401, detail={"code": code, "message": str(exc)}) from exc
+    except RateLimitError as exc:
+        raise HTTPException(
+            status_code=429,
+            detail={"code": "RATE_LIMITED", "message": "Strava meldet zu viele Anfragen."},
+        ) from exc
+    except (RuntimeError, ValueError) as exc:
+        raise _unexpected_response(exc, "Single kudo") from exc
+    except httpx.RequestError as exc:
+        log.warning("Single kudo failed (network error): %s", exc)
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "code": "STRAVA_UNREACHABLE",
+                "message": "Strava war nicht erreichbar. Bitte später erneut versuchen.",
+            },
+        ) from exc
     finally:
         persist_client_cookies(cfg.stravaCookies, client)
         await client.aclose()

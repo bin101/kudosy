@@ -1,7 +1,8 @@
 """Unit tests for decision.py — pure filter logic.
 
 Decision precedence (highest → lowest):
-  ignore → already → allow → name_match → no_rule (gating) → criteria → default (give kudos)
+  ignore → already → allow → name_match → no_rule (gating) → criteria / stat_missing
+  → default (give kudos)
 
 Test corpus is derived from the real last-run.log to guarantee behavioral parity.
 """
@@ -153,20 +154,65 @@ class TestCriteriaSkip:
         d = decide(act, eff)  # type: ignore[arg-type]
         assert d.give_kudos is True
 
-    def test_missing_distance_does_not_fail_criteria(self) -> None:
-        """WeightTraining has no distance; a minDistance rule must not block it."""
+    def test_missing_distance_with_active_rule_skips(self) -> None:
+        """An active minDistance rule cannot be verified without a distance → no kudos."""
         eff = _eff(catch_min_dist=10)
         act = _act(sport_type="WeightTraining", moving_time_s=2988)  # 49m 48s
         d = decide(act, eff)  # type: ignore[arg-type]
-        # Missing distance → treat as "not failing" → give kudos
-        assert d.give_kudos is True
+        assert d.give_kudos is False
+        assert d.reason == DecisionReason.STAT_MISSING
 
-    def test_missing_time_does_not_fail_time_criteria(self) -> None:
-        """No time stat and no elapsed time → rule not violated."""
+    def test_missing_time_with_active_rule_skips(self) -> None:
+        """No time stat and no elapsed time with a minTime rule → no kudos."""
         eff = _eff(catch_min_time=45)
         act = _act(sport_type="Ride")  # no time at all
         d = decide(act, eff)  # type: ignore[arg-type]
+        assert d.give_kudos is False
+        assert d.reason == DecisionReason.STAT_MISSING
+
+    def test_elapsed_time_is_enough_when_moving_time_missing(self) -> None:
+        eff = _eff(catch_min_time=45)
+        act = _act(sport_type="Ride", elapsed_time_s=3600)
+        d = decide(act, eff)  # type: ignore[arg-type]
         assert d.give_kudos is True
+        assert d.reason == DecisionReason.DEFAULT
+
+    def test_catch_all_distance_with_per_sport_zero_and_time_rule_gives_kudos(self) -> None:
+        """Distance-less sports: per-sport minDistance=0 removes the catch-all distance rule."""
+        eff = _eff(
+            catch_min_dist=5, per_dist={"WeightTraining": 0}, per_time={"WeightTraining": 20}
+        )
+        act = _act(sport_type="WeightTraining", moving_time_s=1800)
+        d = decide(act, eff)  # type: ignore[arg-type]
+        assert d.give_kudos is True
+        assert d.reason == DecisionReason.DEFAULT
+
+    def test_catch_all_distance_with_only_per_sport_time_rule_is_stat_missing(self) -> None:
+        eff = _eff(catch_min_dist=5, per_time={"WeightTraining": 20})
+        act = _act(sport_type="WeightTraining", moving_time_s=1800)
+        assert decide(act, eff).reason == DecisionReason.STAT_MISSING  # type: ignore[arg-type]
+
+    def test_failing_present_stat_wins_over_missing_stat(self) -> None:
+        """Below threshold is the more informative reason than a missing other stat."""
+        eff = _eff(catch_min_dist=10, catch_min_time=45)
+        act = _act(sport_type="Run", moving_time_s=600)  # distance missing, time too short
+        d = decide(act, eff)  # type: ignore[arg-type]
+        assert d.give_kudos is False
+        assert d.reason == DecisionReason.CRITERIA
+
+    def test_missing_stat_without_matching_rule_is_irrelevant(self) -> None:
+        """Only a distance rule is active; a missing time does not matter."""
+        eff = _eff(per_dist={"Run": 5.0})
+        act = _act(sport_type="Run", distance_m=8000.0)  # no time
+        d = decide(act, eff)  # type: ignore[arg-type]
+        assert d.give_kudos is True
+
+    def test_missing_stat_does_not_block_allow_list_or_name_match(self) -> None:
+        eff = _eff(catch_min_dist=10, allow=["111"])
+        assert decide(_act(sport_type="Yoga"), eff).reason == DecisionReason.ALLOW  # type: ignore[arg-type]
+        eff = _eff(catch_min_dist=10, names=["^Yoga"])
+        act = _act(sport_type="Yoga", activity_name="Yoga flow")
+        assert decide(act, eff).reason == DecisionReason.NAME_MATCH  # type: ignore[arg-type]
 
 
 class TestNameMatch:
@@ -274,13 +320,13 @@ class TestRuleGating:
         assert d.give_kudos is True
         assert d.reason == DecisionReason.NAME_MATCH
 
-    def test_missing_stat_with_rule_passes_gate(self) -> None:
-        """Sport has a rule (gate passes); missing stat does not count as CRITERIA failure."""
+    def test_missing_stat_with_rule_passes_gate_but_is_skipped(self) -> None:
+        """Sport has a rule (gate passes); the missing stat then skips with STAT_MISSING."""
         eff = _eff(per_dist={"WeightTraining": 1.0})
         act = _act(sport_type="WeightTraining")  # no distance stat
         d = decide(act, eff)  # type: ignore[arg-type]
-        assert d.give_kudos is True
-        assert d.reason == DecisionReason.DEFAULT
+        assert d.give_kudos is False
+        assert d.reason == DecisionReason.STAT_MISSING
 
     def test_only_time_rule_passes_gate(self) -> None:
         """A minTime rule (no distance rule) is sufficient to pass the gate."""

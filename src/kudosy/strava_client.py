@@ -60,6 +60,7 @@ from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -197,6 +198,8 @@ class StravaClient:
         self._athlete_id: str | None = None
         # First feed page embedded in the dashboard HTML; consumed by fetch_following_feed.
         self._dashboard_feed: dict[str, Any] | None = None
+        # HTTP status of the most recent send_kudos response (None: no response / no call yet).
+        self.last_kudo_status: int | None = None
         self._client: httpx.AsyncClient | None = None
         # Inject sleep/rng for deterministic testing (analogous to humanizer.py).
         self._sleep: Callable[[float], Awaitable[None]] = (
@@ -374,7 +377,7 @@ class StravaClient:
 
     @staticmethod
     def _csrf_found(source: str, token: str) -> str:
-        log.debug("CSRF token from %s", source)
+        log.info("CSRF token from %s", source)
         return token
 
     async def fetch_current_athlete_id(self) -> str | None:
@@ -437,8 +440,9 @@ class StravaClient:
             equivalent to what the caller would see from a single-page response.
             :class:`~kudosy.feed.StructuredFeedParser` can consume it unchanged.
 
-        A failing XHR for page 2+ (HTML, 4xx/5xx, unexpected format) only logs a
-        WARNING and ends pagination with the entries collected so far. One WARNING
+        A failing XHR for page 2+ (HTML, 4xx/5xx, unexpected format, network error after
+        retries) only logs a WARNING and ends pagination with the entries collected so
+        far. A login redirect still raises ``AuthError``. One WARNING
         also reports entries whose ``locale`` is not ``en``.
 
         Raises:
@@ -465,9 +469,21 @@ class StravaClient:
                 log.info("Feed: Seite 1 aus Dashboard")
                 payload = embedded
             else:
-                resp = await self._get_with_retry(
-                    client, _FEED_URL, params=params, headers=feed_headers, timeout=15.0
-                )
+                try:
+                    resp = await self._get_with_retry(
+                        client, _FEED_URL, params=params, headers=feed_headers, timeout=15.0
+                    )
+                except httpx.RequestError as exc:
+                    if page_num == 0:
+                        raise
+                    log.warning(
+                        "Feed page %d could not be fetched (%s) — stopping pagination with"
+                        " %d activities",
+                        page_num + 1,
+                        type(exc).__name__,
+                        len(seen_activity_ids),
+                    )
+                    break
                 self._check_auth(resp)
                 parsed, detail = _feed_payload(resp)
                 if parsed is None:
@@ -568,9 +584,17 @@ class StravaClient:
         return feed
 
     async def send_kudos(self, activity_id: str, csrf_token: str) -> bool:
-        """POST a kudo for *activity_id*. Returns True on success."""
+        """POST a kudo for *activity_id*. Returns True only on HTTP 200/201.
+
+        Redirects are not followed: a followed redirect ends on a page that answers
+        200 and would be counted as a kudo that was never given. A redirect to a
+        login path (or a 401) raises :class:`~kudosy.feed.AuthError`; any other
+        non-success status counts as a failure. The HTTP status of the answer is kept
+        in :attr:`last_kudo_status` for the caller's log line.
+        """
         client = self._get_client()
         url = _KUDO_URL.format(activity_id=activity_id)
+        self.last_kudo_status = None
         try:
             resp = await client.post(
                 url,
@@ -583,19 +607,36 @@ class StravaClient:
                     "Referer": f"{_BASE}/dashboard",
                 },
                 timeout=15.0,
+                follow_redirects=False,
             )
-            if resp.status_code in (200, 201):
-                return True
-            if resp.status_code == 429:
-                log.warning(
-                    "Strava Rate-Limit (429) beim Senden der Kudos für Activity %s", activity_id
-                )
-                raise RateLimitError(f"HTTP 429 für Activity {activity_id}")
-            log.warning("Unexpected status %d sending kudos to %s", resp.status_code, activity_id)
-            return False
         except httpx.RequestError as exc:
             log.error("Network error sending kudos to %s: %s", activity_id, exc)
             return False
+        status = resp.status_code
+        self.last_kudo_status = status
+        if status in (200, 201):
+            return True
+        if status == 429:
+            log.warning(
+                "Strava Rate-Limit (429) beim Senden der Kudos für Activity %s", activity_id
+            )
+            raise RateLimitError(f"HTTP 429 für Activity {activity_id}")
+        if resp.is_redirect:
+            target = urlsplit(resp.headers.get("location", "")).path
+            if _LOGIN_PATH_RE.search(target):
+                log.warning("Kudo POST for %s redirected to login (%s)", activity_id, target)
+                self._auth_failed = True
+                raise self._session_rejected_error()
+            log.warning(
+                "Kudo POST for %s answered HTTP %d (redirect to %s) — not counted as given",
+                activity_id,
+                status,
+                target or "-",
+            )
+            return False
+        self._check_auth(resp)  # 401 -> AuthError
+        log.warning("Kudo POST for %s answered HTTP %d — not counted as given", activity_id, status)
+        return False
 
     async def search_athletes(self, query: str) -> list[dict[str, str]]:
         """Search for athletes by name on Strava.
@@ -629,11 +670,15 @@ class StravaClient:
             return []
 
     async def lookup_athlete(self, athlete_id: str) -> str | None:
-        """Scrape an athlete's display name from their profile page."""
+        """Scrape an athlete's display name from their profile page.
+
+        Raises :class:`~kudosy.feed.AuthError` when Strava bounces the request to login.
+        """
         client = self._get_client()
         url = _ATHLETE_URL.format(athlete_id=athlete_id)
         try:
             resp = await client.get(url, timeout=8.0)
+            self._check_auth(resp)
             if not resp.is_success:
                 return None
             return parse_athlete_name(resp.text)
@@ -666,6 +711,23 @@ class StravaClient:
             lines.append(f"  {hop.status_code} {hop.url.path} | sent=[{sent}] | set=[{set_}]")
         return "\n".join(lines)
 
+    def _session_rejected_error(self) -> AuthError:
+        """AuthError for a request Strava bounced to its login page."""
+        has_remember = all(self._initial_cookies.get(n) for n in REMEMBER_COOKIES)
+        if has_remember:
+            err = AuthError(
+                "Strava hat die Session trotz Remember-Cookies abgelehnt. "
+                "Bitte den kompletten Cookie-Header neu eintragen."
+            )
+            err.code = "AUTH_REMEMBER_EXPIRED"
+        else:
+            err = AuthError(
+                "Strava-Session ist abgelaufen und es sind keine Remember-Cookies "
+                "hinterlegt. Bitte den kompletten Cookie-Header neu eintragen."
+            )
+            err.code = "AUTH_SESSION_EXPIRED"
+        return err
+
     def _raise_for_auth(self, resp: httpx.Response, *, probe: bool) -> None:
         # httpx follows redirects, so resp.request is the *last* hop (after a 301 that is
         # the anonymous session Strava hands out); the stored cookies went out first.
@@ -678,20 +740,7 @@ class StravaClient:
                 self._describe_hops(resp),
                 _masked_cookie_header(sent),
             )
-            has_remember = all(self._initial_cookies.get(n) for n in REMEMBER_COOKIES)
-            if has_remember:
-                err = AuthError(
-                    "Strava hat die Session trotz Remember-Cookies abgelehnt. "
-                    "Bitte den kompletten Cookie-Header neu eintragen."
-                )
-                err.code = "AUTH_REMEMBER_EXPIRED"
-            else:
-                err = AuthError(
-                    "Strava-Session ist abgelaufen und es sind keine Remember-Cookies "
-                    "hinterlegt. Bitte den kompletten Cookie-Header neu eintragen."
-                )
-                err.code = "AUTH_SESSION_EXPIRED"
-            raise err
+            raise self._session_rejected_error()
         if probe and resp.status_code in (400, 500) and sent:
             log.warning(
                 "Strava answered %d for %s\n%s\n  first request cookies: %s",
@@ -836,13 +885,16 @@ def _extract_search_results(html: str) -> list[Any]:
     """
     m = _NEXT_DATA_RE.search(html)
     if not m:
+        log.warning("No __NEXT_DATA__ in athlete search response — Strava's page may have changed")
         return []
     try:
         data = json.loads(m.group(1))
     except (json.JSONDecodeError, ValueError):
         log.warning("__NEXT_DATA__ JSON could not be parsed in athlete search response")
         return []
-    results = data.get("props", {}).get("pageProps", {}).get("searchResults")
+    props = data.get("props") if isinstance(data, dict) else None
+    page_props = props.get("pageProps") if isinstance(props, dict) else None
+    results = page_props.get("searchResults") if isinstance(page_props, dict) else None
     return results if isinstance(results, list) else []
 
 

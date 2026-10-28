@@ -73,11 +73,8 @@ export async function loadFeed(refresh = false) {
     renderFeed();
   } catch (err) {
     state.feedLoaded = false;
-    const is401 = err.message && (
-      err.message.includes('AUTH_') ||
-      err.message.includes('401') ||
-      err.message.toLowerCase().includes('cookie')
-    );
+    // AUTH_REQUIRED is the optional Kudosy login gate (api.js re-shows its overlay), not a Strava cookie problem.
+    const is401 = typeof err.code === 'string' && err.code.startsWith('AUTH_') && err.code !== 'AUTH_REQUIRED';
     container.innerHTML = is401
       ? `<p class="hint feed-error">${t('feed.auth.error')}</p>`
       : `<p class="hint feed-error">${t('feed.load.error', { msg: err.message })}</p>`;
@@ -208,10 +205,12 @@ export function renderFeed() {
 
             kudosBtn.remove();
           } else {
+            toast(t('toast.kudo.failed'), 'error');
             kudosBtn.disabled    = false;
             kudosBtn.textContent = t('feed.kudo.give');
           }
-        } catch {
+        } catch (err) {
+          toast(t('toast.kudo.failedWith', { msg: err.message }), 'error');
           kudosBtn.disabled    = false;
           kudosBtn.textContent = t('feed.kudo.give');
         }

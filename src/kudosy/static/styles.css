@@ -572,6 +572,11 @@ small, .hint {
   color: var(--text-muted);
 }
 
+.status-error {
+  margin-top: 4px;
+  color: var(--error);
+}
+
 /* ── Log output ──────────────────────────────────────────────────────────────── */
 
 .log-header {

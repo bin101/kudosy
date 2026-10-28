@@ -7,7 +7,8 @@ Precedence (highest → lowest):
   4. activity name matches a regex → GIVE (NAME_MATCH) — overrides thresholds
   5. Sport type has no effective rule → SKIP (NO_RULE) — rule-gating (always active)
   6. Stats below minDistance or minTime for sport type → SKIP (CRITERIA)
-  7. Default → GIVE (DEFAULT)
+  7. An active minDistance/minTime rule but no such value → SKIP (STAT_MISSING)
+  8. Default → GIVE (DEFAULT)
 
 Rule-gating (step 5): kudos are given only when the sport type has at least one
 effective Distance or Duration rule, regardless of whether it comes from a
@@ -15,11 +16,14 @@ per-sport rule, a category rule, or a catchAll rule (all three sources collapse
 into the same flat per-sport dicts after build_effective_config, so a single
 dict lookup captures all sources).
 
-Note on missing stats: If a rule (e.g. minDistance) exists for a sport type
-but the activity has no Distance stat, the rule is treated as not violated
-(we give kudos). This mirrors upstream behavior where time-only activities
-like WeightTraining still receive kudos when only a minTime rule exists but no
-time is recorded.
+Note on missing stats: if a rule (e.g. minDistance) is active for a sport type but
+the activity has no such value, the rule cannot be verified and no kudos are given
+(STAT_MISSING). Before this rule a missing value counted as "not violated", which
+silently gave kudos to everything whenever Strava's stat labels stopped parsing.
+Activities that legitimately have no distance (e.g. WeightTraining) therefore need
+minDistance set to 0 for that sport or category (which removes a catch-all distance
+rule there; add a minTime rule if wanted), an allow-list entry or a name match.
+A catch-all minDistance skips such activities.
 """
 
 from __future__ import annotations
@@ -62,11 +66,12 @@ def _has_rule(sport: str, eff: EffectiveConfig) -> bool:
     return time is not None and time > 0
 
 
-def _check_criteria(activity: Activity, eff: EffectiveConfig) -> bool:
-    """Return True when the activity fails the distance or time threshold.
+def _check_criteria(activity: Activity, eff: EffectiveConfig) -> DecisionReason | None:
+    """Return why the activity fails the distance or time rules, or ``None`` if it passes.
 
-    'Fails' means: a rule exists AND the measured value is below the threshold.
-    Missing stat → treat as not failing (return False = does not fail criteria).
+    ``CRITERIA``: a rule is active and the measured value is below the threshold.
+    ``STAT_MISSING``: a rule is active but the activity has no such value. A value
+    that is present and too low wins over a missing one (more informative reason).
 
     Reads typed numeric values directly from ActivityStats — no string reparsing.
     For time we prefer moving_time_s; elapsed_time_s is the fallback (always
@@ -74,25 +79,26 @@ def _check_criteria(activity: Activity, eff: EffectiveConfig) -> bool:
     """
     sport = activity.sport_type
     stats = activity.stats
+    missing = False
 
     # --- minDistance check ---
     min_dist_km = eff.kudoRules.minDistance.get(sport)
-    if (
-        min_dist_km is not None
-        and min_dist_km > 0
-        and stats.distance_m is not None
-        and stats.distance_m < min_dist_km * 1000
-    ):
-        return True  # fails criteria
+    if min_dist_km is not None and min_dist_km > 0:
+        if stats.distance_m is None:
+            missing = True
+        elif stats.distance_m < min_dist_km * 1000:
+            return DecisionReason.CRITERIA
 
     # --- minTime check ---
     min_time_min = eff.kudoRules.minTime.get(sport)
     if min_time_min is not None and min_time_min > 0:
         time_s = stats.moving_time_s if stats.moving_time_s is not None else stats.elapsed_time_s
-        if time_s is not None and time_s < min_time_min * 60:
-            return True  # fails criteria
+        if time_s is None:
+            missing = True
+        elif time_s < min_time_min * 60:
+            return DecisionReason.CRITERIA
 
-    return False
+    return DecisionReason.STAT_MISSING if missing else None
 
 
 def decide(activity: Activity, eff: EffectiveConfig) -> Decision:
@@ -122,9 +128,10 @@ def decide(activity: Activity, eff: EffectiveConfig) -> Decision:
     if not _has_rule(activity.sport_type, eff):
         return Decision(give_kudos=_SKIP, reason=DecisionReason.NO_RULE)
 
-    # 6. Stats criteria
-    if _check_criteria(activity, eff):
-        return Decision(give_kudos=_SKIP, reason=DecisionReason.CRITERIA)
+    # 6. Stats criteria (below threshold, or an active rule without a value to check)
+    failed = _check_criteria(activity, eff)
+    if failed is not None:
+        return Decision(give_kudos=_SKIP, reason=failed)
 
     # 7. Default → give kudos
     return Decision(give_kudos=_GIVE, reason=DecisionReason.DEFAULT)

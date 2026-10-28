@@ -108,3 +108,30 @@ def test_no_language_has_a_blank_translation(i18n: dict[str, Any]) -> None:
         if blank:
             problems.append(f"{lang} has empty value(s) for: {blank}")
     assert not problems, "Language(s) with blank translation values:\n" + "\n".join(problems)
+
+
+_NEW_KEYS = (
+    "reason.stat_missing",
+    "toast.kudo.failed",
+    "toast.kudo.failedWith",
+    "status.lastError",
+    "status.authError.AUTH_SESSION_EXPIRED",
+    "status.authError.AUTH_REMEMBER_EXPIRED",
+    "status.authError.AUTH_MALFORMED_COOKIE",
+    "status.authError.AUTH_FAILED",
+)
+
+
+@pytest.mark.parametrize("key", _NEW_KEYS)
+def test_error_visibility_keys_exist_in_every_language(i18n: dict[str, Any], key: str) -> None:
+    for lang, keys in i18n["MESSAGES"].items():
+        assert keys.get(key), f"{lang} lacks {key}"
+
+
+def test_unexpected_response_text_points_to_changed_page_structure(i18n: dict[str, Any]) -> None:
+    """The old text said 'try again later', which is wrong for a structural change."""
+    for lang, keys in i18n["MESSAGES"].items():
+        text = keys["error.UNEXPECTED_RESPONSE"].lower()
+        for retry_hint in ("later", "später", "plus tard", "más tarde", "più tardi"):
+            assert retry_hint not in text, lang
+        assert "csrf" not in text, lang

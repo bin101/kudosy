@@ -160,7 +160,7 @@ docker compose up --build   # builds image, starts on :8080
 | `humanizer.py` | Pure: `compute_jitter`, `compute_delay` — RNG injected for tests |
 | `models.py` | Pydantic v2: `StatValue`, `ActivityStats`, `Activity`, `UserConfig` (incl. `catchAll`), `AppSettings`, `Decision`, `RunResult` |
 | `effective_config.py` | Pure: `build_effective_config(user)` — two-layer merge (catchAll → user per-sport) |
-| `decision.py` | Pure: `decide(activity, effective_config) -> Decision` — reads typed `ActivityStats` fields directly |
+| `decision.py` | Pure: `decide(activity, effective_config) -> Decision` — reads typed `ActivityStats` fields directly; an active minDistance/minTime rule with no such value → skip (`STAT_MISSING`) |
 | `feed.py` | `FeedParser` protocol + `StructuredFeedParser` — parses JSON XHR feed response into `list[Activity]` |
 | `strava_client.py` | httpx async (real cookie jar, `current_cookies()` exposes `Set-Cookie` rotations): dashboard `__NEXT_DATA__` as source for CSRF token, athlete ID and feed page 1 plus multi-source CSRF fallbacks (see Brittleness note), JSON feed fetch (`/dashboard/feed` XHR for pages 2+), kudo POST, athlete lookup, name search, `fetch_current_athlete_id` |
 | `engine.py` | Orchestrator: run-kudos loop with delays, dry-run, RunResult |
@@ -218,7 +218,25 @@ that XHR fails (not verified live) it logs a WARNING and keeps the entries colle
 usable page 1 anywhere it raises `RuntimeError` with status/content type/path. Without a meta token,
 fallbacks are the `csrf-token` response header of `/frontend/athletes/current` and the meta tag of the
 Rails page `/athlete/training`. The kudo endpoint is unchanged.
+`send_kudos` does not follow redirects (a followed redirect lands on a 200 page and would count as a
+given kudo): success only on 200/201, a redirect to a login path or a 401 raises `AuthError`, any other
+status is a failure whose HTTP status is kept in `client.last_kudo_status` for the run log line.
+`GET /api/feed` goes through `get_csrf_token()` first (like the engine) so it uses the embedded page 1;
+`RuntimeError`/`ValueError` from Strava-facing routes (`/api/feed`, `/api/kudos/{id}`) become a 502 with
+`code: UNEXPECTED_RESPONSE`, and `?refresh=true` never overwrites the activity cache with an empty list.
 If Strava changes their response format, only these two modules need updating.
+
+**Missing stat values (behavior change):** `decision.py` no longer treats a missing distance/duration as
+"rule not violated". With an active minimum rule and no value the decision is `STAT_MISSING` (skip), shown
+in the Feed tab as "value missing"; the engine logs one aggregated WARNING when no activity has a
+parsable distance. Distance-less sports (e.g. WeightTraining) need minDistance 0 for that sport or category (plus a minTime
+rule if wanted; a catch-all minDistance skips them), the allow list
+or a name pattern. Documented in the README ("Rules and Missing Values").
+
+**Auth status:** `app.auth_ok` becomes true only after a run without `RunResult.error`. An `AuthError`
+is stored as a failed `RunResult` (`error`, `error_code`, not written to the run history) so the status
+panel and banner show the reason (`AUTH_SESSION_EXPIRED`, `AUTH_REMEMBER_EXPIRED`,
+`AUTH_MALFORMED_COOKIE`, `AUTH_FAILED`); the auth webhook title follows the same code.
 
 **Auth note:** all `/api/*` routes except `/api/auth-status`, `/api/login`, and `/api/logout`
 (plus `GET /`, serving the frontend shell) go through `auth.require_auth` — a no-op unless

@@ -125,6 +125,21 @@ environment variables:
 Leaving `KUDOSY_AUTH_PASSWORD` unset keeps today's behavior (no login) — this is opt-in and
 does not affect existing installs.
 
+## Rules and Missing Values
+
+A minimum-distance or minimum-duration rule is only checked against values Strava actually
+reports for an activity. **If such a rule is active for an activity's sport type and the activity
+has no matching value, Kudosy does not give kudos** (reason "value missing" in the Feed tab).
+Earlier versions treated a missing value as "rule not violated" and gave kudos anyway, which
+hid parsing problems: if Strava's stat labels changed, every activity passed the rules.
+
+Practical consequence: activities that never have a distance (e.g. weight training) are skipped
+by a distance rule, and a catch-all minimum distance therefore skips them too. To kudo them, set the
+minimum distance to 0 for that sport or category (optionally with a duration rule), use the athlete
+allow list, or an activity-name pattern; all three bypass or avoid the distance check.
+If none of the feed's activities has a parsable distance, the run log shows a WARNING
+("N of M activities have no parsable distance").
+
 ## Human-Like Timing
 
 Kudosy has several layers of randomness and restraint to avoid a detectable machine pattern:

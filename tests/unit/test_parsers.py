@@ -30,6 +30,21 @@ class TestDecodeHtmlEntities:
     def test_named_apos(self) -> None:
         assert decode_html_entities("it&apos;s") == "it's"
 
+    def test_numeric_hex_entity(self) -> None:
+        assert decode_html_entities("O&#x27;Brien") == "O'Brien"
+
+    def test_numeric_entity_non_ascii(self) -> None:
+        assert decode_html_entities("M&#252;ller &#x4e2d;") == "Müller 中"
+
+    def test_other_named_entity(self) -> None:
+        assert decode_html_entities("a&nbsp;b") == "a\u00a0b"
+
+    def test_decodes_only_one_level(self) -> None:
+        assert decode_html_entities("&amp;lt;") == "&lt;"
+
+    def test_bare_ampersand_and_invalid_entity_unchanged(self) -> None:
+        assert decode_html_entities("R&D & &#xZZ; &foo;") == "R&D & &#xZZ; &foo;"
+
     def test_plain_text_unchanged(self) -> None:
         assert decode_html_entities("plain text") == "plain text"
 

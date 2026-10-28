@@ -9,23 +9,14 @@ handles the full Strava feed stat format (HTML-wrapped display strings).
 from __future__ import annotations
 
 import re
+from html import unescape
 
 # ── HTML entity decoding ──────────────────────────────────────────────────────
 
-_ENTITIES: dict[str, str] = {
-    "&amp;": "&",
-    "&lt;": "<",
-    "&gt;": ">",
-    "&quot;": '"',
-    "&#39;": "'",
-    "&apos;": "'",
-}
-_ENTITY_RE = re.compile("|".join(re.escape(k) for k in _ENTITIES))
-
 
 def decode_html_entities(s: str) -> str:
-    """Replace the six most common HTML entities in *s*."""
-    return _ENTITY_RE.sub(lambda m: _ENTITIES[m.group()], s)
+    """Decode HTML entities in *s* (named and numeric, e.g. ``&amp;``, ``&#39;``, ``&#x27;``)."""
+    return unescape(s)
 
 
 # ── Athlete name ──────────────────────────────────────────────────────────────
