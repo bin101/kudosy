@@ -326,7 +326,7 @@ async def test_cookie() -> dict[str, Any]:
             "hasRememberToken": _has_remember_token(cfg.stravaCookies),
         }
     except RuntimeError:
-        # No CSRF meta on the dashboard: Strava served something unexpected.
+        # No usable page 1 or CSRF token anywhere: Strava served something unexpected.
         return {
             "ok": False,
             "code": "UNEXPECTED_RESPONSE",

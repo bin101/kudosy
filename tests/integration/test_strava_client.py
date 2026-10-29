@@ -656,6 +656,114 @@ async def test_fetch_feed_sleep_called_between_pages() -> None:
     assert mock_sleep.call_count == 2
 
 
+def _embedded_with(entries: list, *, has_more: bool = False) -> str:
+    def mutate(data: dict) -> None:
+        data["props"]["pageProps"]["dashboardData"]["feed"] = {
+            "entries": [{**e, "feedType": "following"} for e in entries],
+            "pagination": {"hasMore": has_more},
+        }
+
+    return _nextjs_dashboard(mutate=mutate)
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_embedded_has_more_false_still_fetches_xhr_page_2() -> None:
+    _mock_nextjs_dashboard(_embedded_with([_act_entry(1, rank=500.5, updated_at=900)]))
+    xhr = respx.get(_FEED).mock(
+        return_value=httpx.Response(200, json=_page([_act_entry(2)], has_more=False))
+    )
+    client = StravaClient(_FULL_COOKIES, sleep=AsyncMock(), rng=random.Random(0))
+    await client.get_csrf_token()
+    result = await client.fetch_following_feed("20000001")
+    await client.aclose()
+    assert xhr.call_count == 1
+    assert [e["activity"]["id"] for e in result["entries"]] == [1, 2]
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_before_is_running_minimum_across_pages_and_cursor_is_last_rank() -> None:
+    # updated_at is not sorted; the minimum (100) sits in the embedded page.
+    _mock_nextjs_dashboard(
+        _embedded_with(
+            [_act_entry(1, rank=900, updated_at=100), _act_entry(2, rank=800.9, updated_at=500)]
+        )
+    )
+    xhr = respx.get(_FEED).mock(
+        side_effect=[
+            httpx.Response(
+                200,
+                json=_page(
+                    [
+                        _act_entry(3, rank=700, updated_at=400),
+                        _act_entry(4, rank=650.2, updated_at=600),
+                    ],
+                    has_more=True,
+                ),
+            ),
+            httpx.Response(200, json=_page([_act_entry(5)], has_more=False)),
+        ]
+    )
+    client = StravaClient(_FULL_COOKIES, sleep=AsyncMock(), rng=random.Random(0))
+    await client.get_csrf_token()
+    await client.fetch_following_feed("20000001")
+    await client.aclose()
+    first, second = (dict(c.request.url.params) for c in xhr.calls)
+    assert (first["before"], first["cursor"]) == ("100", "800")  # int(800.9)
+    assert (second["before"], second["cursor"]) == ("100", "650")  # int(650.2)
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_feed_xhr_sends_csrf_header_only_when_token_known() -> None:
+    respx.get(_DASHBOARD).mock(return_value=httpx.Response(200, text=_CSRF_HTML))
+    xhr = respx.get(_FEED).mock(
+        return_value=httpx.Response(200, json=_page([_act_entry(1)], False))
+    )
+    client = StravaClient(_FULL_COOKIES, sleep=AsyncMock(), rng=random.Random(0))
+    await client.get_csrf_token()
+    await client.fetch_following_feed("1")
+    await client.aclose()
+    assert xhr.calls.last.request.headers["x-csrf-token"] == _TOKEN
+
+    xhr.reset()
+    anonymous = StravaClient(_FULL_COOKIES, sleep=AsyncMock(), rng=random.Random(0))
+    await anonymous.fetch_following_feed("1")
+    await anonymous.aclose()
+    assert "x-csrf-token" not in xhr.calls.last.request.headers
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_embedded_page_without_cursor_data_stops_gracefully() -> None:
+    _mock_nextjs_dashboard(_embedded_with([{"entity": "Activity", "activity": {"id": 1}}]))
+    xhr = respx.get(_FEED).mock(return_value=httpx.Response(200, json=_page([], False)))
+    client = StravaClient(_FULL_COOKIES, sleep=AsyncMock(), rng=random.Random(0))
+    await client.get_csrf_token()
+    result = await client.fetch_following_feed("20000001")
+    await client.aclose()
+    assert not xhr.called
+    assert len(result["entries"]) == 1
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_send_kudos_has_no_content_type_and_no_body() -> None:
+    route = respx.post("https://www.strava.com/feed/activity/1/kudo").mock(
+        return_value=httpx.Response(200, text="")
+    )
+    client = StravaClient({"_strava4_session": "c"})
+    await client.send_kudos("1", "tok")
+    await client.aclose()
+    req = route.calls.last.request
+    assert "content-type" not in req.headers
+    assert req.content == b""
+    assert req.headers["accept"] == "application/json, text/plain, */*"
+    assert req.headers["x-csrf-token"] == "tok"
+    assert req.headers["x-requested-with"] == "XMLHttpRequest"
+
+
 # ── Cookie jar, rotation & auth diagnostics ───────────────────────────────────
 
 _CSRF_HTML = f'<html><head><meta name="csrf-token" content="{_TOKEN}"></head></html>'
@@ -1317,7 +1425,8 @@ async def test_feed_page_1_comes_from_dashboard_and_parses() -> None:
     # Page 1 was embedded; hasMore=true asks for page 2, which the XHR answers (empty).
     assert xhr.call_count == 1
     assert "before" in xhr.calls.last.request.url.params
-    assert xhr.calls.last.request.url.params["before"] == str(1790000000 - 2000)  # last entry
+    # before = minimum updated_at over all entries of page 1 (fixture: the last one)
+    assert xhr.calls.last.request.url.params["before"] == str(1790000000 - 2000)
     activities = StructuredFeedParser().parse(feed)
     assert [a.activity_id for a in activities] == ["10000000001", "10000000002"]
     assert activities[0].stats.distance_m == pytest.approx(10500)
@@ -1339,10 +1448,13 @@ async def test_embedded_feed_is_used_once() -> None:
     client = StravaClient(_FULL_COOKIES)
     await client.get_csrf_token()
     await client.fetch_following_feed("20000001")
-    assert not xhr.called
+    # The embedded page's hasMore is never trusted: one XHR page 2 is always tried.
+    assert xhr.call_count == 1
+    assert "before" in xhr.calls.last.request.url.params
     await client.fetch_following_feed("20000001")  # second call: no stale embedded page
     await client.aclose()
-    assert xhr.call_count == 1
+    assert xhr.call_count == 2
+    assert "before" not in xhr.calls.last.request.url.params
 
 
 @pytest.mark.asyncio

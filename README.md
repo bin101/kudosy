@@ -58,7 +58,7 @@ KUDOSY_DATA_DIR=./data KUDOSY_PORT=8080 python -m kudosy
 ## Getting Your Strava Cookies
 
 1. Log in to [strava.com](https://www.strava.com) in your browser.
-2. Open DevTools → **Network**, reload the page and select the request to `strava.com/dashboard`.
+2. Open DevTools → **Network** and reload the dashboard first. Then pick the request of type *document* (or any request to `www.strava.com`).
 3. Under **Request Headers**, copy the whole `Cookie` line.
 4. Paste it into the **Strava Cookies** field of the web UI (or into `data/config.yaml` as `stravaCookies`, a map of cookie name to value). Kudosy keeps only the Strava cookies and drops tracking cookies.
 5. Click **Test cookie** to check the login.
