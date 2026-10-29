@@ -100,7 +100,7 @@ export const MESSAGES = {
     'settings.pagination.mode.label': 'Feed-Abruf',
     'settings.pagination.mode.count': 'Feste Anzahl Aktivitäten',
     'settings.pagination.mode.untilKnown': 'Bis zur bekannten Aktivität',
-    'settings.pagination.mode.hint': 'Bis zur bekannten Aktivität: lädt Seiten, bis eine Aktivität des letzten Laufs erscheint. Ohne vorherigen Lauf wird die feste Anzahl verwendet.',
+    'settings.pagination.mode.hint': 'Bis zur bekannten Aktivität: lädt Seiten, bis eine Aktivität des letzten Laufs erscheint, plus eine weitere Sicherheitsseite. Ohne vorherigen Lauf wird die feste Anzahl verwendet.',
     'settings.pagination.target.label': 'Anzahl Aktivitäten (20–500)',
     'settings.pagination.target.hint': 'Ziel an Aktivitäten pro Lauf. Beim Modus „Bis zur bekannten Aktivität“ nur obere Grenze.',
     'settings.updateCheck.label': 'Auf neue Version prüfen',
@@ -238,6 +238,7 @@ export const MESSAGES = {
     'login.submit': 'Anmelden',
     'login.error.generic': 'Anmeldung fehlgeschlagen.',
     'login.logout.title': 'Abmelden',
+    'login.logout.label': 'Abmelden',
     'tab.stats': 'Statistik',
     'stats.title': 'Lauf-Statistik',
     'stats.refresh': '🔄 Aktualisieren',
@@ -349,7 +350,7 @@ export const MESSAGES = {
     'settings.pagination.mode.label': 'Feed fetching',
     'settings.pagination.mode.count': 'Fixed number of activities',
     'settings.pagination.mode.untilKnown': 'Until a known activity',
-    'settings.pagination.mode.hint': 'Until a known activity: loads pages until an activity from the previous run appears. Without a previous run the fixed number is used.',
+    'settings.pagination.mode.hint': 'Until a known activity: loads pages until an activity from the previous run appears, plus one extra safety page. Without a previous run the fixed number is used.',
     'settings.pagination.target.label': 'Number of activities (20–500)',
     'settings.pagination.target.hint': 'Target number of activities per run. In “Until a known activity” mode it is only an upper bound.',
     'settings.updateCheck.label': 'Check for new versions',
@@ -487,6 +488,7 @@ export const MESSAGES = {
     'login.submit': 'Log in',
     'login.error.generic': 'Login failed.',
     'login.logout.title': 'Log out',
+    'login.logout.label': 'Log out',
     'tab.stats': 'Statistics',
     'stats.title': 'Run Statistics',
     'stats.refresh': '🔄 Refresh',
@@ -598,7 +600,7 @@ export const MESSAGES = {
     'settings.pagination.mode.label': 'Récupération du fil',
     'settings.pagination.mode.count': 'Nombre fixe d\'activités',
     'settings.pagination.mode.untilKnown': 'Jusqu\'à une activité connue',
-    'settings.pagination.mode.hint': 'Jusqu\'à une activité connue : charge des pages jusqu\'à ce qu\'une activité de l\'exécution précédente apparaisse. Sans exécution précédente, le nombre fixe est utilisé.',
+    'settings.pagination.mode.hint': 'Jusqu\'à une activité connue : charge des pages jusqu\'à ce qu\'une activité de l\'exécution précédente apparaisse, plus une page de sécurité supplémentaire. Sans exécution précédente, le nombre fixe est utilisé.',
     'settings.pagination.target.label': 'Nombre d\'activités (20–500)',
     'settings.pagination.target.hint': 'Nombre cible d\'activités par exécution. En mode « Jusqu\'à une activité connue », c\'est seulement une limite supérieure.',
     'settings.updateCheck.label': 'Vérifier les nouvelles versions',
@@ -736,6 +738,7 @@ export const MESSAGES = {
     'login.submit': 'Se connecter',
     'login.error.generic': 'Échec de la connexion.',
     'login.logout.title': 'Se déconnecter',
+    'login.logout.label': 'Déconnexion',
     'tab.stats': 'Statistiques',
     'stats.title': 'Statistiques des exécutions',
     'stats.refresh': '🔄 Actualiser',
@@ -847,7 +850,7 @@ export const MESSAGES = {
     'settings.pagination.mode.label': 'Obtención del feed',
     'settings.pagination.mode.count': 'Número fijo de actividades',
     'settings.pagination.mode.untilKnown': 'Hasta una actividad conocida',
-    'settings.pagination.mode.hint': 'Hasta una actividad conocida: carga páginas hasta que aparece una actividad de la ejecución anterior. Sin ejecución previa se usa el número fijo.',
+    'settings.pagination.mode.hint': 'Hasta una actividad conocida: carga páginas hasta que aparece una actividad de la ejecución anterior, más una página de seguridad adicional. Sin ejecución previa se usa el número fijo.',
     'settings.pagination.target.label': 'Número de actividades (20–500)',
     'settings.pagination.target.hint': 'Número objetivo de actividades por ejecución. En el modo «Hasta una actividad conocida» solo es un límite superior.',
     'settings.updateCheck.label': 'Buscar nuevas versiones',
@@ -985,6 +988,7 @@ export const MESSAGES = {
     'login.submit': 'Iniciar sesión',
     'login.error.generic': 'Error al iniciar sesión.',
     'login.logout.title': 'Cerrar sesión',
+    'login.logout.label': 'Cerrar sesión',
     'tab.stats': 'Estadísticas',
     'stats.title': 'Estadísticas de ejecuciones',
     'stats.refresh': '🔄 Actualizar',
@@ -1096,7 +1100,7 @@ export const MESSAGES = {
     'settings.pagination.mode.label': 'Recupero del feed',
     'settings.pagination.mode.count': 'Numero fisso di attività',
     'settings.pagination.mode.untilKnown': 'Fino a un\'attività nota',
-    'settings.pagination.mode.hint': 'Fino a un\'attività nota: carica pagine finché compare un\'attività dell\'esecuzione precedente. Senza esecuzione precedente si usa il numero fisso.',
+    'settings.pagination.mode.hint': 'Fino a un\'attività nota: carica pagine finché compare un\'attività dell\'esecuzione precedente, più una pagina di sicurezza aggiuntiva. Senza esecuzione precedente si usa il numero fisso.',
     'settings.pagination.target.label': 'Numero di attività (20–500)',
     'settings.pagination.target.hint': 'Numero obiettivo di attività per esecuzione. Nella modalità «Fino a un\'attività nota» è solo un limite superiore.',
     'settings.updateCheck.label': 'Controlla nuove versioni',
@@ -1234,6 +1238,7 @@ export const MESSAGES = {
     'login.submit': 'Accedi',
     'login.error.generic': 'Accesso non riuscito.',
     'login.logout.title': 'Esci',
+    'login.logout.label': 'Esci',
     'tab.stats': 'Statistiche',
     'stats.title': 'Statistiche delle esecuzioni',
     'stats.refresh': '🔄 Aggiorna',
@@ -1299,6 +1304,9 @@ export function applyStaticTranslations(root = document) {
   });
   root.querySelectorAll('[data-i18n-title]').forEach(el => {
     el.title = t(el.dataset.i18nTitle);
+  });
+  root.querySelectorAll('[data-i18n-aria]').forEach(el => {
+    el.setAttribute('aria-label', t(el.dataset.i18nAria));
   });
 }
 

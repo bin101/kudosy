@@ -161,11 +161,11 @@ All other timing parameters are configurable in the web UI on the **Configuratio
 
 | Setting (`settings.json`) | Meaning |
 |---|---|
-| `feedPaginationMode` | `count` (default): load pages until `feedPaginationTarget` unique activities are collected. `untilKnown`: load pages until a page contains an activity seen by the last successful live run (stored in `feed-known-ids.json`, at most 1000 IDs; dry runs, aborted runs and Feed-tab refreshes never change it; that page is kept completely). Without it (first run, missing or corrupt file) it falls back to `count`. |
+| `feedPaginationMode` | `count` (default): load pages until `feedPaginationTarget` unique activities are collected. `untilKnown`: load pages until a page contains an activity seen by the last successful live run (stored in `feed-known-ids.json`, at most 1000 IDs; dry runs, aborted runs and Feed-tab refreshes never change it; that page is kept completely, plus exactly one more safety page). Without it (first run, missing or corrupt file) it falls back to `count`. |
 | `feedPaginationTarget` | Default 100, clamped to 20–500. In `untilKnown` mode only an upper safety bound. |
 
 Pagination also ends when Strava reports the end of the feed or at a hard page cap of
-`ceil(target / 15) + 2` pages (never more than 40). Every page and the stop reason (`target reached`, `known activity reached`, `feed end`, `page cap`, `feed error`) are logged at INFO level.
+`ceil(target / 15) + 2` pages (never more than 40). Every page and the stop reason (`target reached`, `known activity reached (+1 safety page)`, `feed end`, `page cap`, `feed error`) are logged at INFO level.
 
 ## Docker Image
 
