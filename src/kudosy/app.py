@@ -38,12 +38,14 @@ from kudosy.store import (
     mark_kudoed_many,
     persist_client_cookies,
     prune_kudoed,
+    read_known_feed_ids,
     read_kudoed_ids,
     read_last_digest_at,
     read_run_history,
     read_settings,
     read_user_config,
     write_activity_cache,
+    write_known_feed_ids,
     write_last_digest_at,
 )
 
@@ -138,6 +140,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         reset_log_handler(log_path())
         started_at = datetime.now(UTC)
         kudoed_ids = read_kudoed_ids()
+        # IDs seen by the last successful live run (feed pagination mode "untilKnown").
+        # Not the activity cache: dry runs and Feed-tab refreshes write that one too.
+        previous_ids = read_known_feed_ids()
         client = StravaClient(user_cfg.stravaCookies)
         try:
             result = await run_kudos(
@@ -147,6 +152,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
                 feed_parser=feed_parser,
                 dry_run=dry_run,
                 kudoed_ids=kudoed_ids,
+                previous_ids=previous_ids,
             )
             # A run that failed before/after the auth probe (changed page, network, no
             # athlete ID) says nothing about the cookie, so only a clean run confirms it.
@@ -183,6 +189,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
                             act["has_kudoed"] = True
                 write_activity_cache(acts, result.started_at.isoformat())
                 log.debug("Activity cache updated (%d entries)", len(acts))
+            # Known feed IDs: only a clean LIVE run (not dry, not aborted) counts as "handled".
+            if (
+                result
+                and not dry_run
+                and result.error is None
+                and result.success
+                and result.activity_ids
+            ):
+                write_known_feed_ids(result.activity_ids)
             # Persist a compact history entry for every completed run
             if result:
                 append_run_history(

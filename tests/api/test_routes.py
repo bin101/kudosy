@@ -1536,3 +1536,51 @@ def test_post_kudos_network_error_is_502(app_client: TestClient, data_dir: Path)
 
     assert resp.status_code == 502
     assert resp.json()["detail"]["code"] == "STRAVA_UNREACHABLE"
+
+
+def test_put_settings_pagination_roundtrip_and_clamp(app_client: TestClient) -> None:
+    resp = app_client.put(
+        "/api/settings", json={"feedPaginationMode": "untilKnown", "feedPaginationTarget": 9999}
+    )
+    assert resp.status_code == 200
+    data = app_client.get("/api/settings").json()
+    assert data["feedPaginationMode"] == "untilKnown"
+    assert data["feedPaginationTarget"] == 500
+
+
+def test_get_feed_refresh_passes_settings_and_previous_snapshot_ids(
+    app_client: TestClient, data_dir: Path
+) -> None:
+    from unittest.mock import AsyncMock, patch
+
+    from kudosy import store
+
+    store.write_user_config_raw({"stravaSessionCookie": "valid-cookie", "athleteId": "20000001"})
+    store.write_settings(
+        AppSettings(
+            updateCheckEnabled=False, feedPaginationMode="untilKnown", feedPaginationTarget=60
+        )
+    )
+    store.write_known_feed_ids({"111", "222"})
+    store.write_activity_cache([{"activity_id": "cache-only"}], "2026-01-01T00:00:00")
+
+    seen: dict[str, object] = {}
+
+    async def fake_fetch(athlete_id: str, **kwargs: object) -> dict[str, object]:
+        seen.update(kwargs)
+        return {"entries": [], "pagination": {}}
+
+    mock_instance = AsyncMock()
+    mock_instance.fetch_following_feed.side_effect = fake_fetch
+    mock_instance.aclose = AsyncMock()
+    mock_instance.current_cookies = MagicMock(return_value={})
+    with patch("kudosy.routes.StravaClient", return_value=mock_instance):
+        assert app_client.get("/api/feed?refresh=true").status_code == 200
+
+    assert seen["known_ids"] == {"111", "222"}
+    # The refresh may read the known set but must never write it.
+    assert store.read_known_feed_ids() == {"111", "222"}
+    assert seen["mode"] == "untilKnown"
+    assert seen["target"] == 60
+    # The refresh may read the known set but must never write it.
+    assert store.read_known_feed_ids() == {"111", "222"}

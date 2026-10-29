@@ -271,6 +271,21 @@
             </label>
             <small style="margin-top:6px" data-i18n="settings.shuffle.hint">Kudos werden in zufälliger Reihenfolge vergeben (nur im Nicht-Dry-Run).</small>
           </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="feedPaginationMode" data-i18n="settings.pagination.mode.label">Feed-Abruf</label>
+              <select id="feedPaginationMode">
+                <option value="count" data-i18n="settings.pagination.mode.count">Feste Anzahl Aktivitäten</option>
+                <option value="untilKnown" data-i18n="settings.pagination.mode.untilKnown">Bis zur bekannten Aktivität</option>
+              </select>
+              <small data-i18n="settings.pagination.mode.hint">Bis zur bekannten Aktivität: lädt Seiten, bis eine Aktivität des letzten Laufs erscheint. Ohne vorherigen Lauf wird die feste Anzahl verwendet.</small>
+            </div>
+            <div class="form-group">
+              <label for="feedPaginationTarget" data-i18n="settings.pagination.target.label">Anzahl Aktivitäten (20–500)</label>
+              <input type="number" id="feedPaginationTarget" min="20" max="500" step="10">
+              <small data-i18n="settings.pagination.target.hint">Ziel an Aktivitäten pro Lauf. Beim Modus „Bis zur bekannten Aktivität“ nur obere Grenze.</small>
+            </div>
+          </div>
           <div class="form-group">
             <label class="toggle-row">
               <input type="checkbox" id="updateCheckEnabled">

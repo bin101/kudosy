@@ -161,7 +161,7 @@ docker compose up --build   # builds image, starts on :8080
 | `stat_parse.py` | Pure: `strip_unit_markup`, `parse_distance`, `parse_duration`, `parse_pace`, `parse_elevation`, `classify_stat` — all stat string→number conversions |
 | `sport_types.py` | `ALL_SPORT_TYPES` enum list, `fetch_sport_types`, `merge_sport_types` |
 | `humanizer.py` | Pure: `compute_jitter`, `compute_delay` — RNG injected for tests |
-| `models.py` | Pydantic v2: `StatValue`, `ActivityStats`, `Activity`, `UserConfig` (incl. `catchAll`), `AppSettings`, `Decision`, `RunResult` |
+| `models.py` | Pydantic v2: `StatValue`, `ActivityStats`, `Activity`, `UserConfig` (incl. `catchAll`), `AppSettings` (incl. `feedPaginationMode`/`feedPaginationTarget`), `Decision`, `RunResult` |
 | `effective_config.py` | Pure: `build_effective_config(user)` — two-layer merge (catchAll → user per-sport) |
 | `decision.py` | Pure: `decide(activity, effective_config) -> Decision` — reads typed `ActivityStats` fields directly; an active minDistance/minTime rule with no such value → skip (`STAT_MISSING`) |
 | `feed.py` | `FeedParser` protocol + `StructuredFeedParser` — parses JSON XHR feed response into `list[Activity]` |
@@ -211,6 +211,16 @@ endpoints and can break when Strava changes them. Affected: `strava_client.py` (
 `__NEXT_DATA__`, `_extract_search_results`), `feed.py` (`StructuredFeedParser`), `parsers.py`
 (athlete-name scraping), `stat_parse.py`, `sport_types.py` (swagger fetch), `routes.py` (error mapping)
 and the UI/README cookie hints.
+Pagination limits are settings (`feedPaginationMode` `count`|`untilKnown`, `feedPaginationTarget` 20..500, default 100),
+passed as kwargs `target`/`known_ids`/`mode` into `fetch_following_feed` (client stays free of store/settings imports):
+`engine.run_kudos(previous_ids=...)` (read in `app._run_job`) and `GET /api/feed?refresh=true` read the known ids from
+`feed-known-ids.json` (`store.read_known_feed_ids`/`write_known_feed_ids`, max 1000). It is written ONLY by `_run_job`
+after a live run with `error is None and success` (never dry runs, aborted runs or `/api/feed`); NOT the activity cache,
+which dry runs and Feed-tab refreshes also overwrite. `untilKnown` stops after the page containing a known id
+(page kept completely), falls back to `count` without a snapshot; hard page cap `ceil(target/15)+2` (max 40); one INFO line
+per page plus the stop reason (`target reached`, `known activity reached`, `feed end`, `page cap`, `feed error`). Pacing constants
+(`_FEED_FIRST_PAGE_DELAY_RANGE` 1-3 s, `_FEED_PAGE_DELAY_RANGE` 2-6 s, long "reading" pause 8-15 s with p=0.15 replacing the normal pause, at most
+one per 4 pauses) have no UI knob.
 Feed pagination (verified 2026-10-29 via HAR): the embedded dashboard page reports `hasMore=false`
 although more exist, so it is never trusted — at least one XHR page is always tried and only XHR
 `hasMore` counts. XHR params: `before=int(min(cursorData.updated_at))` over all entries collected so far,
