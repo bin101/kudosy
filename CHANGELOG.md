@@ -5,6 +5,13 @@ All notable changes to Kudosy will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.7](https://github.com/bin101/kudosy/compare/v1.9.6...v1.9.7) (2026-10-29)
+
+
+### Bug Fixes
+
+* **feed:** paginate past the embedded dashboard page with the browser's cursor rules ([ff9ec67](https://github.com/bin101/kudosy/commit/ff9ec67f8dc1d8be7c4949e88cb6bc38b811efd9))
+
 ## [1.9.6](https://github.com/bin101/kudosy/compare/v1.9.5...v1.9.6) (2026-10-28)
 
 
