@@ -15,7 +15,10 @@ official Strava API/OAuth).
 
 The engine (`engine.py`) is imported as a module — **no subprocess spawning**, no separate image.
 All network and response-shape assumptions are isolated in `feed.py` + `strava_client.py` behind
-a `FeedParser` protocol (the "brittleness firewall").
+a `FeedParser` protocol (the "brittleness firewall" for the feed). Other Strava-dependent
+places: `strava_client.py` (CSRF, dashboard `__NEXT_DATA__`, search HTML), `parsers.py` (athlete-name
+scraping), `stat_parse.py` (stat labels/units), `sport_types.py` (swagger fetch), `routes.py` (error
+mapping) and the UI/README cookie hints.
 
 ```
 FastAPI app (app.py / routes.py)
@@ -203,10 +206,15 @@ POST /api/login                     — {password} → sets session cookie (401 
 POST /api/logout                    — clears the session cookie
 ```
 
-**Brittleness note:** `GET /api/athletes/search` and `GET /api/feed` depend on Strava's
-undocumented web session endpoints. The JSON feed format (`GET /dashboard/feed?feed_type=following&athlete_id=<id>`)
-is isolated in `feed.py` (`StructuredFeedParser`) and `strava_client.py`.
-`GET /api/athletes/search` HTML parsing is isolated in `strava_client.py` (`_extract_search_results`).
+**Brittleness note:** everything that talks to Strava depends on undocumented web session
+endpoints and can break when Strava changes them. Affected: `strava_client.py` (requests, CSRF,
+`__NEXT_DATA__`, `_extract_search_results`), `feed.py` (`StructuredFeedParser`), `parsers.py`
+(athlete-name scraping), `stat_parse.py`, `sport_types.py` (swagger fetch), `routes.py` (error mapping)
+and the UI/README cookie hints.
+Feed pagination (verified 2026-10-29 via HAR): the embedded dashboard page reports `hasMore=false`
+although more exist, so it is never trusted — at least one XHR page is always tried and only XHR
+`hasMore` counts. XHR params: `before=int(min(cursorData.updated_at))` over all entries collected so far,
+`cursor=int(rank)` of the previous page's last entry; the XHR carries `X-CSRF-Token`.
 Dashboard (verified 2026-10-28): `/dashboard` is a Next.js page (`GET /dashboard` redirects to
 `/dashboard?dashboard_next=1`) and the single source for a run's start data. `get_csrf_token()` requests it
 once (`Accept-Language: en`, also the auth probe) and reads from that response: the CSRF token from
@@ -214,7 +222,7 @@ once (`Accept-Language: en`, also the auth probe) and reads from that response: 
 the athlete ID and the first feed page from `__NEXT_DATA__` (`_parse_next_data`: `currentAthletePreload.id_str`,
 `pageProps.dashboardData.feed`, same shape as the XHR). `fetch_following_feed()` uses that embedded page 1
 (if its entries have `feedType == "following"`) and only pages 2+ come from the `/dashboard/feed` XHR; if
-that XHR fails (not verified live) it logs a WARNING and keeps the entries collected so far. Without a
+that XHR fails it logs a WARNING and keeps the entries collected so far. Without a
 usable page 1 anywhere it raises `RuntimeError` with status/content type/path. Without a meta token,
 fallbacks are the `csrf-token` response header of `/frontend/athletes/current` and the meta tag of the
 Rails page `/athlete/training`. The kudo endpoint is unchanged.

@@ -26,7 +26,9 @@ Feed format (verified 2026-07-01 via HAR capture):
 
   The first page is already embedded in the dashboard HTML
   (``__NEXT_DATA__`` -> ``props.pageProps.dashboardData.feed``, same shape), so the XHR is
-  only needed for pages 2+ (not verified live — failures there degrade gracefully).
+  only needed for pages 2+ (verified 2026-10-29 via HAR). The embedded page reports
+  ``hasMore=false`` although the browser still loads more pages, so that flag is never
+  trusted: one XHR page is always tried after it. Failures there degrade gracefully.
 
   Pagination: every response carries ``{"entries": [...], "pagination": {"hasMore": bool}}``.
   Each entry (Activity **and** Challenge) includes::
@@ -35,10 +37,12 @@ Feed format (verified 2026-07-01 via HAR capture):
 
   The next (older) page is fetched by appending to the same URL::
 
-      before=int(last_entry.cursorData["updated_at"])
-      cursor=int(last_entry.cursorData["rank"])
+      before=int(min(cursorData["updated_at"] over ALL entries collected so far))
+      cursor=int(last_entry_of_previous_page.cursorData["rank"])
 
-  Fetching continues while ``pagination.hasMore`` is true, until
+  (``updated_at`` is not sorted, so ``before`` is a running minimum across pages; verified
+  2026-10-29 via HAR, which also shows the browser sending ``X-CSRF-Token`` on the XHR.)
+  Fetching continues while ``pagination.hasMore`` of an XHR response is true, until
   ``_FEED_MAX_PAGES`` pages or ``_FEED_TARGET_ACTIVITIES`` activity entries
   have been collected. The merged result looks like a single-page response so
   :class:`~kudosy.feed.StructuredFeedParser` stays unchanged.
@@ -198,6 +202,8 @@ class StravaClient:
         self._athlete_id: str | None = None
         # First feed page embedded in the dashboard HTML; consumed by fetch_following_feed.
         self._dashboard_feed: dict[str, Any] | None = None
+        # CSRF token from get_csrf_token(); sent on the feed XHR like the browser does.
+        self._csrf_token: str | None = None
         # HTTP status of the most recent send_kudos response (None: no response / no call yet).
         self.last_kudo_status: int | None = None
         self._client: httpx.AsyncClient | None = None
@@ -375,9 +381,9 @@ class StravaClient:
         log.debug("CSRF source: %s", line)
         return line
 
-    @staticmethod
-    def _csrf_found(source: str, token: str) -> str:
+    def _csrf_found(self, source: str, token: str) -> str:
         log.info("CSRF token from %s", source)
+        self._csrf_token = token
         return token
 
     async def fetch_current_athlete_id(self) -> str | None:
@@ -458,6 +464,8 @@ class StravaClient:
             "Referer": _DASHBOARD_URL,
             **_EN_HEADERS,
         }
+        if self._csrf_token:
+            feed_headers["X-CSRF-Token"] = self._csrf_token
         embedded = self._take_embedded_feed(athlete_id)
         params: dict[str, Any] = {"feed_type": "following", "athlete_id": athlete_id}
         merged_entries: list[Any] = []
@@ -522,7 +530,10 @@ class StravaClient:
                 len(seen_activity_ids),
             )
 
-            if not last_pagination.get("hasMore"):
+            # The embedded page claims hasMore=false although more pages exist: only XHR
+            # responses are trusted, so always try at least one XHR page after it.
+            from_embedded = page_num == 0 and embedded is not None
+            if not from_embedded and not last_pagination.get("hasMore"):
                 break
             if len(seen_activity_ids) >= _FEED_TARGET_ACTIVITIES:
                 log.debug(
@@ -531,9 +542,9 @@ class StravaClient:
                 )
                 break
 
-            cursor = _next_cursor_params(entries)
+            cursor = _next_cursor_params(entries, merged_entries)
             if cursor is None:
-                log.debug("No cursorData on last entry despite hasMore=true, stopping")
+                log.debug("No usable cursorData for the next page, stopping")
                 break
             params = {"feed_type": "following", "athlete_id": athlete_id, **cursor}
 
@@ -601,8 +612,8 @@ class StravaClient:
                 headers={
                     "X-CSRF-Token": csrf_token,
                     "X-Requested-With": "XMLHttpRequest",
-                    "Accept": "application/json, text/javascript, */*; q=0.01",
-                    "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+                    # Like the browser: empty body, no Content-Type.
+                    "Accept": "application/json, text/plain, */*",
                     "Origin": _BASE,
                     "Referer": f"{_BASE}/dashboard",
                 },
@@ -817,7 +828,11 @@ def _feed_payload(resp: httpx.Response) -> tuple[dict[str, Any] | None, str]:
 
 
 def _warn_on_foreign_locale(entries: list[Any]) -> None:
-    """One aggregated WARNING if entries come in a non-English locale (labels may not parse)."""
+    """One aggregated WARNING if entries come in a non-English locale (labels may not parse).
+
+    Only the embedded dashboard page carries ``locale``; XHR entries have none, so for them
+    this check is a no-op by design.
+    """
     foreign = [
         e["locale"] for e in entries if isinstance(e, dict) and e.get("locale") not in (None, "en")
     ]
@@ -844,36 +859,45 @@ def _athlete_id_from(data: Any) -> str | None:
     return None
 
 
-def _next_cursor_params(entries: list[Any]) -> dict[str, int] | None:
-    """Return next-page ``before``/``cursor`` params from the last entry's ``cursorData``.
+def _next_cursor_params(
+    entries: list[Any], all_entries: list[Any] | None = None
+) -> dict[str, int] | None:
+    """Return next-page ``before``/``cursor`` params (verified 2026-10-29 via HAR).
 
-    Strava's following feed uses cursor pagination (verified 2026-07-01 via HAR):
-    each entry carries ``cursorData: {"updated_at": <unix s>, "rank": <float>}``.
-    The next (older) page is requested with ``before=int(updated_at)`` and
-    ``cursor=int(rank)`` from the *last* entry in the current page.
+    Each entry carries ``cursorData: {"updated_at": <unix s>, "rank": <int or float>}``.
+    ``cursor`` is ``int(rank)`` of the *last* entry of *entries* (the previous page);
+    ``before`` is ``int(min(updated_at))`` over *all_entries* (every entry collected so far,
+    default *entries*), because ``updated_at`` is not sorted. Entries without a usable
+    ``updated_at`` are skipped for the minimum.
 
-    Returns ``None`` if ``cursorData`` is absent or incomplete so the caller
-    can abort pagination gracefully instead of making a malformed request.
+    Returns ``None`` if the last entry has no usable rank or no entry yields a minimum, so
+    the caller can abort pagination gracefully instead of making a malformed request.
     """
     if not entries:
         return None
     last = entries[-1]
-    if not isinstance(last, dict):
-        return None
-    cd = last.get("cursorData")
-    if not isinstance(cd, dict):
-        return None
-    updated_at = cd.get("updated_at")
-    rank = cd.get("rank")
-    if updated_at is None or rank is None:
+    last_cd = last.get("cursorData") if isinstance(last, dict) else None
+    rank = last_cd.get("rank") if isinstance(last_cd, dict) else None
+    if rank is None:
         return None
     try:
-        return {"before": int(updated_at), "cursor": int(rank)}
+        cursor = int(rank)
     except (TypeError, ValueError):
         # cursorData shape drifted (e.g. non-numeric strings) — abort
         # pagination gracefully instead of raising out of fetch_following_feed.
-        log.warning("cursorData present but non-numeric (updated_at=%r, rank=%r)", updated_at, rank)
+        log.warning("cursorData present but non-numeric (rank=%r)", rank)
         return None
+    updated: list[int] = []
+    for entry in entries if all_entries is None else all_entries:
+        cd = entry.get("cursorData") if isinstance(entry, dict) else None
+        raw = cd.get("updated_at") if isinstance(cd, dict) else None
+        try:
+            updated.append(int(raw))  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            continue
+    if not updated:
+        return None
+    return {"before": min(updated), "cursor": cursor}
 
 
 def _extract_search_results(html: str) -> list[Any]:
