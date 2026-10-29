@@ -217,8 +217,8 @@ passed as kwargs `target`/`known_ids`/`mode` into `fetch_following_feed` (client
 `feed-known-ids.json` (`store.read_known_feed_ids`/`write_known_feed_ids`, max 1000). It is written ONLY by `_run_job`
 after a live run with `error is None and success` (never dry runs, aborted runs or `/api/feed`); NOT the activity cache,
 which dry runs and Feed-tab refreshes also overwrite. `untilKnown` stops after the page containing a known id
-(page kept completely), falls back to `count` without a snapshot; hard page cap `ceil(target/15)+2` (max 40); one INFO line
-per page plus the stop reason (`target reached`, `known activity reached`, `feed end`, `page cap`, `feed error`). Pacing constants
+(page kept completely) plus exactly one more safety page (target/page cap/feed end still apply; stop reason `known activity reached (+1 safety page)`), falls back to `count` without a snapshot; hard page cap `ceil(target/15)+2` (max 40); one INFO line
+per page plus the stop reason (`target reached`, `known activity reached (+1 safety page)`, `feed end`, `page cap`, `feed error`). Pacing constants
 (`_FEED_FIRST_PAGE_DELAY_RANGE` 1-3 s, `_FEED_PAGE_DELAY_RANGE` 2-6 s, long "reading" pause 8-15 s with p=0.15 replacing the normal pause, at most
 one per 4 pauses) have no UI knob.
 Feed pagination (verified 2026-10-29 via HAR): the embedded dashboard page reports `hasMore=false`
