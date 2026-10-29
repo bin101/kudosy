@@ -107,7 +107,9 @@ async def test_athlete_id_resolved_live_still_works() -> None:
         _cfg(athlete_id=""), _FAST, client=client, feed_parser=_Parser([_act()]), dry_run=True
     )
     assert result.success is True
-    client.fetch_following_feed.assert_awaited_once_with("20000001")
+    client.fetch_following_feed.assert_awaited_once_with(
+        "20000001", target=100, known_ids=None, mode="count"
+    )
 
 
 @pytest.mark.asyncio

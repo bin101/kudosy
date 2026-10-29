@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import itertools
 import json
 import random
 from collections.abc import Callable
@@ -522,21 +523,22 @@ async def test_fetch_feed_stops_on_hasmore_false() -> None:
 @pytest.mark.asyncio
 @respx.mock
 async def test_fetch_feed_stops_at_max_pages() -> None:
-    """Loop stops after _FEED_MAX_PAGES even when hasMore stays true forever."""
-    from kudosy.strava_client import _FEED_MAX_PAGES
+    """Loop stops at the target-derived page cap even when hasMore stays true forever."""
+    from kudosy.strava_client import _feed_page_cap
 
+    max_pages = _feed_page_cap(100)
     infinite_page = _page([_act_entry(1, rank=9000.0, updated_at=1800)], has_more=True)
 
     # Provide more responses than the cap — only _FEED_MAX_PAGES should be consumed
     respx.get("https://www.strava.com/dashboard/feed").mock(
-        side_effect=[httpx.Response(200, json=infinite_page)] * (_FEED_MAX_PAGES + 2)
+        side_effect=[httpx.Response(200, json=infinite_page)] * (max_pages + 2)
     )
 
     client = StravaClient({"_strava4_session": "cookie"}, sleep=AsyncMock(), rng=random.Random(0))
     await client.fetch_following_feed("111")
     await client.aclose()
 
-    assert len(respx.calls) == _FEED_MAX_PAGES
+    assert len(respx.calls) == max_pages
 
 
 @pytest.mark.asyncio
@@ -634,7 +636,7 @@ async def test_fetch_feed_stops_gracefully_when_cursor_data_missing() -> None:
 @pytest.mark.asyncio
 @respx.mock
 async def test_fetch_feed_sleep_called_between_pages() -> None:
-    """sleep is called exactly (n_pages - 1) times."""
+    """One pause before the first XHR page, then one between each following XHR page."""
     page1 = _page([_act_entry(1, rank=9000.0, updated_at=1800)], has_more=True)
     page2 = _page([_act_entry(2, rank=8000.0, updated_at=1700)], has_more=True)
     page3 = _page([_act_entry(3, rank=7000.0, updated_at=1600)], has_more=False)
@@ -652,8 +654,8 @@ async def test_fetch_feed_sleep_called_between_pages() -> None:
     await client.fetch_following_feed("42")
     await client.aclose()
 
-    # 3 pages → 2 pauses (after page 1, after page 2, not after the last)
-    assert mock_sleep.call_count == 2
+    # 3 XHR pages → 1 initial pause + 2 between pages (none after the last)
+    assert mock_sleep.call_count == 3
 
 
 def _embedded_with(entries: list, *, has_more: bool = False) -> str:
@@ -1883,3 +1885,197 @@ async def test_pagination_login_redirect_still_raises_and_keeps_stored_cookies()
         await client.fetch_following_feed("20000001")
     assert client.current_cookies() == _FULL_COOKIES
     await client.aclose()
+
+
+# ── fetch_following_feed — pagination settings, stop reasons, pacing ─────────
+
+
+def _mock_pages(n_pages: int, per_page: int = 15, *, last_has_more: bool = True) -> None:
+    pages = []
+    for p in range(n_pages):
+        entries = [
+            _act_entry(p * per_page + i, rank=9000.0 - p, updated_at=2000 - p)
+            for i in range(per_page)
+        ]
+        pages.append(httpx.Response(200, json=_page(entries, p < n_pages - 1 or last_has_more)))
+    respx.get("https://www.strava.com/dashboard/feed").mock(side_effect=pages)
+
+
+def _ids(result: dict) -> list[int]:
+    return [e["activity"]["id"] for e in result["entries"]]
+
+
+def _client(sleep: AsyncMock | None = None, seed: int = 0) -> StravaClient:
+    return StravaClient(
+        {"_strava4_session": "cookie"}, sleep=sleep or AsyncMock(), rng=random.Random(seed)
+    )
+
+
+def test_feed_page_cap_derivation() -> None:
+    from kudosy.strava_client import _feed_page_cap
+
+    assert _feed_page_cap(100) == 9
+    assert _feed_page_cap(20) == 4
+    assert _feed_page_cap(500) == 36
+    assert _feed_page_cap(100000) == 40
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_count_mode_stops_at_target(caplog: pytest.LogCaptureFixture) -> None:
+    _mock_pages(10)
+    client = _client()
+    with caplog.at_level("INFO", logger="kudosy.strava_client"):
+        result = await client.fetch_following_feed("1", target=40)
+    await client.aclose()
+    assert len(respx.calls) == 3  # 15, 30, 45 >= 40
+    assert len(_ids(result)) == 45
+    assert "stop reason: target reached" in caplog.text
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_large_target_reaches_beyond_old_cap() -> None:
+    _mock_pages(12)
+    client = _client()
+    await client.fetch_following_feed("1", target=150)
+    await client.aclose()
+    assert len(respx.calls) == 10
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_until_known_stops_at_page_with_known_id_and_keeps_full_page(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    _mock_pages(6)
+    client = _client()
+    with caplog.at_level("INFO", logger="kudosy.strava_client"):
+        result = await client.fetch_following_feed(
+            "1", target=500, known_ids={"20"}, mode="untilKnown"
+        )
+    await client.aclose()
+    assert len(respx.calls) == 2  # id 20 is on page 2
+    assert len(_ids(result)) == 30  # whole page 2 included
+    assert "stop reason: known activity reached" in caplog.text
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_until_known_without_snapshot_falls_back_to_count() -> None:
+    for known in (None, set()):
+        respx.calls.reset()
+        _mock_pages(10)
+        client = _client()
+        result = await client.fetch_following_feed(
+            "1", target=40, known_ids=known, mode="untilKnown"
+        )
+        await client.aclose()
+        assert len(_ids(result)) == 45
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_until_known_target_is_upper_bound(caplog: pytest.LogCaptureFixture) -> None:
+    _mock_pages(10)
+    client = _client()
+    with caplog.at_level("INFO", logger="kudosy.strava_client"):
+        result = await client.fetch_following_feed(
+            "1", target=20, known_ids={"99999"}, mode="untilKnown"
+        )
+    await client.aclose()
+    assert len(_ids(result)) == 30
+    assert "stop reason: target reached" in caplog.text
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_embedded_page_with_known_id_stops_without_xhr() -> None:
+    _mock_nextjs_dashboard(_embedded_with([_act_entry(5, updated_at=100)]))
+    xhr = respx.get(_FEED).mock(return_value=httpx.Response(200, json=_page([], False)))
+    client = StravaClient(_FULL_COOKIES, sleep=AsyncMock(), rng=random.Random(0))
+    await client.get_csrf_token()
+    result = await client.fetch_following_feed("20000001", known_ids={"5"}, mode="untilKnown")
+    await client.aclose()
+    assert _ids(result) == [5]
+    assert not xhr.called
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_page_cap_stop_reason_and_info_page_logs(caplog: pytest.LogCaptureFixture) -> None:
+    from kudosy.strava_client import _feed_page_cap
+
+    cap = _feed_page_cap(20)
+    _mock_pages(cap + 3, per_page=2)
+    client = _client()
+    with caplog.at_level("INFO", logger="kudosy.strava_client"):
+        await client.fetch_following_feed("1", target=20)
+    await client.aclose()
+    assert len(respx.calls) == cap
+    assert "Feed page 1: 2 entries, 2 unique activities so far" in caplog.text
+    assert f"Feed page {cap}: 2 entries, {2 * cap} unique activities so far" in caplog.text
+    assert "stop reason: page cap" in caplog.text
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_feed_end_stop_reason(caplog: pytest.LogCaptureFixture) -> None:
+    _mock_pages(2, last_has_more=False)
+    client = _client()
+    with caplog.at_level("INFO", logger="kudosy.strava_client"):
+        await client.fetch_following_feed("1", target=500)
+    await client.aclose()
+    assert "stop reason: feed end" in caplog.text
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_pacing_pauses_within_ranges_and_long_pause_rate_limited() -> None:
+    from kudosy.strava_client import (
+        _FEED_FIRST_PAGE_DELAY_RANGE,
+        _FEED_LONG_PAUSE_RANGE,
+        _FEED_PAGE_DELAY_RANGE,
+    )
+
+    class AlwaysLong(random.Random):
+        def random(self) -> float:  # always below the long-pause probability
+            return 0.0
+
+    _mock_pages(40, per_page=1)
+    sleep = AsyncMock()
+    client = StravaClient({"_strava4_session": "cookie"}, sleep=sleep, rng=AlwaysLong(1))
+    await client.fetch_following_feed("1", target=500)
+    await client.aclose()
+    pauses = [c.args[0] for c in sleep.call_args_list]
+    assert _FEED_FIRST_PAGE_DELAY_RANGE[0] <= pauses[0] <= _FEED_FIRST_PAGE_DELAY_RANGE[1]
+    kinds = []
+    for pause in pauses[1:]:
+        if _FEED_LONG_PAUSE_RANGE[0] <= pause <= _FEED_LONG_PAUSE_RANGE[1]:
+            kinds.append("long")
+        else:
+            assert _FEED_PAGE_DELAY_RANGE[0] <= pause <= _FEED_PAGE_DELAY_RANGE[1]
+            kinds.append("short")
+    assert "long" in kinds
+    longs = [i for i, k in enumerate(kinds) if k == "long"]
+    assert len(longs) >= 2
+    assert all(b - a == 4 for a, b in itertools.pairwise(longs))
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_later_page_failure_stop_reason_feed_error(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    respx.get("https://www.strava.com/dashboard/feed").mock(
+        side_effect=[
+            httpx.Response(200, json=_page([_act_entry(1)], True)),
+            httpx.Response(200, text="<html>nope</html>"),
+        ]
+    )
+    client = _client()
+    with caplog.at_level("INFO", logger="kudosy.strava_client"):
+        result = await client.fetch_following_feed("1")
+    await client.aclose()
+    assert _ids(result) == [1]
+    assert "stop reason: feed error" in caplog.text

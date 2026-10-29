@@ -165,6 +165,23 @@ class AppSettings(BaseModel):
     notifyDailyDigestTime: str = "20:00"  # HH:MM in settings.timezone
     # Check GitHub releases for a newer Kudosy version (at most every 12 h)
     updateCheckEnabled: bool = True
+    # Feed pagination: "count" = until target unique activities; "untilKnown" = until a page
+    # contains an activity of the previous run's snapshot (target is then only an upper bound).
+    feedPaginationMode: str = "count"
+    feedPaginationTarget: int = 100
+
+    @field_validator("feedPaginationMode", mode="before")
+    @classmethod
+    def validate_pagination_mode(cls, v: Any) -> str:
+        return v if isinstance(v, str) and v in {"count", "untilKnown"} else "count"
+
+    @field_validator("feedPaginationTarget", mode="before")
+    @classmethod
+    def clamp_pagination_target(cls, v: Any) -> int:
+        try:
+            return min(500, max(20, int(v)))
+        except (TypeError, ValueError):
+            return 100
 
     @field_validator("intervalMinutes", mode="before")
     @classmethod

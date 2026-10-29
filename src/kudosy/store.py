@@ -13,6 +13,7 @@ import json
 import logging
 import os
 import tempfile
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
@@ -95,6 +96,8 @@ _LABELS_FILE = "athlete-labels.json"
 _AVATARS_FILE = "athlete-avatars.json"
 _KUDOED_FILE = "kudoed-activities.json"
 _ACTIVITY_CACHE_FILE = "activity-cache.json"
+_KNOWN_FEED_IDS_FILE = "feed-known-ids.json"
+_KNOWN_FEED_IDS_MAX = 1000
 _HISTORY_FILE = "run-history.json"
 _DIGEST_STATE_FILE = "last-digest.json"
 _LOG_FILE = "last-run.log"
@@ -298,6 +301,25 @@ def write_activity_cache(activities: list[dict[str, Any]], fetched_at: str) -> N
         _path(_ACTIVITY_CACHE_FILE),
         {"fetched_at": fetched_at, "activities": activities},
     )
+
+
+def read_known_feed_ids() -> set[str]:
+    """Activity IDs seen in the last successful live run (feed pagination ``untilKnown``).
+
+    Separate from the activity cache, which dry runs and Feed-tab refreshes also write.
+    Missing or corrupt file -> empty set.
+    """
+    raw = _read_json(_path(_KNOWN_FEED_IDS_FILE))
+    ids = raw.get("ids") if isinstance(raw, dict) else None
+    if not isinstance(ids, list):
+        return set()
+    return {str(i) for i in ids}
+
+
+def write_known_feed_ids(ids: Iterable[str]) -> None:
+    """Persist the known feed IDs atomically (first ``_KNOWN_FEED_IDS_MAX``, feed order)."""
+    capped = list(dict.fromkeys(str(i) for i in ids))[:_KNOWN_FEED_IDS_MAX]
+    _write_json_atomic(_path(_KNOWN_FEED_IDS_FILE), {"ids": capped})
 
 
 def mark_activity_kudoed_in_cache(activity_id: str) -> None:

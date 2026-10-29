@@ -75,6 +75,7 @@ async def run_kudos(
     dry_run: bool = False,
     rng: random.Random | None = None,
     kudoed_ids: set[str] | None = None,
+    previous_ids: set[str] | None = None,
 ) -> RunResult:
     """Execute one kudos run.
 
@@ -85,6 +86,8 @@ async def run_kudos(
         feed_parser: Injected FeedParser (or fake for tests).
         dry_run:     When True, log decisions but do not send any kudos.
         rng:         Optional seeded RNG for deterministic tests.
+        previous_ids: Activity IDs of the previous run's snapshot (feed pagination mode
+                     ``untilKnown``); read by the caller before the snapshot is overwritten.
 
     Returns:
         A :class:`RunResult` with structured outcome data.
@@ -120,7 +123,12 @@ async def run_kudos(
                 )
 
         # 3. Fetch feed (JSON endpoint)
-        raw_feed = await client.fetch_following_feed(athlete_id)
+        raw_feed = await client.fetch_following_feed(
+            athlete_id,
+            target=settings.feedPaginationTarget,
+            known_ids=previous_ids or None,
+            mode=settings.feedPaginationMode,
+        )
         activities = feed_parser.parse(raw_feed)  # reassigns the pre-init'd list
         total = len(activities)
         log.info("Found %d activities", total)

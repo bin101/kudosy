@@ -221,3 +221,121 @@ def test_successful_run_sets_auth_ok_true(
     status = real_job_client.get("/api/status").json()
     assert status["authOk"] is True
     assert status["lastRun"]["error"] is None
+
+
+def _fake_run_kudos(captured: dict[str, object], **overrides: object) -> object:
+    from datetime import UTC, datetime
+
+    from kudosy.models import RunResult
+
+    async def fake(*_a: object, **kw: object) -> RunResult:
+        captured.update(kw)
+        base: dict[str, object] = {
+            "started_at": datetime.now(UTC),
+            "finished_at": datetime.now(UTC),
+            "success": True,
+            "dry_run": bool(kw["dry_run"]),
+            "total": 2,
+            "would_give": 0,
+            "given": 0,
+            "activity_ids": ["10", "11"],
+        }
+        return RunResult.model_validate({**base, **overrides})
+
+    return fake
+
+
+def test_run_job_uses_known_feed_ids_not_activity_cache(
+    real_job_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from kudosy import store
+
+    store.write_activity_cache([{"activity_id": "cache-only"}], "2026-01-01T00:00:00")
+    store.write_known_feed_ids({"7"})
+    captured: dict[str, object] = {}
+    monkeypatch.setattr("kudosy.app.run_kudos", _fake_run_kudos(captured))
+    assert real_job_client.post("/api/run", json={}).status_code == 200
+    assert captured["previous_ids"] == {"7"}
+
+
+def test_first_run_without_known_file_passes_empty_set(
+    real_job_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured: dict[str, object] = {}
+    monkeypatch.setattr("kudosy.app.run_kudos", _fake_run_kudos(captured))
+    real_job_client.post("/api/run", json={})
+    assert captured["previous_ids"] == set()
+
+
+def test_dry_run_leaves_known_ids_unchanged(
+    real_job_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from kudosy import store
+
+    store.write_known_feed_ids({"7"})
+    monkeypatch.setattr("kudosy.app.run_kudos", _fake_run_kudos({}))
+    real_job_client.post("/api/run", json={"dryRun": True})
+    assert store.read_known_feed_ids() == {"7"}
+
+
+def test_successful_live_run_replaces_known_ids(
+    real_job_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from kudosy import store
+
+    store.write_known_feed_ids({"7"})
+    monkeypatch.setattr("kudosy.app.run_kudos", _fake_run_kudos({}))
+    real_job_client.post("/api/run", json={"dryRun": False})
+    assert store.read_known_feed_ids() == {"10", "11"}
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"success": False, "aborted_reason": "rate_limited"},
+        {"success": False, "aborted_reason": "consecutive_failures"},
+        {"success": False, "error": "boom"},
+    ],
+)
+def test_failed_or_aborted_live_run_leaves_known_ids_unchanged(
+    real_job_client: TestClient, monkeypatch: pytest.MonkeyPatch, overrides: dict[str, object]
+) -> None:
+    from kudosy import store
+
+    store.write_known_feed_ids({"7"})
+    monkeypatch.setattr("kudosy.app.run_kudos", _fake_run_kudos({}, **overrides))
+    real_job_client.post("/api/run", json={"dryRun": False})
+    assert store.read_known_feed_ids() == {"7"}
+
+
+def test_feed_refresh_then_live_run_still_uses_old_known_set(
+    real_job_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A Feed-tab refresh rewrites the activity cache, but must not make newer ids 'known'."""
+    from kudosy import store
+
+    store.write_known_feed_ids({"old"})
+    captured_refresh: dict[str, object] = {}
+    captured_run: dict[str, object] = {}
+
+    class FeedClient(FakeOkClient):
+        async def fetch_following_feed(self, athlete_id: str, **kw: object) -> dict[str, object]:
+            captured_refresh.update(kw)
+            return {
+                "entries": [
+                    {
+                        "entity": "Activity",
+                        "activity": {"id": 99, "activityName": "x", "type": "Run"},
+                    }
+                ],
+                "pagination": {"hasMore": False},
+            }
+
+    monkeypatch.setattr("kudosy.routes.StravaClient", FeedClient)
+    real_job_client.get("/api/feed?refresh=true")
+    assert captured_refresh["known_ids"] == {"old"}
+    assert store.read_known_feed_ids() == {"old"}
+
+    monkeypatch.setattr("kudosy.app.run_kudos", _fake_run_kudos(captured_run))
+    real_job_client.post("/api/run", json={})
+    assert captured_run["previous_ids"] == {"old"}

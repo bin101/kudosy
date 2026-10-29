@@ -244,3 +244,24 @@ async def test_no_kudoed_ids_arg_behaves_like_empty_set() -> None:
 
     assert result.skipped_cached == 0
     assert result.given == 1
+
+
+# ── Feed pagination options ───────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("previous", [{"a", "b"}, set(), None])
+async def test_engine_passes_pagination_options(previous: set[str] | None) -> None:
+    client = make_fake_client()
+    await run_kudos(
+        user_cfg=_USER_CFG,
+        settings=AppSettings(feedPaginationMode="untilKnown", feedPaginationTarget=250),
+        client=client,
+        feed_parser=FakeFeedParser([]),
+        dry_run=True,
+        previous_ids=previous,
+    )
+    kwargs = client.fetch_following_feed.call_args.kwargs
+    assert kwargs["mode"] == "untilKnown"
+    assert kwargs["target"] == 250
+    assert kwargs["known_ids"] == (previous or None)

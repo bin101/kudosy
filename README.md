@@ -80,6 +80,7 @@ All config lives in `./data/` (mounted as `/data` in Docker):
 | `kudoed-activities.json` | Already-kudoed activity IDs (skip cache across runs) |
 | `activity-cache.json` | Last parsed feed snapshot (survives restarts) |
 | `run-history.json` | Compact per-run history entries (feeds the Statistics tab) |
+| `feed-known-ids.json` | Activity IDs of the last successful live run (feed pagination mode `untilKnown`) |
 | `last-digest.json` | Timestamp of the last daily-digest notification |
 | `last-run.log` | Output of the most recent run |
 
@@ -150,7 +151,21 @@ Kudosy has several layers of randomness and restraint to avoid a detectable mach
 4. **Quiet hours**: the 7×24 schedule matrix restricts kudos to allowed weekday/hour slots in your timezone.
 5. **Rate-limit backoff**: on HTTP 429 (or three consecutive failed sends) the remaining kudos of the run are skipped; the next scheduled run retries naturally.
 
-All timing parameters are configurable in the web UI on the **Configuration** tab.
+6. **Feed pagination pacing**: the feed is fetched page by page (about 20 entries each). Kudosy waits a
+   random 1–3 s before the first page request, 2–6 s between pages, and with ~15 % probability per page
+   a longer "reading" pause of 8–15 s instead of the normal one (at most one per 4 pages). These ranges are fixed constants.
+
+All other timing parameters are configurable in the web UI on the **Configuration** tab.
+
+### Feed pagination settings
+
+| Setting (`settings.json`) | Meaning |
+|---|---|
+| `feedPaginationMode` | `count` (default): load pages until `feedPaginationTarget` unique activities are collected. `untilKnown`: load pages until a page contains an activity seen by the last successful live run (stored in `feed-known-ids.json`, at most 1000 IDs; dry runs, aborted runs and Feed-tab refreshes never change it; that page is kept completely). Without it (first run, missing or corrupt file) it falls back to `count`. |
+| `feedPaginationTarget` | Default 100, clamped to 20–500. In `untilKnown` mode only an upper safety bound. |
+
+Pagination also ends when Strava reports the end of the feed or at a hard page cap of
+`ceil(target / 15) + 2` pages (never more than 40). Every page and the stop reason (`target reached`, `known activity reached`, `feed end`, `page cap`, `feed error`) are logged at INFO level.
 
 ## Docker Image
 

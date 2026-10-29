@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from kudosy import store
 from kudosy.models import AppSettings, KudoRules, UserConfig
 from kudosy.store import (
     bootstrap,
@@ -462,3 +463,20 @@ def test_persist_rotated_cookies_without_config(data_dir: Path) -> None:
     from kudosy.store import persist_rotated_cookies
 
     assert persist_rotated_cookies({"_strava4_session": "a"}, {"_strava4_session": "b"}) is False
+
+
+def test_known_feed_ids_roundtrip_missing_and_corrupt(data_dir: Path) -> None:
+    assert store.read_known_feed_ids() == set()
+    store.write_known_feed_ids({"1", "2"})
+    assert store.read_known_feed_ids() == {"1", "2"}
+    (data_dir / "feed-known-ids.json").write_text("{not json", encoding="utf-8")
+    assert store.read_known_feed_ids() == set()
+    (data_dir / "feed-known-ids.json").write_text('{"ids": "oops"}', encoding="utf-8")
+    assert store.read_known_feed_ids() == set()
+
+
+def test_known_feed_ids_write_is_capped(data_dir: Path) -> None:
+    store.write_known_feed_ids([str(i) for i in range(1500)])
+    ids = store.read_known_feed_ids()
+    assert len(ids) == 1000
+    assert "0" in ids and "999" in ids and "1000" not in ids

@@ -55,6 +55,7 @@ from kudosy.store import (
     read_activity_cache,
     read_athlete_avatars,
     read_athlete_labels,
+    read_known_feed_ids,
     read_log,
     read_run_history,
     read_settings,
@@ -653,7 +654,16 @@ async def get_feed(request: Request) -> dict[str, Any]:
         if get_settings().log_level.upper() == "DEBUG":
             with contextlib.suppress(Exception):
                 dump_path = Path(get_settings().data_dir) / "last-feed-raw.json"
-        raw_feed = await client.fetch_following_feed(athlete_id, dump_raw=dump_path)
+        # Known IDs of the last successful live run — read only, never written here.
+        known_ids = read_known_feed_ids()
+        app_settings = read_settings()
+        raw_feed = await client.fetch_following_feed(
+            athlete_id,
+            dump_raw=dump_path,
+            target=app_settings.feedPaginationTarget,
+            known_ids=known_ids or None,
+            mode=app_settings.feedPaginationMode,
+        )
         activities = StructuredFeedParser().parse(raw_feed)
         # Cache avatar URLs from the live feed.
         avatars = read_athlete_avatars()

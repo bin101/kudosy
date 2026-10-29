@@ -43,8 +43,10 @@ Feed format (verified 2026-07-01 via HAR capture):
   (``updated_at`` is not sorted, so ``before`` is a running minimum across pages; verified
   2026-10-29 via HAR, which also shows the browser sending ``X-CSRF-Token`` on the XHR.)
   Fetching continues while ``pagination.hasMore`` of an XHR response is true, until
-  ``_FEED_MAX_PAGES`` pages or ``_FEED_TARGET_ACTIVITIES`` activity entries
-  have been collected. The merged result looks like a single-page response so
+  the stop condition of the configured mode (``count``: target of unique activities,
+  ``untilKnown``: a page with an activity of the previous run's snapshot) or the hard
+  page cap (``_feed_page_cap``) is hit. Requests are paced human-like (see ``_FEED_*``
+  delay constants). The merged result looks like a single-page response so
   :class:`~kudosy.feed.StructuredFeedParser` stays unchanged.
 
   Use fetch_current_athlete_id() to resolve the athlete ID when the user has
@@ -84,12 +86,22 @@ _TRAINING_URL = f"{_BASE}/athlete/training"
 _ATHLETE_URL = f"{_BASE}/athletes/{{athlete_id}}"
 _ATHLETE_SEARCH_URL = f"{_BASE}/athletes/search"
 
-# Feed pagination limits — fixed constants, no UI knob needed.
-# ~20 entries/page (Activities + Challenges mixed) → 6 pages ≈ 100+ activities.
-_FEED_MAX_PAGES = 6
-_FEED_TARGET_ACTIVITIES = 100
-# Human-like pause between page requests (seconds). Keeps us gentle with Strava.
-_FEED_PAGE_DELAY_RANGE = (0.5, 1.5)
+# Feed pagination: the target comes from the settings (feedPaginationTarget). Pages carry
+# ~20 entries (Activities + Challenges mixed), observed ≈ 15 unique activities per page.
+_FEED_ACTIVITIES_PER_PAGE = 15
+_FEED_PAGE_CAP_LIMIT = 40
+# Human-like pacing (seconds) — fixed constants, no UI knob. Keeps us gentle with Strava.
+_FEED_FIRST_PAGE_DELAY_RANGE = (1.0, 3.0)  # before the first XHR request
+_FEED_PAGE_DELAY_RANGE = (2.0, 6.0)  # between XHR pages
+_FEED_LONG_PAUSE_RANGE = (8.0, 15.0)  # occasional "reading" pause
+_FEED_LONG_PAUSE_PROBABILITY = 0.15
+_FEED_LONG_PAUSE_MIN_GAP = 4  # at most one long pause per this many pauses
+
+
+def _feed_page_cap(target: int) -> int:
+    """Hard page cap derived from the target, so large targets stay reachable."""
+    return min(_FEED_PAGE_CAP_LIMIT, -(-target // _FEED_ACTIVITIES_PER_PAGE) + 2)
+
 
 # Rails pages call the meta "csrf-token", the Next.js dashboard "csrf"; same token kind.
 _CSRF_RE = re.compile(r'<meta\s+name="csrf(?:-token)?"\s+content="([^"]+)"', re.IGNORECASE)
@@ -416,7 +428,13 @@ class StravaClient:
             return None
 
     async def fetch_following_feed(
-        self, athlete_id: str, *, dump_raw: Path | None = None
+        self,
+        athlete_id: str,
+        *,
+        dump_raw: Path | None = None,
+        target: int = 100,
+        known_ids: set[str] | None = None,
+        mode: str = "count",
     ) -> dict[str, Any]:
         """Fetch the following activity feed, merging multiple pages into one dict.
 
@@ -426,12 +444,17 @@ class StravaClient:
         and follows Strava's cursor pagination (``before`` / ``cursor`` params
         derived from each page's last entry ``cursorData``) until:
 
-        * ``pagination.hasMore`` is false, or
-        * ``_FEED_MAX_PAGES`` pages have been fetched, or
-        * ``_FEED_TARGET_ACTIVITIES`` unique activities have been collected.
+        * ``pagination.hasMore`` of an XHR response is false (feed end), or
+        * ``target`` unique activities have been collected, or
+        * mode ``untilKnown`` with non-empty ``known_ids``: a page contained a known
+          activity ID (that page is kept completely); without ``known_ids`` it falls
+          back to ``count``, or
+        * the hard page cap ``_feed_page_cap(target)`` has been reached.
 
-        A short random pause (``_FEED_PAGE_DELAY_RANGE``) is inserted between
-        page requests to keep requests human-like.
+        The applied stop reason is logged once at INFO. Random pauses
+        (``_FEED_FIRST_PAGE_DELAY_RANGE`` before the first XHR page,
+        ``_FEED_PAGE_DELAY_RANGE`` between pages, plus an occasional long
+        ``_FEED_LONG_PAUSE_RANGE`` pause) keep requests human-like.
 
         The ``Accept-Language: en`` header is sent to get English stat labels
         and English decimal formatting, ensuring deterministic parsing.
@@ -440,6 +463,9 @@ class StravaClient:
             athlete_id:  The numeric Strava athlete ID of the logged-in user.
             dump_raw:    If given, write the merged JSON bytes to this path
                          (useful for debugging format changes).
+            target:      Unique-activity target (upper bound in ``untilKnown`` mode).
+            known_ids:   Activity IDs of the previous run's snapshot.
+            mode:        ``"count"`` or ``"untilKnown"``.
 
         Returns:
             A merged ``{"entries": [...], "pagination": {...}}`` dict
@@ -471,12 +497,31 @@ class StravaClient:
         merged_entries: list[Any] = []
         seen_activity_ids: set[str] = set()
         last_pagination: dict[str, Any] = {}
+        until_known = mode == "untilKnown" and bool(known_ids)
+        page_cap = _feed_page_cap(target)
+        stop_reason = "page cap"
+        xhr_fetched = False
+        pauses_since_long = _FEED_LONG_PAUSE_MIN_GAP
 
-        for page_num in range(_FEED_MAX_PAGES):
+        for page_num in range(page_cap):
             if page_num == 0 and embedded is not None:
                 log.info("Feed: Seite 1 aus Dashboard")
                 payload = embedded
             else:
+                # Human-like pause before every XHR request (first one: shorter, no long pause).
+                if not xhr_fetched:
+                    await self._sleep(self._rng.uniform(*_FEED_FIRST_PAGE_DELAY_RANGE))
+                else:
+                    pauses_since_long += 1
+                    if (
+                        pauses_since_long >= _FEED_LONG_PAUSE_MIN_GAP
+                        and self._rng.random() < _FEED_LONG_PAUSE_PROBABILITY
+                    ):
+                        pauses_since_long = 0
+                        await self._sleep(self._rng.uniform(*_FEED_LONG_PAUSE_RANGE))
+                    else:
+                        await self._sleep(self._rng.uniform(*_FEED_PAGE_DELAY_RANGE))
+                xhr_fetched = True
                 try:
                     resp = await self._get_with_retry(
                         client, _FEED_URL, params=params, headers=feed_headers, timeout=15.0
@@ -491,6 +536,7 @@ class StravaClient:
                         type(exc).__name__,
                         len(seen_activity_ids),
                     )
+                    stop_reason = "feed error"
                     break
                 self._check_auth(resp)
                 parsed, detail = _feed_payload(resp)
@@ -507,11 +553,13 @@ class StravaClient:
                         detail,
                         len(seen_activity_ids),
                     )
+                    stop_reason = "feed error"
                     break
                 payload = parsed
             entries: list[Any] = payload["entries"]
             last_pagination = payload.get("pagination") or {}
 
+            page_has_known = False
             for entry in entries:
                 act = entry.get("activity") if isinstance(entry, dict) else None
                 # Page 1 (embedded JSON) and pages 2+ (XHR) may type the same ID differently.
@@ -521,9 +569,11 @@ class StravaClient:
                     continue
                 if aid is not None:
                     seen_activity_ids.add(aid)
+                    if known_ids and aid in known_ids:
+                        page_has_known = True
                 merged_entries.append(entry)
 
-            log.debug(
+            log.info(
                 "Feed page %d: %d entries, %d unique activities so far",
                 page_num + 1,
                 len(entries),
@@ -534,27 +584,26 @@ class StravaClient:
             # responses are trusted, so always try at least one XHR page after it.
             from_embedded = page_num == 0 and embedded is not None
             if not from_embedded and not last_pagination.get("hasMore"):
+                stop_reason = "feed end"
                 break
-            if len(seen_activity_ids) >= _FEED_TARGET_ACTIVITIES:
-                log.debug(
-                    "Reached target of %d activities, stopping pagination",
-                    _FEED_TARGET_ACTIVITIES,
-                )
+            if until_known and page_has_known:
+                stop_reason = "known activity reached"
+                break
+            if len(seen_activity_ids) >= target:
+                stop_reason = "target reached"
                 break
 
             cursor = _next_cursor_params(entries, merged_entries)
             if cursor is None:
                 log.debug("No usable cursorData for the next page, stopping")
+                stop_reason = "feed end"
                 break
             params = {"feed_type": "following", "athlete_id": athlete_id, **cursor}
 
-            # Human-like pause before fetching the next page.
-            await self._sleep(self._rng.uniform(*_FEED_PAGE_DELAY_RANGE))
-
         log.info(
-            "Feed fetched: %d unique activities across up to %d pages",
+            "Feed fetched: %d unique activities, stop reason: %s",
             len(seen_activity_ids),
-            _FEED_MAX_PAGES,
+            stop_reason,
         )
         _warn_on_foreign_locale(merged_entries)
 
