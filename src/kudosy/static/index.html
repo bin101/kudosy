@@ -33,8 +33,8 @@
           <button id="btn-run" class="btn btn-primary">
             <span>▶</span> <span data-i18n="btn.runNow">Jetzt ausführen</span>
           </button>
-          <button id="btn-logout" class="btn-icon" data-i18n-title="login.logout.title"
-                  title="Abmelden" hidden>🔒</button>
+          <button id="btn-logout" type="button" class="btn btn-outline" data-i18n="login.logout.label"
+                  data-i18n-title="login.logout.title" title="Abmelden" hidden>Abmelden</button>
         </div>
       </div>
     </header>
@@ -75,8 +75,11 @@
                         placeholder="Kompletten Cookie-Header aus den DevTools einfügen"
                         autocomplete="off" spellcheck="false"></textarea>
               <button type="button" class="btn-icon" data-reveal="cookieInput"
-                      data-i18n-title="config.cookie.reveal.title"
-                      title="Anzeigen/Verbergen">👁</button>
+                      data-i18n-title="config.cookie.reveal.title" data-i18n-aria="config.cookie.reveal.title"
+                      title="Anzeigen/Verbergen" aria-label="Anzeigen/Verbergen" aria-pressed="false">
+                <svg class="icon-eye" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
+                <svg class="icon-eye-off" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.9 10.9 0 0 1 12 19c-6.5 0-10-7-10-7a18.5 18.5 0 0 1 5.06-5.94M9.9 4.24A9.1 9.1 0 0 1 12 5c6.5 0 10 7 10 7a18.5 18.5 0 0 1-2.16 3.19M14.12 14.12a3 3 0 1 1-4.24-4.24"/><path d="M1 1l22 22"/></svg>
+              </button>
             </div>
             <small data-i18n="config.cookie.hint">Dashboard neu laden → DevTools → Network → Request vom Typ „document“ (oder irgendeinen Request an www.strava.com) wählen → Request Headers → Zeile „Cookie“ komplett kopieren. Mit den Remember-Cookies erneuert Kudosy die Session selbst.</small>
             <div class="cookie-test-row">

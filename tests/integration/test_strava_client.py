@@ -1945,7 +1945,7 @@ async def test_large_target_reaches_beyond_old_cap() -> None:
 
 @pytest.mark.asyncio
 @respx.mock
-async def test_until_known_stops_at_page_with_known_id_and_keeps_full_page(
+async def test_until_known_fetches_one_safety_page_after_known_page(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     _mock_pages(6)
@@ -1955,9 +1955,9 @@ async def test_until_known_stops_at_page_with_known_id_and_keeps_full_page(
             "1", target=500, known_ids={"20"}, mode="untilKnown"
         )
     await client.aclose()
-    assert len(respx.calls) == 2  # id 20 is on page 2
-    assert len(_ids(result)) == 30  # whole page 2 included
-    assert "stop reason: known activity reached" in caplog.text
+    assert len(respx.calls) == 3  # id 20 is on page 2, plus one safety page
+    assert len(_ids(result)) == 45  # whole page 2 and the safety page included
+    assert "stop reason: known activity reached (+1 safety page)" in caplog.text
 
 
 @pytest.mark.asyncio
@@ -1990,15 +1990,17 @@ async def test_until_known_target_is_upper_bound(caplog: pytest.LogCaptureFixtur
 
 @pytest.mark.asyncio
 @respx.mock
-async def test_embedded_page_with_known_id_stops_without_xhr() -> None:
+async def test_embedded_page_with_known_id_fetches_one_xhr_safety_page() -> None:
     _mock_nextjs_dashboard(_embedded_with([_act_entry(5, updated_at=100)]))
-    xhr = respx.get(_FEED).mock(return_value=httpx.Response(200, json=_page([], False)))
+    xhr = respx.get(_FEED).mock(
+        return_value=httpx.Response(200, json=_page([_act_entry(6, updated_at=90)], True))
+    )
     client = StravaClient(_FULL_COOKIES, sleep=AsyncMock(), rng=random.Random(0))
     await client.get_csrf_token()
     result = await client.fetch_following_feed("20000001", known_ids={"5"}, mode="untilKnown")
     await client.aclose()
-    assert _ids(result) == [5]
-    assert not xhr.called
+    assert _ids(result) == [5, 6]
+    assert xhr.call_count == 1
 
 
 @pytest.mark.asyncio
@@ -2016,6 +2018,103 @@ async def test_page_cap_stop_reason_and_info_page_logs(caplog: pytest.LogCapture
     assert "Feed page 1: 2 entries, 2 unique activities so far" in caplog.text
     assert f"Feed page {cap}: 2 entries, {2 * cap} unique activities so far" in caplog.text
     assert "stop reason: page cap" in caplog.text
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_until_known_on_last_page_needs_no_extra_request(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    _mock_pages(2, last_has_more=False)
+    client = _client()
+    with caplog.at_level("INFO", logger="kudosy.strava_client"):
+        result = await client.fetch_following_feed(
+            "1", target=500, known_ids={"20"}, mode="untilKnown"
+        )
+    await client.aclose()
+    assert len(respx.calls) == 2
+    assert len(_ids(result)) == 30
+    assert "stop reason: feed end" in caplog.text
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_safety_page_respects_target() -> None:
+    _mock_pages(6)
+    client = _client()
+    await client.fetch_following_feed("1", target=20, known_ids={"20"}, mode="untilKnown")
+    await client.aclose()
+    assert len(respx.calls) == 2  # target reached on the known page: no safety page
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_safety_page_respects_page_cap(caplog: pytest.LogCaptureFixture) -> None:
+    from kudosy.strava_client import _feed_page_cap
+
+    cap = _feed_page_cap(20)
+    _mock_pages(cap + 3, per_page=2)  # more pages available than the cap allows
+    client = _client()
+    with caplog.at_level("INFO", logger="kudosy.strava_client"):
+        await client.fetch_following_feed(
+            "1", target=20, known_ids={str(2 * (cap - 1))}, mode="untilKnown"
+        )
+    await client.aclose()
+    assert len(respx.calls) == cap  # known id on the last allowed page; no extra page
+    assert "stop reason: page cap" in caplog.text
+
+
+@pytest.mark.asyncio
+@respx.mock
+@pytest.mark.parametrize(("mode", "pages", "ids"), [("count", 4, 60), ("untilKnown", 2, 30)])
+async def test_count_mode_ignores_known_ids_and_safety_page(
+    mode: str, pages: int, ids: int
+) -> None:
+    _mock_pages(10)
+    client = _client()
+    result = await client.fetch_following_feed("1", target=60, known_ids={"0"}, mode=mode)
+    await client.aclose()
+    # count: target of 60 unique activities, known id on page 1 ignored;
+    # untilKnown: known page 1 plus exactly one safety page
+    assert len(respx.calls) == pages
+    assert len(_ids(result)) == ids
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_failing_safety_page_keeps_entries_and_reports_feed_error(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    respx.get(_FEED).mock(
+        side_effect=[
+            httpx.Response(200, json=_page([_act_entry(1), _act_entry(2)], True)),
+            httpx.Response(200, text="<html>nope</html>"),
+        ]
+    )
+    client = _client()
+    with caplog.at_level("INFO", logger="kudosy.strava_client"):
+        result = await client.fetch_following_feed("1", known_ids={"2"}, mode="untilKnown")
+    await client.aclose()
+    assert _ids(result) == [1, 2]
+    assert "stop reason: feed error" in caplog.text
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_duplicate_only_safety_page_adds_nothing(caplog: pytest.LogCaptureFixture) -> None:
+    respx.get(_FEED).mock(
+        side_effect=[
+            httpx.Response(200, json=_page([_act_entry(1), _act_entry(2)], True)),
+            httpx.Response(200, json=_page([_act_entry(2), _act_entry(1)], True)),
+        ]
+    )
+    client = _client()
+    with caplog.at_level("INFO", logger="kudosy.strava_client"):
+        result = await client.fetch_following_feed("1", known_ids={"2"}, mode="untilKnown")
+    await client.aclose()
+    assert _ids(result) == [1, 2]
+    assert len(respx.calls) == 2
+    assert "stop reason: known activity reached (+1 safety page)" in caplog.text
 
 
 @pytest.mark.asyncio

@@ -447,7 +447,8 @@ class StravaClient:
         * ``pagination.hasMore`` of an XHR response is false (feed end), or
         * ``target`` unique activities have been collected, or
         * mode ``untilKnown`` with non-empty ``known_ids``: a page contained a known
-          activity ID (that page is kept completely); without ``known_ids`` it falls
+          activity ID (that page is kept completely, plus exactly one more safety
+          page if the feed has one and target/page cap allow); without ``known_ids`` it falls
           back to ``count``, or
         * the hard page cap ``_feed_page_cap(target)`` has been reached.
 
@@ -501,6 +502,7 @@ class StravaClient:
         page_cap = _feed_page_cap(target)
         stop_reason = "page cap"
         xhr_fetched = False
+        safety_page_pending = False  # set once the known page was seen; the next page ends the run
         pauses_since_long = _FEED_LONG_PAUSE_MIN_GAP
 
         for page_num in range(page_cap):
@@ -586,9 +588,12 @@ class StravaClient:
             if not from_embedded and not last_pagination.get("hasMore"):
                 stop_reason = "feed end"
                 break
-            if until_known and page_has_known:
-                stop_reason = "known activity reached"
+            if safety_page_pending:
+                stop_reason = "known activity reached (+1 safety page)"
                 break
+            if until_known and page_has_known:
+                # Fetch exactly one more page for safety (still bound by target/page cap).
+                safety_page_pending = True
             if len(seen_activity_ids) >= target:
                 stop_reason = "target reached"
                 break

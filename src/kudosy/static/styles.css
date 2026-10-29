@@ -342,7 +342,21 @@ small, .hint {
   font-size: 16px;
   color: var(--text-muted);
 }
+.btn-icon {
+  display: flex;
+  align-items: center;
+  border-radius: var(--radius);
+}
 .btn-icon:hover { color: var(--text); }
+/* Inside the reveal field the background is the (light) textarea: use dark, readable colours. */
+.input-reveal .btn-icon { color: #4b5563; }
+.input-reveal .btn-icon:hover { color: #111827; background: rgba(0, 0, 0, 0.08); }
+.btn-icon:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
+.btn-icon svg { display: block; }
+/* Reveal toggle: eye while masked, crossed-out eye while the value is shown. */
+.btn-icon .icon-eye-off { display: none; }
+.btn-icon[aria-pressed="true"] .icon-eye { display: none; }
+.btn-icon[aria-pressed="true"] .icon-eye-off { display: block; }
 
 .form-footer {
   display: flex;

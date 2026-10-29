@@ -76,7 +76,7 @@ export function initRevealButtons() {
       const hidden = isArea ? input.classList.contains('masked') : input.type === 'password';
       if (isArea) input.classList.toggle('masked', !hidden);
       else input.type = hidden ? 'text' : 'password';
-      btn.textContent = hidden ? '🙈' : '👁';
+      btn.setAttribute('aria-pressed', String(hidden));
     });
   });
 }
