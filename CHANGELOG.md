@@ -5,6 +5,14 @@ All notable changes to Kudosy will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.10.0](https://github.com/bin101/kudosy/compare/v1.9.7...v1.10.0) (2026-10-29)
+
+
+### Features
+
+* **feed:** configurable pagination (until known activity or target count) with human-like pacing ([53f801a](https://github.com/bin101/kudosy/commit/53f801ad406eba4c9e8c72005c70a3b56486b417))
+* **ui:** safety page for untilKnown, real logout button, icon toggle for the cookie field ([2595ea0](https://github.com/bin101/kudosy/commit/2595ea0e9e68a34a0eee49ab21db95fb4646b472))
+
 ## [1.9.7](https://github.com/bin101/kudosy/compare/v1.9.6...v1.9.7) (2026-10-29)
 
 
